@@ -4,8 +4,11 @@ using System.Text.Json;
 
 namespace GenerateTypeRegistry;
 
-/// <summary>The two files a package's registration is: its public header and its source.</summary>
-internal sealed record GeneratedFiles(string Header, string Source);
+/// <summary>
+/// The files a package's registration is: its public header and its source, and its defaults test when its
+/// <c>[registration]</c> names one.
+/// </summary>
+internal sealed record GeneratedFiles(string Header, string Source, string? Test = null);
 
 /// <summary>
 /// Writes a package's type registration (ADR-0074) from its API description: one <c>TypeDescription</c> per described
@@ -34,9 +37,90 @@ internal static class Generator
                 $"{registration.DescriptionPath}: describes package '{package}', not the selection's '{registration.Package}'");
         }
 
+        var used = new Dictionary<string, UsedType>(StringComparer.Ordinal);
+        var uses = new List<Registration>();
+        foreach (var selection in registration.Uses)
+        {
+            var (use, registers) = ReadUsed(selection, [registration.SelectionPath]);
+            uses.Add(use);
+            foreach (var (name, type) in registers)
+            {
+                if (used.TryGetValue(name, out var earlier) && earlier.Reference != type.Reference)
+                {
+                    throw new GenerateException(
+                        $"{registration.SelectionPath}: two registrations it uses both describe {name} " +
+                        $"({earlier.Reference} and {type.Reference}); one of them should use the other");
+                }
+
+                used.TryAdd(name, type);
+            }
+        }
+
         var identifiers = new Identifiers();
-        var types = Read(root.GetProperty("types"), identifiers);
-        return new GeneratedFiles(WriteHeader(registration, types), WriteSource(registration, types, identifiers));
+        var types = Read(root.GetProperty("types"), identifiers, used);
+        return new GeneratedFiles(WriteHeader(registration, types, uses),
+                                  WriteSource(registration, types, identifiers, used, uses),
+                                  registration.TestPath is null ? null : WriteTest(registration, types, used));
+    }
+
+    // A type another package's registration describes and this one uses: the qualified name of its description object,
+    // which that package's generated header declares, and its description.
+    private sealed record UsedType(string Reference, JsonElement Json);
+
+    // Reads a used package's registration and description, and through its own uses theirs: returns the registration
+    // and every type its registration function registers (its own and, through the registrations it calls first, its
+    // uses'), each under the name of its description object. `usingSelections` holds the selections on the way here, so
+    // a cycle of uses fails rather than recursing.
+    private static (Registration Registration, Dictionary<string, UsedType> Registers) ReadUsed(
+        string selection, List<string> usingSelections)
+    {
+        if (usingSelections.Contains(selection, StringComparer.Ordinal))
+        {
+            throw new GenerateException(
+                $"{usingSelections[^1]}: uses {selection}, which uses it in turn ({string.Join(" -> ", usingSelections)})");
+        }
+
+        if (!File.Exists(selection))
+        {
+            throw new GenerateException($"{usingSelections[^1]}: uses {selection}, which does not exist");
+        }
+
+        var registration = Registration.Read(selection) ??
+                           throw new GenerateException(
+                               $"{usingSelections[^1]}: uses {selection}, which has no [registration] to use");
+        if (!File.Exists(registration.DescriptionPath))
+        {
+            throw new GenerateException($"{registration.DescriptionPath}: no description: run fenrir-describe-api first");
+        }
+
+        var registers = new Dictionary<string, UsedType>(StringComparer.Ordinal);
+        foreach (var deeper in registration.Uses)
+        {
+            foreach (var (name, type) in ReadUsed(deeper, [.. usingSelections, selection]).Registers)
+            {
+                registers.TryAdd(name, type);
+            }
+        }
+
+        // Its header, which this one's includes, is spelled from below an include directory.
+        _ = registration.HeaderInclude;
+
+        // Its own types named as its own generation names them: by its types alone, in its description's order, skipping
+        // those its uses register.
+        using var document = ParseDescription(registration, File.ReadAllText(registration.DescriptionPath));
+        var identifiers = new Identifiers();
+        foreach (var type in document.RootElement.GetProperty("types").EnumerateArray())
+        {
+            var name = type.GetProperty("name").GetString()!;
+            if (!registers.ContainsKey(name))
+            {
+                registers.Add(name, new UsedType(
+                                        $"{registration.DescriptionNamespace}::{identifiers.Unique(Identifier(name))}",
+                                        type.Clone()));
+            }
+        }
+
+        return (registration, registers);
     }
 
     private static JsonDocument ParseDescription(Registration registration, string json)
@@ -56,13 +140,19 @@ internal static class Generator
     private sealed record Described(string Name, string Identifier, JsonElement Json);
 
     // The types to describe, in the description's order (dependencies first), each checked and given an identifier.
-    private static List<Described> Read(JsonElement types, Identifiers identifiers)
+    // A type a used registration describes is that package's: skipped here, and described before every type here.
+    private static List<Described> Read(JsonElement types, Identifiers identifiers, Dictionary<string, UsedType> used)
     {
         var described = new List<Described>();
-        var earlier = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        var earlier = used.ToDictionary(type => type.Key, type => type.Value.Json, StringComparer.Ordinal);
         foreach (var type in types.EnumerateArray())
         {
             var name = type.GetProperty("name").GetString()!;
+            if (used.ContainsKey(name))
+            {
+                continue;
+            }
+
             CheckKnown(name, type);
             CheckFields(name, type, earlier.Keys.ToHashSet(StringComparer.Ordinal));
             if (IsTaggedUnion(type))
@@ -320,7 +410,7 @@ internal static class Generator
         }
     }
 
-    private static string WriteHeader(Registration registration, List<Described> types)
+    private static string WriteHeader(Registration registration, List<Described> types, List<Registration> uses)
     {
         var text = new Text();
         text.Line($"// Generated by {Tool} from {registration.DescriptionName}. Do not edit.");
@@ -336,6 +426,17 @@ internal static class Generator
         }
 
         if (registration.Includes.Count > 0)
+        {
+            text.Line();
+        }
+
+        // The registrations this one uses: the Describe<T> and description objects of the types they register.
+        foreach (var use in uses)
+        {
+            text.Line($"#include \"{use.HeaderInclude}\"");
+        }
+
+        if (uses.Count > 0)
         {
             text.Line();
         }
@@ -389,6 +490,21 @@ internal static class Generator
             text.Line($"}} // namespace {registration.FunctionNamespace}");
         }
 
+        if (types.Count > 0)
+        {
+            text.Line();
+            text.Line("// The description objects Describe<T> yields, declared so a registration using this one ([registration]");
+            text.Line("// 'uses') points its fields at them rather than describing the types again.");
+            text.Line($"namespace {registration.DescriptionNamespace}");
+            text.Line("{");
+            foreach (var type in types)
+            {
+                text.Line($"    extern const Fenrir::TypeDescription {type.Identifier};");
+            }
+
+            text.Line($"}} // namespace {registration.DescriptionNamespace}");
+        }
+
         foreach (var type in types)
         {
             text.Line();
@@ -405,7 +521,8 @@ internal static class Generator
         return text.ToString();
     }
 
-    private static string WriteSource(Registration registration, List<Described> types, Identifiers identifiers)
+    private static string WriteSource(Registration registration, List<Described> types, Identifiers identifiers,
+                                      Dictionary<string, UsedType> used, List<Registration> uses)
     {
         var text = new Text();
         text.Line($"// Generated by {Tool} from {registration.DescriptionName}. Do not edit.");
@@ -428,10 +545,16 @@ internal static class Generator
         text.Line("#include <cstdint>");
         text.Line("#include <string_view>");
         text.Line();
-        text.Line("namespace");
+        text.Line($"namespace {registration.DescriptionNamespace}");
         text.Line("{");
         var typeIds = types.ToDictionary(type => type.Name, type => type.Identifier, StringComparer.Ordinal);
         var jsons = types.ToDictionary(type => type.Name, type => type.Json, StringComparer.Ordinal);
+        foreach (var (name, type) in used)
+        {
+            typeIds.Add(name, type.Reference);
+            jsons.Add(name, type.Json);
+        }
+
         var visits = new Dictionary<string, string>(StringComparer.Ordinal);
         var first = true;
         foreach (var type in types)
@@ -445,37 +568,51 @@ internal static class Generator
             WriteDescription(text, registration, type, typeIds, jsons, visits, identifiers);
         }
 
-        text.Line("} // namespace");
+        text.Line($"}} // namespace {registration.DescriptionNamespace}");
 
+        var ns = registration.DescriptionNamespace;
         foreach (var type in types)
         {
             text.Line();
             text.Line($"const Fenrir::TypeDescription& Fenrir::Describe<{type.Name}>::Description() noexcept");
             text.Line("{");
-            text.Line($"    return {type.Identifier};");
+            text.Line($"    return {ns}::{type.Identifier};");
             text.Line("}");
         }
 
-        var function = registration.FunctionNamespace.Length > 0
-                           ? $"{registration.FunctionNamespace}::{registration.FunctionName}"
-                           : registration.FunctionName;
         text.Line();
-        text.Line($"bool {function}(Fenrir::TypeRegistry& registry)");
+        text.Line($"bool {registration.Function}(Fenrir::TypeRegistry& registry)");
         text.Line("{");
-        if (types.Count == 0)
+        if (types.Count == 0 && uses.Count == 0)
         {
             text.Line("    static_cast<void>(registry);");
             text.Line("    return true;");
         }
         else
         {
-            text.Line("    // As the description lists them: a type after every type its fields name and the data asset it");
-            text.Line("    // extends. A component or resource that registers goes to its role's hook, which hangs its attachments.");
             text.Line("    bool registered = true;");
-            foreach (var type in types)
+            if (uses.Count > 0)
             {
-                var hook = Hook(type.Json) is { } name ? $"Fenrir::{name}<{type.Name}>(registry, {type.Identifier}) && " : "";
-                text.Line($"    registered = registry.Register({type.Identifier}) && {hook}registered;");
+                text.Line("    // The registrations this one uses first: they register the types they describe that this one holds.");
+                foreach (var use in uses)
+                {
+                    text.Line($"    registered = {use.Function}(registry) && registered;");
+                }
+            }
+
+            if (types.Count > 0)
+            {
+                text.Line("    // As the description lists them: a type after every type its fields name and the data asset it");
+                text.Line("    // extends. A type registered as this same description already is left alone, so a second run");
+                text.Line("    // registers nothing; one that registers goes to its role's hook, which hangs its attachments.");
+                foreach (var type in types)
+                {
+                    // Named from the function's own namespace, which the description namespace is inside.
+                    var id = $"{registration.Package}Types::{type.Identifier}";
+                    var hook = Hook(type.Json) is { } name ? $"Fenrir::{name}<{type.Name}>(registry, {id}) && " : "";
+                    text.Line($"    if (registry.Find({id}.name) != &{id})");
+                    text.Line($"        registered = registry.Register({id}) && {hook}registered;");
+                }
             }
 
             text.Line("    return registered;");
@@ -556,7 +693,7 @@ internal static class Generator
             (tag, alternatives) = WriteAlternatives(text, type, typeIds, jsons, identifiers);
         }
 
-        var visit = byMember ? WriteVisit(text, type, fields, visits, identifiers) : null;
+        var visit = byMember ? WriteVisit(text, type, fields, visits, typeIds, identifiers) : null;
 
         var role = isEnum ? "Enum" : RoleName(json.GetProperty("role").GetString()!)!;
         text.Line($"    constexpr Fenrir::TypeDescription {id}{{");
@@ -661,7 +798,7 @@ internal static class Generator
     // Writes a by-member type's visit function, which pushes its base's fields (through the base's own visit function),
     // then each of its own, reached by member; returns its name.
     private static string WriteVisit(Text text, Described type, string? fields, Dictionary<string, string> visits,
-                                     Identifiers identifiers)
+                                     Dictionary<string, string> typeIds, Identifiers identifiers)
     {
         var visit = identifiers.Unique($"{type.Identifier}_Visit");
         visits.Add(type.Name, visit);
@@ -681,8 +818,11 @@ internal static class Generator
 
         if (baseName is not null)
         {
+            // A base a used registration describes is visited through its description object.
             text.Line("        // Its base's fields first (ADR-0075).");
-            text.Line($"        {visits[baseName]}(static_cast<{baseName}*>(&value), visitor);");
+            text.Line(visits.TryGetValue(baseName, out var baseVisit)
+                          ? $"        {baseVisit}(static_cast<{baseName}*>(&value), visitor);"
+                          : $"        {typeIds[baseName]}.visit(static_cast<{baseName}*>(&value), visitor);");
         }
 
         for (var i = 0; i < own.Count; ++i)
@@ -803,6 +943,208 @@ internal static class Generator
         }
 
         return JsonSerializer.SerializeToElement(flat);
+    }
+
+    // The defaults test: per described struct or tagged union, its instance default-constructed through its
+    // description and visited through it, each value it reaches against the default the description records
+    // (FenrirTypes/Testing/Defaults.hpp walks it). A bound type has no defaults of its own to check, and an enum none.
+    private static string WriteTest(Registration registration, List<Described> types, Dictionary<string, UsedType> used)
+    {
+        var jsons = types.ToDictionary(type => type.Name, type => type.Json, StringComparer.Ordinal);
+        foreach (var (name, type) in used)
+        {
+            jsons.Add(name, type.Json);
+        }
+
+        var text = new Text();
+        text.Line($"// Generated by {Tool} from {registration.DescriptionName}. Do not edit.");
+        text.Line("// clang-format off");
+        text.Line($"// {registration.Package}'s registration against its description: each described struct and tagged union,");
+        text.Line("// default-constructed through its registered description and visited through it, holds the defaults");
+        text.Line($"// {registration.DescriptionName} records, field by field.");
+        text.Line();
+        text.Line($"#include \"{registration.HeaderInclude}\"");
+        text.Line();
+        text.Line("#include \"FenrirTypes/Testing/Defaults.hpp\"");
+        text.Line();
+        text.Line("#include <catch2/catch_test_macros.hpp>");
+        text.Line();
+        text.Line("#include <cstdint>");
+        text.Line("#include <limits>");
+        text.Line("#include <string>");
+        var tests = 0;
+        foreach (var type in types)
+        {
+            var category = type.Json.GetProperty("category").GetString();
+            if (category is not ("struct" or "tagged-union"))
+            {
+                continue;
+            }
+
+            var expected = new List<(string Path, string Value)>();
+            Expect(type.Name, "", type.Json, null, jsons, expected);
+            if (expected.Count == 0)
+            {
+                continue;
+            }
+
+            ++tests;
+            text.Line();
+            text.Line($"TEST_CASE({Literal($"{type.Name}, default-constructed through its registration, has its description's defaults")}, " +
+                      "\"[types][defaults]\")");
+            text.Line("{");
+            text.Line($"    Fenrir::Testing::CheckDefaults(Fenrir::Describe<{type.Name}>::Description(), {{");
+            foreach (var (path, value) in expected)
+            {
+                text.Line($"        {{{Literal(path)}, {value}}},");
+            }
+
+            text.Line("    });");
+            text.Line("}");
+        }
+
+        if (tests == 0)
+        {
+            text.Line();
+            text.Line($"TEST_CASE({Literal($"{registration.Package} describes no struct whose defaults are recorded")}, \"[types][defaults]\")");
+            text.Line("{");
+            text.Line("    SUCCEED();");
+            text.Line("}");
+        }
+
+        text.Line();
+        text.Line("// clang-format on");
+        return text.ToString();
+    }
+
+    // Adds the defaults a value of `type` holds below `prefix`, as `overrides` sets them (an object of the members a
+    // field's initialiser sets; null or `{}` for the type's own defaults), to `expected`.
+    private static void Expect(string owner, string prefix, JsonElement type, JsonElement? overrides,
+                               Dictionary<string, JsonElement> jsons, List<(string Path, string Value)> expected)
+    {
+        var set = overrides is { ValueKind: JsonValueKind.Object } given ? given : (JsonElement?)null;
+        switch (type.GetProperty("category").GetString())
+        {
+            case "bound-type":
+                // Only what the initialiser spells: a bound type's own defaults are its library's.
+                foreach (var component in Fields(type))
+                {
+                    var name = component.GetProperty("name").GetString()!;
+                    if (set is { } values && values.TryGetProperty(name, out var value))
+                    {
+                        ExpectValue(owner, prefix + name, component, value, jsons, expected);
+                    }
+                }
+
+                break;
+            case "tagged-union":
+                if (set is { } unionSet && unionSet.EnumerateObject().Any())
+                {
+                    throw new GenerateException(
+                        $"{owner}::{prefix.TrimEnd('.')}: a tagged union initialised with members, which the defaults test cannot follow");
+                }
+
+                var tag = type.GetProperty("tag");
+                ExpectValue(owner, prefix + tag.GetProperty("name").GetString()!, tag, tag.GetProperty("default"), jsons,
+                            expected);
+                var defaultKind = type.GetProperty("defaultKind").GetString()!;
+                var alternative = type.GetProperty("kinds").EnumerateArray()
+                                      .First(kind => kind.GetProperty("name").GetString() == defaultKind);
+                ExpectValue(owner, prefix + defaultKind, alternative,
+                            alternative.TryGetProperty("default", out var held) ? held : null, jsons, expected);
+                break;
+            default:
+                foreach (var field in Fields(type))
+                {
+                    var name = field.GetProperty("name").GetString()!;
+                    JsonElement? value = set is { } values && values.TryGetProperty(name, out var setValue) ? setValue
+                                         : field.TryGetProperty("default", out var own) ? own
+                                         : null;
+                    ExpectValue(owner, prefix + name, field, value, jsons, expected);
+                }
+
+                break;
+        }
+    }
+
+    // Adds the default `value` records for the value `field` describes at `path`: a leaf's expected value, or the
+    // values below a struct or array. A missing default (a tagged union's alternative) is the kind's own: zero, false,
+    // or the held type's defaults.
+    private static void ExpectValue(string owner, string path, JsonElement field, JsonElement? value,
+                                    Dictionary<string, JsonElement> jsons, List<(string Path, string Value)> expected)
+    {
+        var kind = field.GetProperty("kind").GetString()!;
+        var given = value is { ValueKind: not JsonValueKind.Null } present ? present : (JsonElement?)null;
+        switch (kind)
+        {
+            case "struct":
+                Expect(owner, path + ".", jsons[field.GetProperty("type").GetString()!], given, jsons, expected);
+                return;
+            case "array":
+                var element = ElementOf(field);
+                var length = field.GetProperty("length").GetInt32();
+                for (var i = 0; i < length; ++i)
+                {
+                    JsonElement? elementValue = given is { ValueKind: JsonValueKind.Array } list && i < list.GetArrayLength()
+                                                    ? list[i]
+                                                    : null;
+                    ExpectValue(owner, $"{path}[{i}]", element, elementValue, jsons, expected);
+                }
+
+                return;
+            case "pointer":
+                return;
+        }
+
+        expected.Add((path, kind switch
+        {
+            "f32" or "f64" => given is { } number ? Float(number) : "0.0",
+            "bool" => given is { } flag && flag.GetBoolean() ? "true" : "false",
+            "enum" => $"std::int64_t{{{EnumValue(owner, path, field, given, jsons)}}}",
+            "entity" => "Fenrir::EntityValue{}",
+            "reference" => "Fenrir::ReferenceValue{}",
+            "fixed-string" or "string" or "path" => $"std::string({Literal(given?.GetString() ?? "")})",
+            "list" or "optional" => "Fenrir::Testing::Empty{}",
+            _ when IsInteger(kind) || kind == "char16" => $"std::int64_t{{{(given is { } integer ? Integer(integer) : "0")}}}",
+            _ => throw new GenerateException($"{owner}::{path}: its kind '{kind}' has no default the defaults test knows"),
+        }));
+    }
+
+    // A float default as a C++ double: its number, or infinity for "inf" and "-inf".
+    private static string Float(JsonElement value) => value.ValueKind == JsonValueKind.String
+        ? value.GetString() switch
+        {
+            "inf" => "std::numeric_limits<double>::infinity()",
+            "-inf" => "-std::numeric_limits<double>::infinity()",
+            var other => throw new GenerateException($"a float default '{other}' is not a number, \"inf\" or \"-inf\""),
+        }
+        : Number(value);
+
+    // An enum default's value: its enumerator's, by name from the enum's description, or the integer recorded for an
+    // enum with no enumerators; zero when none is recorded.
+    private static string EnumValue(string owner, string path, JsonElement field, JsonElement? value,
+                                    Dictionary<string, JsonElement> jsons)
+    {
+        if (value is not { } given)
+        {
+            return "0";
+        }
+
+        if (given.ValueKind == JsonValueKind.Number)
+        {
+            return Integer(given);
+        }
+
+        var enumerator = given.GetString()!;
+        foreach (var known in jsons[field.GetProperty("type").GetString()!].GetProperty("values").EnumerateArray())
+        {
+            if (known.GetProperty("name").GetString() == enumerator)
+            {
+                return Integer(known.GetProperty("value"));
+            }
+        }
+
+        throw new GenerateException($"{owner}::{path}: its default '{enumerator}' is not an enumerator of its enum");
     }
 
     // A FieldMetadata's designated initialisers, in its members' order.

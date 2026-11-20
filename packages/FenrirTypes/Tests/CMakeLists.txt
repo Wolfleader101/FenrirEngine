@@ -4,6 +4,13 @@
 include("${CMAKE_CURRENT_LIST_DIR}/../../../cmake/FenrirCatch2.cmake")
 fenrir_add_catch2()
 
+# What each package's generated defaults test checks with (Support/FenrirTypes/Testing/Defaults.hpp): a described type
+# default-constructed through its description, visited through it and compared with the defaults its API description
+# records. The packages' tests link it; it uses Catch2, which they link.
+add_library(FenrirTypesTesting INTERFACE)
+target_include_directories(FenrirTypesTesting INTERFACE Support)
+target_link_libraries(FenrirTypesTesting INTERFACE FenrirTypes)
+
 # Every public header compiles alone: one source per header, holding nothing but its #include.
 file(GLOB fenrir_types_headers CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../include/FenrirTypes/*.hpp")
 set(fenrir_types_header_checks)

@@ -12,7 +12,7 @@
 #include <cstdint>
 #include <string_view>
 
-namespace
+namespace Fenrir::Generated::TestPackageTypes
 {
     // Test::Vec2
     static_assert(sizeof(Test::Vec2) == 8 && alignof(Test::Vec2) == 4,
@@ -308,91 +308,105 @@ namespace
         .doc = "A scene resource: plain run-time data a scene file never holds.",
         .fields = Test_Weather_Fields,
     };
-} // namespace
+} // namespace Fenrir::Generated::TestPackageTypes
 
 const Fenrir::TypeDescription& Fenrir::Describe<Test::Vec2>::Description() noexcept
 {
-    return Test_Vec2;
+    return Fenrir::Generated::TestPackageTypes::Test_Vec2;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Test::Box>::Description() noexcept
 {
-    return Test_Box;
+    return Fenrir::Generated::TestPackageTypes::Test_Box;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Test::Layers>::Description() noexcept
 {
-    return Test_Layers;
+    return Fenrir::Generated::TestPackageTypes::Test_Layers;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Test::Rarity>::Description() noexcept
 {
-    return Test_Rarity;
+    return Fenrir::Generated::TestPackageTypes::Test_Rarity;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Test::Marker>::Description() noexcept
 {
-    return Test_Marker;
+    return Fenrir::Generated::TestPackageTypes::Test_Marker;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Test::Options>::Description() noexcept
 {
-    return Test_Options;
+    return Fenrir::Generated::TestPackageTypes::Test_Options;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Test::Stat>::Description() noexcept
 {
-    return Test_Stat;
+    return Fenrir::Generated::TestPackageTypes::Test_Stat;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Test::WeaponData>::Description() noexcept
 {
-    return Test_WeaponData;
+    return Fenrir::Generated::TestPackageTypes::Test_WeaponData;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Test::Sword>::Description() noexcept
 {
-    return Test_Sword;
+    return Fenrir::Generated::TestPackageTypes::Test_Sword;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Test::VolumeKind>::Description() noexcept
 {
-    return Test_VolumeKind;
+    return Fenrir::Generated::TestPackageTypes::Test_VolumeKind;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Test::Volume>::Description() noexcept
 {
-    return Test_Volume;
+    return Fenrir::Generated::TestPackageTypes::Test_Volume;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Test::Trigger>::Description() noexcept
 {
-    return Test_Trigger;
+    return Fenrir::Generated::TestPackageTypes::Test_Trigger;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Test::Weather>::Description() noexcept
 {
-    return Test_Weather;
+    return Fenrir::Generated::TestPackageTypes::Test_Weather;
 }
 
 bool Fenrir::Generated::RegisterTestPackageTypes(Fenrir::TypeRegistry& registry)
 {
-    // As the description lists them: a type after every type its fields name and the data asset it
-    // extends. A component or resource that registers goes to its role's hook, which hangs its attachments.
     bool registered = true;
-    registered = registry.Register(Test_Vec2) && registered;
-    registered = registry.Register(Test_Box) && registered;
-    registered = registry.Register(Test_Layers) && Fenrir::AttachAppResource<Test::Layers>(registry, Test_Layers) && registered;
-    registered = registry.Register(Test_Rarity) && registered;
-    registered = registry.Register(Test_Marker) && Fenrir::AttachComponent<Test::Marker>(registry, Test_Marker) && registered;
-    registered = registry.Register(Test_Options) && registered;
-    registered = registry.Register(Test_Stat) && registered;
-    registered = registry.Register(Test_WeaponData) && registered;
-    registered = registry.Register(Test_Sword) && registered;
-    registered = registry.Register(Test_VolumeKind) && registered;
-    registered = registry.Register(Test_Volume) && registered;
-    registered = registry.Register(Test_Trigger) && Fenrir::AttachComponent<Test::Trigger>(registry, Test_Trigger) && registered;
-    registered = registry.Register(Test_Weather) && Fenrir::AttachSceneResource<Test::Weather>(registry, Test_Weather) && registered;
+    // As the description lists them: a type after every type its fields name and the data asset it
+    // extends. A type registered as this same description already is left alone, so a second run
+    // registers nothing; one that registers goes to its role's hook, which hangs its attachments.
+    if (registry.Find(TestPackageTypes::Test_Vec2.name) != &TestPackageTypes::Test_Vec2)
+        registered = registry.Register(TestPackageTypes::Test_Vec2) && registered;
+    if (registry.Find(TestPackageTypes::Test_Box.name) != &TestPackageTypes::Test_Box)
+        registered = registry.Register(TestPackageTypes::Test_Box) && registered;
+    if (registry.Find(TestPackageTypes::Test_Layers.name) != &TestPackageTypes::Test_Layers)
+        registered = registry.Register(TestPackageTypes::Test_Layers) && Fenrir::AttachAppResource<Test::Layers>(registry, TestPackageTypes::Test_Layers) && registered;
+    if (registry.Find(TestPackageTypes::Test_Rarity.name) != &TestPackageTypes::Test_Rarity)
+        registered = registry.Register(TestPackageTypes::Test_Rarity) && registered;
+    if (registry.Find(TestPackageTypes::Test_Marker.name) != &TestPackageTypes::Test_Marker)
+        registered = registry.Register(TestPackageTypes::Test_Marker) && Fenrir::AttachComponent<Test::Marker>(registry, TestPackageTypes::Test_Marker) && registered;
+    if (registry.Find(TestPackageTypes::Test_Options.name) != &TestPackageTypes::Test_Options)
+        registered = registry.Register(TestPackageTypes::Test_Options) && registered;
+    if (registry.Find(TestPackageTypes::Test_Stat.name) != &TestPackageTypes::Test_Stat)
+        registered = registry.Register(TestPackageTypes::Test_Stat) && registered;
+    if (registry.Find(TestPackageTypes::Test_WeaponData.name) != &TestPackageTypes::Test_WeaponData)
+        registered = registry.Register(TestPackageTypes::Test_WeaponData) && registered;
+    if (registry.Find(TestPackageTypes::Test_Sword.name) != &TestPackageTypes::Test_Sword)
+        registered = registry.Register(TestPackageTypes::Test_Sword) && registered;
+    if (registry.Find(TestPackageTypes::Test_VolumeKind.name) != &TestPackageTypes::Test_VolumeKind)
+        registered = registry.Register(TestPackageTypes::Test_VolumeKind) && registered;
+    if (registry.Find(TestPackageTypes::Test_Volume.name) != &TestPackageTypes::Test_Volume)
+        registered = registry.Register(TestPackageTypes::Test_Volume) && registered;
+    if (registry.Find(TestPackageTypes::Test_Trigger.name) != &TestPackageTypes::Test_Trigger)
+        registered = registry.Register(TestPackageTypes::Test_Trigger) && Fenrir::AttachComponent<Test::Trigger>(registry, TestPackageTypes::Test_Trigger) && registered;
+    if (registry.Find(TestPackageTypes::Test_Weather.name) != &TestPackageTypes::Test_Weather)
+        registered = registry.Register(TestPackageTypes::Test_Weather) && Fenrir::AttachSceneResource<Test::Weather>(registry, TestPackageTypes::Test_Weather) && registered;
     return registered;
 }
 

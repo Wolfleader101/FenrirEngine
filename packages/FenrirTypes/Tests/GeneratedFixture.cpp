@@ -367,15 +367,16 @@ TEST_CASE("Construct gives a type's defaults and Destroy ends it")
     hit.Destroy(storage);
 }
 
-TEST_CASE("Registering the fixture twice refuses every type the second time, naming the package")
+TEST_CASE("Registering the fixture twice registers nothing the second time, with no diagnostic")
 {
     Registered fixture;
+    const TypeDescription* sword = fixture.registry.Find("Fixture::Sword");
 
-    REQUIRE_FALSE(Fenrir::Generated::RegisterFixtureTypes(fixture.registry));
+    REQUIRE(Fenrir::Generated::RegisterFixtureTypes(fixture.registry));
 
-    INFO("each type is refused as a duplicate, and the diagnostic names the fixture package");
-    REQUIRE(fixture.diagnostics.size() == RegisteredNames.size());
-    REQUIRE(fixture.diagnostics.front().find("Fixture") != std::string::npos);
+    INFO("every type the second run meets is already registered as the same description, so it is left alone");
+    REQUIRE(fixture.diagnostics.empty());
+    REQUIRE(fixture.registry.Find("Fixture::Sword") == sword);
 }
 
 TEST_CASE("A tagged union's description holds its tag, union offset, alternatives and default alternative")

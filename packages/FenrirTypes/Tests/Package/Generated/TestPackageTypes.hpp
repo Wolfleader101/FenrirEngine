@@ -56,6 +56,25 @@ namespace Fenrir::Generated
     bool RegisterTestPackageTypes(Fenrir::TypeRegistry& registry);
 } // namespace Fenrir::Generated
 
+// The description objects Describe<T> yields, declared so a registration using this one ([registration]
+// 'uses') points its fields at them rather than describing the types again.
+namespace Fenrir::Generated::TestPackageTypes
+{
+    extern const Fenrir::TypeDescription Test_Vec2;
+    extern const Fenrir::TypeDescription Test_Box;
+    extern const Fenrir::TypeDescription Test_Layers;
+    extern const Fenrir::TypeDescription Test_Rarity;
+    extern const Fenrir::TypeDescription Test_Marker;
+    extern const Fenrir::TypeDescription Test_Options;
+    extern const Fenrir::TypeDescription Test_Stat;
+    extern const Fenrir::TypeDescription Test_WeaponData;
+    extern const Fenrir::TypeDescription Test_Sword;
+    extern const Fenrir::TypeDescription Test_VolumeKind;
+    extern const Fenrir::TypeDescription Test_Volume;
+    extern const Fenrir::TypeDescription Test_Trigger;
+    extern const Fenrir::TypeDescription Test_Weather;
+} // namespace Fenrir::Generated::TestPackageTypes
+
 /** @brief The description of Test::Vec2 that RegisterTestPackageTypes adds. */
 template <>
 struct Fenrir::Describe<Test::Vec2>

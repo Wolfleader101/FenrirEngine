@@ -12,7 +12,7 @@
 #include <cstdint>
 #include <string_view>
 
-namespace
+namespace Fenrir::Generated::FixtureTypes
 {
     // Fixture::Handle
     static_assert(sizeof(Fixture::Handle) == 16 && alignof(Fixture::Handle) == 8,
@@ -788,223 +788,259 @@ namespace
         .doc = "A scene resource: plain data, as a component is, holding a UTF-32 code point.",
         .fields = Fixture_Weather_Fields,
     };
-} // namespace
+} // namespace Fenrir::Generated::FixtureTypes
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Handle>::Description() noexcept
 {
-    return Fixture_Handle;
+    return Fenrir::Generated::FixtureTypes::Fixture_Handle;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Limits>::Description() noexcept
 {
-    return Fixture_Limits;
+    return Fenrir::Generated::FixtureTypes::Fixture_Limits;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Marker>::Description() noexcept
 {
-    return Fixture_Marker;
+    return Fenrir::Generated::FixtureTypes::Fixture_Marker;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Motion>::Description() noexcept
 {
-    return Fixture_Motion;
+    return Fenrir::Generated::FixtureTypes::Fixture_Motion;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Offset>::Description() noexcept
 {
-    return Fixture_Offset;
+    return Fenrir::Generated::FixtureTypes::Fixture_Offset;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Numbers>::Description() noexcept
 {
-    return Fixture_Numbers;
+    return Fenrir::Generated::FixtureTypes::Fixture_Numbers;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Quat>::Description() noexcept
 {
-    return Fixture_Quat;
+    return Fenrir::Generated::FixtureTypes::Fixture_Quat;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Spring>::Description() noexcept
 {
-    return Fixture_Spring;
+    return Fenrir::Generated::FixtureTypes::Fixture_Spring;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Vec3>::Description() noexcept
 {
-    return Fixture_Vec3;
+    return Fenrir::Generated::FixtureTypes::Fixture_Vec3;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Body>::Description() noexcept
 {
-    return Fixture_Body;
+    return Fenrir::Generated::FixtureTypes::Fixture_Body;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::BodyId>::Description() noexcept
 {
-    return Fixture_BodyId;
+    return Fenrir::Generated::FixtureTypes::Fixture_BodyId;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::BoxShape>::Description() noexcept
 {
-    return Fixture_BoxShape;
+    return Fenrir::Generated::FixtureTypes::Fixture_BoxShape;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Clock>::Description() noexcept
 {
-    return Fixture_Clock;
+    return Fenrir::Generated::FixtureTypes::Fixture_Clock;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::ShapeType>::Description() noexcept
 {
-    return Fixture_ShapeType;
+    return Fenrir::Generated::FixtureTypes::Fixture_ShapeType;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::SphereShape>::Description() noexcept
 {
-    return Fixture_SphereShape;
+    return Fenrir::Generated::FixtureTypes::Fixture_SphereShape;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Shape>::Description() noexcept
 {
-    return Fixture_Shape;
+    return Fenrir::Generated::FixtureTypes::Fixture_Shape;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Collider>::Description() noexcept
 {
-    return Fixture_Collider;
+    return Fenrir::Generated::FixtureTypes::Fixture_Collider;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Columns>::Description() noexcept
 {
-    return Fixture_Columns;
+    return Fenrir::Generated::FixtureTypes::Fixture_Columns;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Contacts>::Description() noexcept
 {
-    return Fixture_Contacts;
+    return Fenrir::Generated::FixtureTypes::Fixture_Contacts;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Dial>::Description() noexcept
 {
-    return Fixture_Dial;
+    return Fenrir::Generated::FixtureTypes::Fixture_Dial;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Folder>::Description() noexcept
 {
-    return Fixture_Folder;
+    return Fenrir::Generated::FixtureTypes::Fixture_Folder;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Heading>::Description() noexcept
 {
-    return Fixture_Heading;
+    return Fenrir::Generated::FixtureTypes::Fixture_Heading;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Hit>::Description() noexcept
 {
-    return Fixture_Hit;
+    return Fenrir::Generated::FixtureTypes::Fixture_Hit;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Pair<double>>::Description() noexcept
 {
-    return Fixture_Pair_double;
+    return Fenrir::Generated::FixtureTypes::Fixture_Pair_double;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Paths>::Description() noexcept
 {
-    return Fixture_Paths;
+    return Fenrir::Generated::FixtureTypes::Fixture_Paths;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Size>::Description() noexcept
 {
-    return Fixture_Size;
+    return Fenrir::Generated::FixtureTypes::Fixture_Size;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Sky>::Description() noexcept
 {
-    return Fixture_Sky;
+    return Fenrir::Generated::FixtureTypes::Fixture_Sky;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Socket>::Description() noexcept
 {
-    return Fixture_Socket;
+    return Fenrir::Generated::FixtureTypes::Fixture_Socket;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Stat>::Description() noexcept
 {
-    return Fixture_Stat;
+    return Fenrir::Generated::FixtureTypes::Fixture_Stat;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::WeaponData>::Description() noexcept
 {
-    return Fixture_WeaponData;
+    return Fenrir::Generated::FixtureTypes::Fixture_WeaponData;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Sword>::Description() noexcept
 {
-    return Fixture_Sword;
+    return Fenrir::Generated::FixtureTypes::Fixture_Sword;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Tag>::Description() noexcept
 {
-    return Fixture_Tag;
+    return Fenrir::Generated::FixtureTypes::Fixture_Tag;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Ticket>::Description() noexcept
 {
-    return Fixture_Ticket;
+    return Fenrir::Generated::FixtureTypes::Fixture_Ticket;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Touched>::Description() noexcept
 {
-    return Fixture_Touched;
+    return Fenrir::Generated::FixtureTypes::Fixture_Touched;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Weather>::Description() noexcept
 {
-    return Fixture_Weather;
+    return Fenrir::Generated::FixtureTypes::Fixture_Weather;
 }
 
 bool Fenrir::Generated::RegisterFixtureTypes(Fenrir::TypeRegistry& registry)
 {
-    // As the description lists them: a type after every type its fields name and the data asset it
-    // extends. A component or resource that registers goes to its role's hook, which hangs its attachments.
     bool registered = true;
-    registered = registry.Register(Fixture_Handle) && registered;
-    registered = registry.Register(Fixture_Limits) && registered;
-    registered = registry.Register(Fixture_Marker) && registered;
-    registered = registry.Register(Fixture_Motion) && registered;
-    registered = registry.Register(Fixture_Offset) && registered;
-    registered = registry.Register(Fixture_Numbers) && registered;
-    registered = registry.Register(Fixture_Quat) && registered;
-    registered = registry.Register(Fixture_Spring) && registered;
-    registered = registry.Register(Fixture_Vec3) && registered;
-    registered = registry.Register(Fixture_Body) && Fenrir::AttachComponent<Fixture::Body>(registry, Fixture_Body) && registered;
-    registered = registry.Register(Fixture_BodyId) && registered;
-    registered = registry.Register(Fixture_BoxShape) && registered;
-    registered = registry.Register(Fixture_Clock) && Fenrir::AttachAppResource<Fixture::Clock>(registry, Fixture_Clock) && registered;
-    registered = registry.Register(Fixture_ShapeType) && registered;
-    registered = registry.Register(Fixture_SphereShape) && registered;
-    registered = registry.Register(Fixture_Shape) && registered;
-    registered = registry.Register(Fixture_Collider) && Fenrir::AttachComponent<Fixture::Collider>(registry, Fixture_Collider) && registered;
-    registered = registry.Register(Fixture_Columns) && registered;
-    registered = registry.Register(Fixture_Contacts) && Fenrir::AttachComponent<Fixture::Contacts>(registry, Fixture_Contacts) && registered;
-    registered = registry.Register(Fixture_Dial) && Fenrir::AttachComponent<Fixture::Dial>(registry, Fixture_Dial) && registered;
-    registered = registry.Register(Fixture_Folder) && Fenrir::AttachComponent<Fixture::Folder>(registry, Fixture_Folder) && registered;
-    registered = registry.Register(Fixture_Heading) && registered;
-    registered = registry.Register(Fixture_Hit) && registered;
-    registered = registry.Register(Fixture_Pair_double) && registered;
-    registered = registry.Register(Fixture_Paths) && registered;
-    registered = registry.Register(Fixture_Size) && registered;
-    registered = registry.Register(Fixture_Sky) && Fenrir::AttachAppResource<Fixture::Sky>(registry, Fixture_Sky) && registered;
-    registered = registry.Register(Fixture_Socket) && Fenrir::AttachComponent<Fixture::Socket>(registry, Fixture_Socket) && registered;
-    registered = registry.Register(Fixture_Stat) && registered;
-    registered = registry.Register(Fixture_WeaponData) && registered;
-    registered = registry.Register(Fixture_Sword) && registered;
-    registered = registry.Register(Fixture_Tag) && registered;
-    registered = registry.Register(Fixture_Ticket) && registered;
-    registered = registry.Register(Fixture_Touched) && registered;
-    registered = registry.Register(Fixture_Weather) && Fenrir::AttachSceneResource<Fixture::Weather>(registry, Fixture_Weather) && registered;
+    // As the description lists them: a type after every type its fields name and the data asset it
+    // extends. A type registered as this same description already is left alone, so a second run
+    // registers nothing; one that registers goes to its role's hook, which hangs its attachments.
+    if (registry.Find(FixtureTypes::Fixture_Handle.name) != &FixtureTypes::Fixture_Handle)
+        registered = registry.Register(FixtureTypes::Fixture_Handle) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Limits.name) != &FixtureTypes::Fixture_Limits)
+        registered = registry.Register(FixtureTypes::Fixture_Limits) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Marker.name) != &FixtureTypes::Fixture_Marker)
+        registered = registry.Register(FixtureTypes::Fixture_Marker) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Motion.name) != &FixtureTypes::Fixture_Motion)
+        registered = registry.Register(FixtureTypes::Fixture_Motion) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Offset.name) != &FixtureTypes::Fixture_Offset)
+        registered = registry.Register(FixtureTypes::Fixture_Offset) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Numbers.name) != &FixtureTypes::Fixture_Numbers)
+        registered = registry.Register(FixtureTypes::Fixture_Numbers) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Quat.name) != &FixtureTypes::Fixture_Quat)
+        registered = registry.Register(FixtureTypes::Fixture_Quat) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Spring.name) != &FixtureTypes::Fixture_Spring)
+        registered = registry.Register(FixtureTypes::Fixture_Spring) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Vec3.name) != &FixtureTypes::Fixture_Vec3)
+        registered = registry.Register(FixtureTypes::Fixture_Vec3) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Body.name) != &FixtureTypes::Fixture_Body)
+        registered = registry.Register(FixtureTypes::Fixture_Body) && Fenrir::AttachComponent<Fixture::Body>(registry, FixtureTypes::Fixture_Body) && registered;
+    if (registry.Find(FixtureTypes::Fixture_BodyId.name) != &FixtureTypes::Fixture_BodyId)
+        registered = registry.Register(FixtureTypes::Fixture_BodyId) && registered;
+    if (registry.Find(FixtureTypes::Fixture_BoxShape.name) != &FixtureTypes::Fixture_BoxShape)
+        registered = registry.Register(FixtureTypes::Fixture_BoxShape) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Clock.name) != &FixtureTypes::Fixture_Clock)
+        registered = registry.Register(FixtureTypes::Fixture_Clock) && Fenrir::AttachAppResource<Fixture::Clock>(registry, FixtureTypes::Fixture_Clock) && registered;
+    if (registry.Find(FixtureTypes::Fixture_ShapeType.name) != &FixtureTypes::Fixture_ShapeType)
+        registered = registry.Register(FixtureTypes::Fixture_ShapeType) && registered;
+    if (registry.Find(FixtureTypes::Fixture_SphereShape.name) != &FixtureTypes::Fixture_SphereShape)
+        registered = registry.Register(FixtureTypes::Fixture_SphereShape) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Shape.name) != &FixtureTypes::Fixture_Shape)
+        registered = registry.Register(FixtureTypes::Fixture_Shape) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Collider.name) != &FixtureTypes::Fixture_Collider)
+        registered = registry.Register(FixtureTypes::Fixture_Collider) && Fenrir::AttachComponent<Fixture::Collider>(registry, FixtureTypes::Fixture_Collider) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Columns.name) != &FixtureTypes::Fixture_Columns)
+        registered = registry.Register(FixtureTypes::Fixture_Columns) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Contacts.name) != &FixtureTypes::Fixture_Contacts)
+        registered = registry.Register(FixtureTypes::Fixture_Contacts) && Fenrir::AttachComponent<Fixture::Contacts>(registry, FixtureTypes::Fixture_Contacts) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Dial.name) != &FixtureTypes::Fixture_Dial)
+        registered = registry.Register(FixtureTypes::Fixture_Dial) && Fenrir::AttachComponent<Fixture::Dial>(registry, FixtureTypes::Fixture_Dial) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Folder.name) != &FixtureTypes::Fixture_Folder)
+        registered = registry.Register(FixtureTypes::Fixture_Folder) && Fenrir::AttachComponent<Fixture::Folder>(registry, FixtureTypes::Fixture_Folder) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Heading.name) != &FixtureTypes::Fixture_Heading)
+        registered = registry.Register(FixtureTypes::Fixture_Heading) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Hit.name) != &FixtureTypes::Fixture_Hit)
+        registered = registry.Register(FixtureTypes::Fixture_Hit) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Pair_double.name) != &FixtureTypes::Fixture_Pair_double)
+        registered = registry.Register(FixtureTypes::Fixture_Pair_double) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Paths.name) != &FixtureTypes::Fixture_Paths)
+        registered = registry.Register(FixtureTypes::Fixture_Paths) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Size.name) != &FixtureTypes::Fixture_Size)
+        registered = registry.Register(FixtureTypes::Fixture_Size) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Sky.name) != &FixtureTypes::Fixture_Sky)
+        registered = registry.Register(FixtureTypes::Fixture_Sky) && Fenrir::AttachAppResource<Fixture::Sky>(registry, FixtureTypes::Fixture_Sky) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Socket.name) != &FixtureTypes::Fixture_Socket)
+        registered = registry.Register(FixtureTypes::Fixture_Socket) && Fenrir::AttachComponent<Fixture::Socket>(registry, FixtureTypes::Fixture_Socket) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Stat.name) != &FixtureTypes::Fixture_Stat)
+        registered = registry.Register(FixtureTypes::Fixture_Stat) && registered;
+    if (registry.Find(FixtureTypes::Fixture_WeaponData.name) != &FixtureTypes::Fixture_WeaponData)
+        registered = registry.Register(FixtureTypes::Fixture_WeaponData) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Sword.name) != &FixtureTypes::Fixture_Sword)
+        registered = registry.Register(FixtureTypes::Fixture_Sword) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Tag.name) != &FixtureTypes::Fixture_Tag)
+        registered = registry.Register(FixtureTypes::Fixture_Tag) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Ticket.name) != &FixtureTypes::Fixture_Ticket)
+        registered = registry.Register(FixtureTypes::Fixture_Ticket) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Touched.name) != &FixtureTypes::Fixture_Touched)
+        registered = registry.Register(FixtureTypes::Fixture_Touched) && registered;
+    if (registry.Find(FixtureTypes::Fixture_Weather.name) != &FixtureTypes::Fixture_Weather)
+        registered = registry.Register(FixtureTypes::Fixture_Weather) && Fenrir::AttachSceneResource<Fixture::Weather>(registry, FixtureTypes::Fixture_Weather) && registered;
     return registered;
 }
 

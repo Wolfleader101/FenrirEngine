@@ -255,7 +255,7 @@ public sealed class GenerateTests
         var generated = Generate(Description(Type("Test::Plain", "struct", role, Field("value", "\"kind\": \"i32\""))));
 
         AssertContains(generated.Source,
-                       $"    registered = registry.Register(Test_Plain) && {hook}<Test::Plain>(registry, Test_Plain) && registered;\n",
+                       Registers("Test_Plain", $"{hook}<Test::Plain>(registry, FixtureTypes::Test_Plain)"),
                        "The registration should call the role's hook for a type that registered.");
         AssertContains(generated.Header, "#include \"FenrirTypes/RoleHooks.hpp\"\n", "The hooks are declared by FenrirTypes.");
         AssertContains(generated.Header, $"template <typename T>\ninline bool {hook}(Fenrir::TypeRegistry&, const Fenrir::TypeDescription&)\n" +
@@ -272,7 +272,7 @@ public sealed class GenerateTests
     {
         var generated = Generate(Description(Type("Test::Plain", "struct", role, Field("value", "\"kind\": \"i32\""))));
 
-        AssertContains(generated.Source, "    registered = registry.Register(Test_Plain) && registered;\n",
+        AssertContains(generated.Source, Registers("Test_Plain"),
                        "The type should be registered.");
         Assert.False(generated.Source.Contains("Attach", StringComparison.Ordinal) ||
                      generated.Header.Contains("Attach", StringComparison.Ordinal),
@@ -298,7 +298,7 @@ public sealed class GenerateTests
             "{\"name\": \"Test::Mode\", \"category\": \"enum\", \"underlying\": \"u8\", \"size\": 1, \"alignment\": 1, " +
             "\"values\": [{\"name\": \"A\", \"value\": 0}]}"));
 
-        AssertContains(generated.Source, "    registered = registry.Register(Test_Mode) && registered;\n",
+        AssertContains(generated.Source, Registers("Test_Mode"),
                        "The enum should be registered.");
         Assert.False(generated.Source.Contains("Attach", StringComparison.Ordinal), "An enum should be handed to no hook.");
     }
@@ -362,9 +362,8 @@ public sealed class GenerateTests
         AssertContains(generated.Source, "{.name = \"shape\", .type = {.kind = Fenrir::Kind::Struct, .type = &Test_Shape}",
                        "A component holding a tagged union should point at its description.");
         AssertContains(generated.Source,
-                       "    registered = registry.Register(Test_Shape) && registered;\n" +
-                       "    registered = registry.Register(Test_Collider) && " +
-                       "Fenrir::AttachComponent<Test::Collider>(registry, Test_Collider) && registered;\n",
+                       Registers("Test_Shape") +
+                       Registers("Test_Collider", "Fenrir::AttachComponent<Test::Collider>(registry, FixtureTypes::Test_Collider)"),
                        "The tagged union should register before the component holding it.");
     }
 
@@ -435,7 +434,9 @@ public sealed class GenerateTests
     [InlineData("header = \"a.hpp\"\nsource = \"a.cpp\"\nfunction = \"F\"\n",
                 "[registration] 'includes' is a list of the headers declaring the described types")]
     [InlineData("header = \"a.hpp\"\nsource = \"a.cpp\"\nfunction = \"F\"\nincludes = []\nextra = 1\n",
-                "[registration] has an unknown key 'extra' (it has 'header', 'source', 'function' and 'includes')")]
+                "[registration] has an unknown key 'extra' (it has 'header', 'source', 'function', 'includes', 'uses' and 'test')")]
+    [InlineData("header = \"a.hpp\"\nsource = \"a.cpp\"\nfunction = \"F\"\nincludes = []\nuses = [\"Other.toml\"]\n",
+                "[registration] 'uses' is a list of the selections (.api.toml) of the packages registering types this description also holds")]
     public void AMalformedRegistrationTableFailsSayingWhatIsWrong(string table, string diagnostic)
     {
         using var directory = new TemporaryDirectory();
@@ -448,6 +449,249 @@ public sealed class GenerateTests
         Assert.True(exception.Message.Contains(diagnostic, StringComparison.Ordinal),
                     $"Reading the selection should fail with\n  {diagnostic}\nbut failed with\n  {exception.Message}");
     }
+
+    [Fact]
+    public void ATypeAlreadyRegisteredAsTheSameDescriptionIsLeftAlone()
+    {
+        var generated = Generate(Description(Type("Test::Plain", "struct", "component", Field("value", "\"kind\": \"i32\""))));
+
+        AssertContains(generated.Source,
+                       "    if (registry.Find(FixtureTypes::Test_Plain.name) != &FixtureTypes::Test_Plain)\n" +
+                       "        registered = registry.Register(FixtureTypes::Test_Plain) && ",
+                       "A second run of the registration should register, and hand to the hook, nothing it registered before.");
+    }
+
+    [Fact]
+    public void TheHeaderDeclaresEachDescriptionObjectInThePackagesNamespace()
+    {
+        var generated = Generate(Description(Type("Test::Plain", "struct", "component", Field("value", "\"kind\": \"i32\""))));
+
+        AssertContains(generated.Header,
+                       "namespace Fenrir::Generated::FixtureTypes\n{\n    extern const Fenrir::TypeDescription Test_Plain;\n}",
+                       "A registration using this one points at the description objects the header declares.");
+        AssertContains(generated.Source, "namespace Fenrir::Generated::FixtureTypes\n{\n",
+                       "The source should define the description objects in the namespace the header declares them in.");
+        AssertContains(generated.Source, "    return Fenrir::Generated::FixtureTypes::Test_Plain;\n",
+                       "Describe<T> should yield the declared description object.");
+    }
+
+    [Fact]
+    public void ATypeAUsedRegistrationDescribesIsItsAndIsPointedAtNotDescribedAgain()
+    {
+        using var directory = new TemporaryDirectory();
+        var holder = Type("Test::Holder", "struct", "component", Field("vec", "\"kind\": \"struct\", \"type\": \"Test::Vec\""));
+        var user = WritePackages(directory, PackageDescription("Base", VecType), PackageDescription("User", VecType, holder));
+
+        var registration = Registration.Read(user)!;
+        var generated = Generator.Generate(registration, File.ReadAllText(registration.DescriptionPath));
+
+        AssertContains(generated.Header, "#include \"Base/Generated/BaseTypes.hpp\"\n",
+                       "The header should include the used registration's header from below its include directory.");
+        Assert.False(generated.Header.Contains("Describe<Test::Vec>", StringComparison.Ordinal),
+                     "Describe<Test::Vec> is the used registration's; specialising it again would redefine it.");
+        Assert.False(generated.Source.Contains("constexpr Fenrir::TypeDescription Test_Vec", StringComparison.Ordinal),
+                     "The used registration's type should not be described again.");
+        AssertContains(generated.Source, ".type = &Fenrir::Generated::BaseTypes::Test_Vec}",
+                       "A field holding the used type should point at the used registration's description object.");
+        AssertContains(generated.Source,
+                       "    bool registered = true;\n" +
+                       "    // The registrations this one uses first: they register the types they describe that this one holds.\n" +
+                       "    registered = Fenrir::Generated::RegisterBaseTypes(registry) && registered;\n",
+                       "The registration should run the used one first, which registers the type its fields point at.");
+    }
+
+    [Fact]
+    public void AUsedRegistrationsOwnUsesAreFollowed()
+    {
+        using var directory = new TemporaryDirectory();
+        var middle = Type("Test::Middle", "struct", "shared-struct", Field("vec", "\"kind\": \"struct\", \"type\": \"Test::Vec\""));
+        var holder = Type("Test::Holder", "struct", "component", Field("middle", "\"kind\": \"struct\", \"type\": \"Test::Middle\""),
+                          Field("vec", "\"kind\": \"struct\", \"type\": \"Test::Vec\""));
+        WritePackages(directory, PackageDescription("Base", VecType), PackageDescription("Middle", VecType, middle), usedBy: "Middle");
+        var user = WritePackage(directory, "User", PackageDescription("User", VecType, middle, holder), "Middle");
+
+        var registration = Registration.Read(user)!;
+        var generated = Generator.Generate(registration, File.ReadAllText(registration.DescriptionPath));
+
+        AssertContains(generated.Source, ".type = &Fenrir::Generated::BaseTypes::Test_Vec}",
+                       "A type the used registration's own use registers is that package's.");
+        AssertContains(generated.Source, ".type = &Fenrir::Generated::MiddleTypes::Test_Middle}",
+                       "A type the used registration registers is its.");
+        Assert.False(generated.Source.Contains("RegisterBaseTypes", StringComparison.Ordinal),
+                     "Only the used registration is called; it calls the ones it uses.");
+    }
+
+    [Fact]
+    public void UsingASelectionWithoutARegistrationFailsNamingIt()
+    {
+        using var directory = new TemporaryDirectory();
+        var user = WritePackages(directory, PackageDescription("Base", VecType), PackageDescription("User", VecType));
+        var baseSelection = Path.Combine(directory.Path, "Base", "api", "Base.api.toml");
+        File.WriteAllText(baseSelection, "headers = [\"Base.hpp\"]\n\n[types]\n\"Test::Vec\" = \"bound-type\"\n");
+
+        var registration = Registration.Read(user)!;
+        var exception = Assert.Throws<GenerateException>(() => Generator.Generate(registration, File.ReadAllText(registration.DescriptionPath)));
+
+        Assert.True(exception.Message.Contains($"uses {baseSelection}, which has no [registration] to use", StringComparison.Ordinal),
+                    $"Generating should fail naming the used selection, but failed with\n  {exception.Message}");
+    }
+
+    [Fact]
+    public void RegistrationsUsingEachOtherFailNamingTheCycle()
+    {
+        using var directory = new TemporaryDirectory();
+        WritePackage(directory, "Base", PackageDescription("Base", VecType), "User");
+        var user = WritePackage(directory, "User", PackageDescription("User", VecType), "Base");
+
+        var registration = Registration.Read(user)!;
+        var exception = Assert.Throws<GenerateException>(() => Generator.Generate(registration, File.ReadAllText(registration.DescriptionPath)));
+
+        Assert.True(exception.Message.Contains("which uses it in turn", StringComparison.Ordinal),
+                    $"Generating should fail naming the cycle, but failed with\n  {exception.Message}");
+    }
+
+    [Fact]
+    public void AUsedRegistrationWhoseHeaderIsUnderNoIncludeDirectoryFailsNamingIt()
+    {
+        using var directory = new TemporaryDirectory();
+        var user = WritePackages(directory, PackageDescription("Base", VecType), PackageDescription("User", VecType));
+        var baseSelection = Path.Combine(directory.Path, "Base", "api", "Base.api.toml");
+        File.WriteAllText(baseSelection, File.ReadAllText(baseSelection).Replace("../include/Base/Generated/", "../Generated/"));
+
+        var registration = Registration.Read(user)!;
+        var exception = Assert.Throws<GenerateException>(() => Generator.Generate(registration, File.ReadAllText(registration.DescriptionPath)));
+
+        Assert.True(exception.Message.Contains("lies under no include directory", StringComparison.Ordinal),
+                    $"Generating should fail naming the header, but failed with\n  {exception.Message}");
+    }
+
+    [Fact]
+    public void ARegistrationWithoutATestWritesNone()
+    {
+        var generated = Generate(Description(Type("Test::Plain", "struct", "component", Field("value", "\"kind\": \"i32\""))));
+
+        Assert.True(generated.Test is null, "A [registration] without 'test' should write no defaults test.");
+    }
+
+    [Fact]
+    public void TheDefaultsTestExpectsEachScalarDefaultTheDescriptionRecords()
+    {
+        var test = GenerateTest(Description(
+            "{\"name\": \"Test::Mode\", \"category\": \"enum\", \"underlying\": \"u8\", \"size\": 1, \"alignment\": 1, " +
+            "\"values\": [{\"name\": \"Off\", \"value\": 0}, {\"name\": \"On\", \"value\": 4}]}",
+            Type("Test::Plain", "struct", "component",
+                 "{\"name\": \"count\", \"offset\": 0, \"kind\": \"u32\", \"default\": 4294967295}",
+                 "{\"name\": \"speed\", \"offset\": 4, \"kind\": \"f32\", \"default\": \"inf\"}",
+                 "{\"name\": \"on\", \"offset\": 8, \"kind\": \"bool\", \"default\": true}",
+                 "{\"name\": \"mode\", \"offset\": 9, \"kind\": \"enum\", \"type\": \"Test::Mode\", \"default\": \"On\"}",
+                 "{\"name\": \"label\", \"offset\": 10, \"kind\": \"fixed-string\", \"length\": 8, \"default\": \"hi\"}",
+                 "{\"name\": \"target\", \"offset\": 24, \"kind\": \"entity\", \"default\": null}",
+                 "{\"name\": \"list\", \"offset\": 40, \"kind\": \"pointer\", \"default\": null}")));
+
+        AssertContains(test,
+                       "    Fenrir::Testing::CheckDefaults(Fenrir::Describe<Test::Plain>::Description(), {\n" +
+                       "        {\"count\", std::int64_t{4294967295}},\n" +
+                       "        {\"speed\", std::numeric_limits<double>::infinity()},\n" +
+                       "        {\"on\", true},\n" +
+                       "        {\"mode\", std::int64_t{4}},\n" +
+                       "        {\"label\", std::string(\"hi\")},\n" +
+                       "        {\"target\", Fenrir::EntityValue{}},\n" +
+                       "    });\n",
+                       "Each scalar's recorded default should be expected, an enum's as its enumerator's value; a pointer is opaque.");
+    }
+
+    [Fact]
+    public void TheDefaultsTestFollowsANestedStructsOwnDefaultsAndTheMembersAFieldSets()
+    {
+        var test = GenerateTest(Description(
+            Type("Test::Spring", "struct", "nested",
+                 "{\"name\": \"frequency\", \"offset\": 0, \"kind\": \"f32\", \"default\": 0}",
+                 "{\"name\": \"damping\", \"offset\": 4, \"kind\": \"f32\", \"default\": 1}"),
+            Type("Test::Motor", "struct", "component",
+                 "{\"name\": \"soft\", \"offset\": 0, \"kind\": \"struct\", \"type\": \"Test::Spring\", \"default\": {\"frequency\": 2}}",
+                 "{\"name\": \"plain\", \"offset\": 8, \"kind\": \"struct\", \"type\": \"Test::Spring\", \"default\": {}}")));
+
+        AssertContains(test,
+                       "        {\"soft.frequency\", 2.0},\n        {\"soft.damping\", 1.0},\n" +
+                       "        {\"plain.frequency\", 0.0},\n        {\"plain.damping\", 1.0},\n",
+                       "A member the initialiser sets takes its value, and the rest the nested type's own defaults.");
+    }
+
+    [Fact]
+    public void TheDefaultsTestExpectsABoundTypesComponentsOnlyWhereTheInitialiserSpellsThem()
+    {
+        var test = GenerateTest(Description(
+            VecType,
+            Type("Test::Body", "struct", "component",
+                 "{\"name\": \"spelled\", \"offset\": 0, \"kind\": \"struct\", \"type\": \"Test::Vec\", \"default\": {\"x\": 1}}",
+                 "{\"name\": \"own\", \"offset\": 4, \"kind\": \"struct\", \"type\": \"Test::Vec\", \"default\": {}}")));
+
+        AssertContains(test, "        {\"spelled.x\", 1.0},\n", "A component the initialiser spells is expected.");
+        Assert.False(test.Contains("\"own.x\"", StringComparison.Ordinal),
+                     "A bound type's own default is its library's, which the description does not record.");
+    }
+
+    [Fact]
+    public void TheDefaultsTestExpectsATaggedUnionsTagAndItsDefaultAlternative()
+    {
+        var test = GenerateTest(Description(ShapeType, TaggedUnion("Test::Shape")));
+
+        AssertContains(test,
+                       "        {\"m_type\", std::int64_t{3}},\n" +
+                       "        {\"m_extents[0]\", 0.0},\n        {\"m_extents[1]\", 0.0},\n        {\"m_extents[2]\", 0.0},\n",
+                       "A tagged union holds its default kind's tag and that alternative's own defaults.");
+    }
+
+    // The defaults test a description gives, with the registration naming one.
+    private static string GenerateTest(string description)
+    {
+        using var directory = new TemporaryDirectory();
+        var selection = WriteRegisteredSelection(directory, description);
+        File.AppendAllText(selection, "test = \"Tests/Generated/FixtureTypesDefaultsTests.cpp\"\n");
+        var registration = Registration.Read(selection)!;
+        var generated = Generator.Generate(registration, description);
+        Assert.True(generated.Test is not null, "A [registration] with 'test' should write a defaults test.");
+        return generated.Test!;
+    }
+
+    // A bound type two packages' descriptions both hold.
+    private const string VecType =
+        "{\"name\": \"Test::Vec\", \"category\": \"bound-type\", \"role\": \"bound-type\", \"size\": 4, \"alignment\": 4, " +
+        "\"components\": [{\"name\": \"x\", \"offset\": 0, \"kind\": \"f32\"}]}";
+
+    // Two packages in the directory, each as an engine package lays out (<Name>/api/, <Name>/include/, <Name>/src/): Base,
+    // and User, which uses Base (or `usedBy`, when that is the package using Base). Returns User's selection.
+    private static string WritePackages(TemporaryDirectory directory, string baseDescription, string userDescription,
+                                        string usedBy = "User")
+    {
+        WritePackage(directory, "Base", baseDescription);
+        return WritePackage(directory, usedBy, userDescription, "Base");
+    }
+
+    // A package's selection and description in <directory>/<name>/api/, registering into its include/ and src/, using
+    // the named packages' selections; returns the selection.
+    private static string WritePackage(TemporaryDirectory directory, string name, string description, params string[] uses)
+    {
+        var api = Path.Combine(directory.Path, name, "api");
+        Directory.CreateDirectory(api);
+        var selection = Path.Combine(api, $"{name}.api.toml");
+        var used = string.Join(", ", uses.Select(use => $"\"../../{use}/api/{use}.api.toml\""));
+        File.WriteAllText(selection,
+                          $"headers = [\"{name}.hpp\"]\n\n[types]\n\"Test::Vec\" = \"bound-type\"\n\n" +
+                          "[registration]\n" +
+                          $"header = \"../include/{name}/Generated/{name}Types.hpp\"\n" +
+                          $"source = \"../src/Generated/{name}Types.cpp\"\n" +
+                          $"function = \"Fenrir::Generated::Register{name}Types\"\n" +
+                          $"includes = [\"{name}.hpp\"]\n" +
+                          (uses.Length > 0 ? $"uses = [{used}]\n" : ""));
+        File.WriteAllText(Path.Combine(api, $"{name}.api.json"), description);
+        return selection;
+    }
+
+    // The line registering a described type of the Fixture package, then handing it to its role's hook when it has one.
+    private static string Registers(string identifier, string? hook = null) =>
+        $"    if (registry.Find(FixtureTypes::{identifier}.name) != &FixtureTypes::{identifier})\n" +
+        $"        registered = registry.Register(FixtureTypes::{identifier}) && {(hook is null ? "" : hook + " && ")}registered;\n";
 
     // The registration a description gives.
     private static GeneratedFiles Generate(string description)
@@ -486,8 +730,10 @@ public sealed class GenerateTests
         return selection;
     }
 
-    private static string Description(params string[] types) =>
-        "{\n  \"package\": \"Fixture\",\n  \"pointerSize\": 8,\n  \"alignment\": \"natural\",\n  \"types\": [\n" +
+    private static string Description(params string[] types) => PackageDescription("Fixture", types);
+
+    private static string PackageDescription(string package, params string[] types) =>
+        $"{{\n  \"package\": \"{package}\",\n  \"pointerSize\": 8,\n  \"alignment\": \"natural\",\n  \"types\": [\n" +
         string.Join(",\n", types) + "\n  ]\n}\n";
 
     private static string Type(string name, string category, string role, params string[] fields) =>
