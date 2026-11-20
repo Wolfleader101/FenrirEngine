@@ -9,7 +9,8 @@ Spec: [Particles](../spec.md). ADR-0089.
 
 **Status:** ready-for-agent
 
-Stacked on 05. On the core stack 01, 02, 03, 04, 05, 06, 09, 10, 11, 12.
+Stacked on 05. On the core stack 01, 02, 09, 10, 03, 04, 05, 06, 11, 12: CPU bursts, then GPU simulation, then the rest, as decided.
 
 - [ ] Null-backend tests: lit particles bind the light clusters and shadows; soft particles bind scene depth; emitted lights reach the light buffer up to the cap and no further.
 - [ ] ParticleDemo's Lights scene works by hand; smoke runs pass.
+- [ ] The API description and generated C# bindings are current with this ticket's modules.

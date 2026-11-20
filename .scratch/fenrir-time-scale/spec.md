@@ -78,3 +78,4 @@ The app gains one global **time scale** and a separate **pause** flag. The scale
 
 - The facts behind it, with file and line, are in [What are pause and time scale?](../engine-gaps/issues/21-what-pause-and-time-scale-are.md).
 - Build and test only `msvc-x64-debug` locally, through the MSVC script and, in a worktree, the short-path junction (`README.md`, "Building and testing").
+- ADR-0086 is `proposed` until ticket 06, the spec's last, makes it `accepted` (CODING_STANDARDS.md).

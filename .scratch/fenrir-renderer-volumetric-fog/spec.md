@@ -80,3 +80,4 @@ A camera that turns volumetric fog on gets a froxel volume: a camera-aligned 3D 
 - Plain fog's spec must be built first: this spec extends its `Fog` resource, fog pass and fog helper.
 - The facts behind the decisions, with costs from other engines, are in [How do engines do volumetric fog?](../engine-gaps/issues/34-how-engines-do-volumetric-fog.md) and its findings on the local `research/volumetric-fog` branch.
 - Build and test only `msvc-x64-debug` locally, run the GL tests on your own GPU before a PR that touches the OpenGL backend, and use the short-path junction in a worktree (`README.md`, "Building and testing").
+- ADR-0088 is `proposed` until ticket 07, the spec's last, makes it `accepted` (CODING_STANDARDS.md).

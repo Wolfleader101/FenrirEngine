@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: proposed
 ---
 
 # One global time scale feeds the fixed-tick accumulator, and pause is its own flag

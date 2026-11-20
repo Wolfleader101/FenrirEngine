@@ -39,7 +39,7 @@ While a UI root has the focus, the arrow keys send the same directions the d-pad
 - **With no element of the root focused,** arrow keys and Escape pass to the game (the keyboard goes to the UI only while it has focus, ADR-0065); unlike a gamepad direction, an arrow does not give a root the first focus.
 - **The flag:** `UIRootConfig::gamepadNavigation` is renamed `directionalNavigation` and covers the d-pad, the left stick and the arrow keys; off, the root takes none of them. The demo UI kit keeps it off, so demo scenes keep their arrow keys. Every use in the repo, the C# binding and the docs follow the rename.
 - **The public call:** a root takes a navigation command, a direction (up, down, left, right), activate or cancel, from C++ and C#. A direction goes through the same navigation as an arrow key; activate sends the focused element what the gamepad's A sends; cancel sends Cancel. With nothing focused, a direction gives the root its first focus as a gamepad direction does.
-- **Glossary:** Directional navigation already covers the arrow keys and a direction the game sends; FenrirUI's README and ADR-0065's wording follow it.
+- **Glossary:** *Gamepad navigation* becomes *Directional navigation*, covering the arrow keys and a direction the game sends, with *gamepad navigation* as its old name to avoid; *Focusable* says a direction; FenrirUI's README and ADR-0065's wording follow it, all in the rename ticket.
 - **No ADR:** it extends ADR-0065's navigation to the keyboard and reverses nothing.
 
 ## Testing Decisions

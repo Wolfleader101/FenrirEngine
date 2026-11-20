@@ -43,7 +43,7 @@ The engine gives a game two CMake functions, one to build and deploy a C# script
 16. As a game developer, I want a clear error naming a missing contract when scripting cannot start, so that I know at once why my scripts did not load.
 17. As a game developer, I want a README section that lists the options to set before `add_subdirectory`, the C++ standard, the .NET SDK, submodule transport and the two functions, so that I can set up a game without reading the engine's CMake.
 18. As a game developer on Windows, I want the README to tell me to give the engine a short binary directory, so that a nested build does not pass MSVC's path limit.
-19. As a game developer, I want the demo apps off by default in my project, or told plainly how to turn them off, so that I do not build demo code I do not use.
+19. As a game developer, I want to be told plainly to turn the demo apps off, so that I do not build demo code I do not use.
 20. As an engine maintainer, I want the demo scaffold's functions to call the same two functions, so that the demo apps prove them every time they build.
 21. As an engine maintainer, I want the demo apps' smoke runs to pass unchanged after the refactor, so that I know the scripts and assets still reach every demo app.
 22. As an engine maintainer, I want a small outside project in the repo that adds the engine as a subdirectory, compiles a shader, links every package and builds and loads a C# script, so that I can check by hand that a game can still build against the engine.

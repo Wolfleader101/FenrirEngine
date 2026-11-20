@@ -9,7 +9,7 @@ Spec: [Particles](../spec.md). ADR-0089.
 
 **Status:** ready-for-agent
 
-Bottom of the core stack 01, 02, 03, 04, 05, 06, 09, 10, 11, 12.
+Bottom of the core stack 01, 02, 09, 10, 03, 04, 05, 06, 11, 12.
 
 - [ ] Null-backend tests: a faced instance list's draw carries its facing mode; each mode reaches the vertex stage.
 - [ ] A CPU test of the facing maths for the three modes.

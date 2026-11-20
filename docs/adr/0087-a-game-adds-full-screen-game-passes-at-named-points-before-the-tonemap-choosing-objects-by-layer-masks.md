@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: proposed
 ---
 
 # A game adds full-screen game passes at named points before the tonemap, choosing objects by layer masks

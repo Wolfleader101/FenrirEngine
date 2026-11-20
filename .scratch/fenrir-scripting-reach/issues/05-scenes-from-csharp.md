@@ -5,7 +5,7 @@ Spec: [C# reach: parenting, scenes, the app, C# resources and mesh positions](..
 **What to build:** A C# script creates, activates and destroys scenes by name through a `Scenes` facade (`Create`, `SetActive`, `Destroy`, `Active`) over the app's scene requests, so a game keeps its title screen and level apart and restarts a level by recreating its scene. Every installed package sets up its per-scene state for a scene made this way exactly as for one made from C++: check each package that keeps per-scene state and fix any that only set up the scenes that existed at install. Script systems keep running against the active scene.
 
 **Blocked by:** 04
-**Touches:** `packages/FenrirScripting/src/`, `packages/FenrirScripting/api/`, `packages/FenrirScripting/Managed/Fenrir.Scripting/`, `packages/FenrirScripting/Tests/`, and the install code of any package that sets up per-scene state only at install
+**Touches:** `packages/FenrirScripting/src/`, `packages/FenrirScripting/api/`, `packages/FenrirScripting/Managed/Fenrir.Scripting/`, `packages/FenrirScripting/Tests/`, and, where they set up per-scene state only at install, `packages/FenrirPhysics/src/`, `packages/FenrirRenderer/src/Facade/`, `packages/FenrirUI/src/`, `packages/FenrirSkeleton/src/`, `packages/FenrirDebugDraw/src/`
 
 **Status:** ready-for-agent
 

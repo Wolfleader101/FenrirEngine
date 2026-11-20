@@ -102,5 +102,6 @@ A **particle effect** is a stack of engine modules with parameters (spawn, initi
 
 - The facts behind the decisions are in [How do engines split particles between the engine and the game?](../engine-gaps/issues/24-how-engines-split-particles.md) (findings on the local `research/engine-particles` branch) and [What is the engine's particle system?](../engine-gaps/issues/25-what-the-particle-system-is.md).
 - It uses the time scale spec's game time, and, where they are built first, the game passes spec's depth resolve, the plain and volumetric fog helper, and the per-entity spec's per-draw colour. The device's storage images from the volumetric fog spec are not needed here (particles use storage buffers).
-- The spec's tickets should put CPU billboards and bursts first, as decided: that is what Flightless Frenzy needs. Then GPU simulation, then ribbons, mesh particles, lit and light-emitting particles, and collision.
+- The tickets put CPU billboards and bursts first, with C# bursts beside them, as decided: that is what Flightless Frenzy needs. Then GPU simulation, then sub-emitters and events, ribbons, mesh particles, lit and light-emitting particles, and collision.
 - Build and test only `msvc-x64-debug` locally, run the GL tests on your own GPU before a PR that touches the OpenGL backend, and use the short-path junction in a worktree (`README.md`, "Building and testing").
+- ADR-0089 is `proposed` until ticket 12, the spec's last, makes it `accepted` (CODING_STANDARDS.md).

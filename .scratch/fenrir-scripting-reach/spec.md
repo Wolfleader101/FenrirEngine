@@ -78,7 +78,7 @@ C# gains, through the existing generated binding pipeline and facades: a writabl
   - `Resources.Get<T>`, `TryGet`, `GetReadOnly`, `Insert` and `Remove` reach it as they reach native resources. A C# resource is not reachable from C++ by type.
   - `Res<T>` system parameters, and describing a C# resource for scene files, are not in this spec.
 - **Mesh positions.** `Assets.GetMeshPositions(mesh, span)` copies the mesh's CPU-side positions into a span of `Vector3` and returns how many it wrote, with a count query to size the span, in the shape of `GetMeshLodIndices` and `GetMeshLodErrors`. Level 0 indices already cross through `GetMeshLodIndices`, so the two feed `PhysicsWorld.CreateCollisionMesh`. A mesh whose CPU copy is absent is reported unreadable through the call's result, not as zero positions.
-- **Glossary.** Scene resource and app resource already allow a script assembly as their keeper. *Scene request* is added: a create, activate or destroy of a scene, queued and applied at the end of the frame.
+- **Glossary.** Scene resource and app resource gain a script assembly as a keeper when C# resources land; *Scene request* is added with the scene requests: a create, activate or destroy of a scene, applied at the end of the frame.
 
 ## Testing Decisions
 

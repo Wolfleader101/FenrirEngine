@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: proposed
 ---
 
 # Volumetric fog is a per-camera froxel volume built in compute, handing off to plain fog at its range

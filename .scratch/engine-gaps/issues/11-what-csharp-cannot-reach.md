@@ -33,4 +33,4 @@ Yes, in two steps. Parenting has no stand-in and likely blocks an early ticket. 
 - 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [How does C# parent entities?](18-how-csharp-parents-entities.md), [How does C# create, switch and destroy scenes, and stop the app?](19-how-csharp-reaches-scenes-and-the-app.md).
 - 2026-11-19, round 2 of [Engine gaps for Flightless Frenzy](../map.md): spec-ready in [How does C# parent entities?](18-how-csharp-parents-entities.md) and [How does C# create, switch and destroy scenes, and stop the app?](19-how-csharp-reaches-scenes-and-the-app.md).
 - 2026-11-19: the spec is written, [C# reach: parenting, scenes, the app, C# resources and mesh positions](../../fenrir-scripting-reach/spec.md), `ready-for-agent` for `/to-tickets`.
-- 2026-11-19: tickets cut, `.scratch/fenrir-scripting-reach/issues/01` to `06` (stack 02, 03, 05, 06; 01 and 04 beside).
+- 2026-11-19: tickets cut, the tickets of [C# reach: parenting, scenes, the app, C# resources and mesh positions](../../fenrir-scripting-reach/spec.md), `01` to `06` (stack 02, 03, 05, 06; 01 and 04 beside).

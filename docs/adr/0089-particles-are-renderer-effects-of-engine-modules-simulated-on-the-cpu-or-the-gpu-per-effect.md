@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: proposed
 ---
 
 # Particles are renderer effects of engine modules, simulated on the CPU or the GPU per effect

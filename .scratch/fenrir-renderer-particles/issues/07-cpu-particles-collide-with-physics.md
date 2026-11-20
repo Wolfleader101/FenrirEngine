@@ -9,7 +9,7 @@ Spec: [Particles](../spec.md). ADR-0089.
 
 **Status:** ready-for-agent
 
-Branches from 03 and runs beside the core stack; its ParticleDemo scene may need a small merge with the core stack's scenes.
+Branches from 03 once it lands on the core stack, and runs beside it; its ParticleDemo scene may need a small merge with the core stack's scenes.
 
 - [ ] Glue tests: CPU particles hitting a static collider bounce, slide or die as configured, and send collision events.
 - [ ] The glue package builds only with physics and the renderer on.

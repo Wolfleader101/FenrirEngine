@@ -1,7 +1,7 @@
 # Does a loaded model give C# its collision?
 
 Type: grilling
-Status: open
+Status: resolved
 Blocked by: none
 Settles: [A level model does not give the level its collision](04-collision-from-a-model.md)
 
@@ -22,3 +22,7 @@ Outcome: a spec-ready design, `wontfix`, or a pointer to the `fenrir-serialisati
 - The CPU copy of a mesh is kept after upload: `AssetStore::TryGet(mesh)` returns `MeshData` with `positions` (`packages/FenrirAssets/include/FenrirAssets/MeshData.hpp:119`), and nothing clears it.
 - `GetMeshLodIndices` and `GetMeshLodErrors` copy into a C# span and return a count (`packages/FenrirAssets/Scripting/src/AssetsScripting.cpp:342,368-385`); `Vector3` spans already cross as inputs to `AddMesh` (`Generated/AssetsNative.cs:47`). A positions getter is the same pattern.
 - `SpawnModel` gives each node a `MeshRenderer` holding the model's mesh handle (`packages/FenrirRenderer/src/Facade/SpawnModel.cpp:31-63`).
+
+## Answer
+
+Deferred, 2026-11-20, in fixing the review of [Engine gaps for Flightless Frenzy](../map.md). Whether the engine turns a loaded model into colliders depends on how a level's geometry and collision are authored, which the levels and scenes design (the `fenrir-serialisation` map) decides; until then the reach fix, [Does C# get a loaded mesh's positions?](33-does-csharp-get-a-loaded-meshs-positions.md), lets a C# game cook a model's collision itself. It comes back when that design settles how a level is made solid.

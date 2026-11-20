@@ -9,8 +9,9 @@ Spec: [Particles](../spec.md). ADR-0089.
 
 **Status:** ready-for-agent
 
-Stacked on 09. On the core stack 01, 02, 03, 04, 05, 06, 09, 10, 11, 12.
+Stacked on 09. On the core stack 01, 02, 09, 10, 03, 04, 05, 06, 11, 12: CPU bursts, then GPU simulation, then the rest, as decided.
 
 - [ ] A GL test: a GPU emitter's particles come out of the sort in back-to-front order.
 - [ ] A GL test: GPU particles stop at a placed plane and at scene depth as configured.
 - [ ] The CPU and GPU agreement test covers collision with shapes.
+- [ ] The API description and generated C# bindings are current with this ticket's modules.

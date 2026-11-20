@@ -30,7 +30,7 @@ Each effort touches different packages, so the efforts are **independent and can
 | 3 | **Pause and time scale** | FenrirTime, FenrirApp, FenrirPhysics, FenrirAnimation | 05 | 21 | for the pause menu |
 | 4 | **Renderer features** | FenrirRenderer, FenrirAssets materials | 06, 07, 14, 15 | 22 → 23, 24 → 25, 36, 26, 34 → 35, 27 | before the game is complete |
 | 5 | **Wanted, not blocking** | FenrirInput, FenrirUI, FenrirWindow | 08, 09, 10, 12 | 29, 30, 31, 32 | never blocks |
-| – | **Waits on the levels design** | FenrirAssets, FenrirPhysics | 04 (the helper) | 28 | once levels are authored |
+| – | **Deferred until the levels design** | FenrirAssets, FenrirPhysics | 04 (the helper) | 28 | once levels are authored |
 | – | **Covered elsewhere or deferred** | | 01, 03 | none | see below |
 
 Within the renderer features, the four tickets are independent of each other as decisions; outlines and particles may both ask the frame for scene depth, which their tickets note.
@@ -57,6 +57,7 @@ Within the renderer features, the four tickets are independent of each other as 
 - [What is the engine's particle system?](issues/25-what-the-particle-system-is.md): everything, in FenrirRenderer, CPU or GPU per effect; a module stack defined in code; billboards, ribbons and meshes; depth and shape collision on the GPU, physics on the CPU; lit, light-emitting, sorted and soft; decals split off; spec-ready with an ADR, CPU bursts first. **Spec written:** [Particles](../fenrir-renderer-particles/spec.md), with ADR-0089 and twelve tickets.
 - [What volumetric fog does the renderer offer?](issues/35-what-volumetric-fog-the-renderer-offers.md): a froxel volume in compute after new 3D textures, storage images and barriers; sun cascades, clustered lights and sky scatter; `FogVolume` entities; its own history; plain fog beyond its range; opt-in per camera; its own spec with an ADR. **Spec written:** [Volumetric fog](../fenrir-renderer-volumetric-fog/spec.md), with ADR-0088 and seven tickets.
 - [What is a decal?](issues/36-what-is-a-decal.md): a `Decal` component clustered like lights and read in forward shading, optional albedo, normal, roughness, metal and emission from an atlas, a `layers` mask, fades and a cap; its own spec. **Spec written:** [Decals](../fenrir-renderer-decals/spec.md), with five tickets.
+- [Does a loaded model give C# its collision?](issues/28-does-a-loaded-model-give-csharp-its-collision.md): deferred until the levels and scenes design says how a level's collision is authored; C# can already cook collision from a model's positions once C# reach lands.
 - [Does C# get a loaded mesh's positions?](issues/33-does-csharp-get-a-loaded-meshs-positions.md): yes, `Assets.GetMeshPositions` into a span, shaped like `GetMeshLodIndices`, in the C# reach effort; spec-ready. **Spec written:** [C# reach: parenting, scenes, the app, C# resources and mesh positions](../fenrir-scripting-reach/spec.md), with six tickets.
 - [Does the engine offer input actions or dead zones?](issues/29-does-the-engine-offer-input-actions.md): radial per-stick dead zones in FenrirInput, settable, raw values still readable, spec-ready; the action layer deferred until a game wants rebinding. **Spec written:** [Stick and trigger dead zones](../fenrir-input-dead-zones/spec.md), with three tickets.
 - [Do arrow keys move UI focus?](issues/30-do-arrow-keys-move-ui-focus.md): arrow keys always drive directional navigation after the focused element's refusal; W and S are the game's through a public call that sends a direction; spec-ready. **Spec written:** [Arrow keys move UI focus](../fenrir-ui-arrow-keys/spec.md), with three tickets.
@@ -67,12 +68,8 @@ Within the renderer features, the four tickets are independent of each other as 
 
 ## Not yet specified
 
-**Where the map stands** (2026-11-19, after round 5): every gap but one has its outcome. [A level model does not give the level its collision](issues/04-collision-from-a-model.md) is half settled: its reach fix is spec-ready, and [Does a loaded model give C# its collision?](issues/28-does-a-loaded-model-give-csharp-its-collision.md) waits on the levels and scenes design.
+**Where the map stands** (2026-11-20): every gap has its outcome and every spec-ready outcome has a spec and tickets. The model-to-collider helper of [A level model does not give the level its collision](issues/04-collision-from-a-model.md) is deferred until the levels and scenes design says how a level's collision is authored.
 
-
-- **Spec boundaries:** the specs the decisions point at: the build helpers; C# reach (parenting, scenes and the app, C# resources, mesh positions), one spec or two; pause and time scale; game passes; plain fog; volumetric fog; per-entity material values; particles; decals; dead zones, arrow-key focus and fullscreen, each small. Which share a spec, and their names, are settled when `/to-spec` runs; the decisions say which are `.scratch/fenrir-renderer-<name>/`.
-- **Which ADRs:** pause and time scale has one, written with its spec; the frame's game passes may; each renderer ticket says whether it is one.
-- **Collision from a model** stays in its ticket's waiting state until the levels and scenes design says how a level's geometry and collision are authored; it may graduate into a pointer to that map instead.
 - **Gaps a later game ticket raises:** the game's unresolved tickets ("How does Kiki move?", "What does the player play with?", "What are the enemies?", the toon-look prototype, "How are levels authored and loaded?") may raise new engine gaps; each arrives as a new issue here, `needs-triage`, and is charted then.
 
 ## Out of scope

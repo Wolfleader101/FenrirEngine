@@ -30,4 +30,4 @@ Yes, its first ticket: the game cannot configure against the engine until item 3
 - 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [What breaks when the engine is built as a subdirectory?](16-build-the-engine-as-a-subdirectory.md), [What CMake functions does the engine give a game?](17-what-cmake-functions-a-game-gets.md).
 - 2026-11-19, round 2 of [Engine gaps for Flightless Frenzy](../map.md): spec-ready in [What CMake functions does the engine give a game?](17-what-cmake-functions-a-game-gets.md), from what [What breaks when the engine is built as a subdirectory?](16-build-the-engine-as-a-subdirectory.md) found.
 - 2026-11-19: the spec is written, [Building a game against the engine](../../fenrir-game-build/spec.md), `ready-for-agent` for `/to-tickets`.
-- 2026-11-19: tickets cut, `.scratch/fenrir-game-build/issues/01` to `05` (stack 01, 02, 03, 05; 04 beside).
+- 2026-11-19: tickets cut, the tickets of [Building a game against the engine](../../fenrir-game-build/spec.md), `01` to `05` (stack 01, 02, 03, 05; 04 beside).

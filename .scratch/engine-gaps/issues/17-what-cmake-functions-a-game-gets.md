@@ -36,3 +36,7 @@ Grilled 2026-11-19 in round 2b of [Engine gaps for Flightless Frenzy](../map.md)
 - **Path length:** no engine change. The README tells a game to give the engine a short binary directory (`add_subdirectory(<engine> f)`); a deep worktree uses `scripts\short-path.ps1` as today.
 - **Keeping it working:** a minimal outside project in `tests/outside-project/` (a shader, a link to every package, a C# script), run by hand and before a game's first ticket; no CI job for now, since one would build the whole engine twice on every PR.
 - **README:** a "Building a game against the engine" section: the options set before `add_subdirectory` (`FENRIR_BUILD_EXAMPLES` off), C++20, the .NET 10 SDK, the short binary directory, submodules with `protocol.file.allow=always` (and `core.longpaths` for HarfBuzz), and the two functions.
+
+## Comments
+
+- 2026-11-20: at the spec's seam check the user moved the outside project to `cmake/Tests/OutsideProject/`, beside the CMake script tests, since the repo has no top-level `tests/`; [Building a game against the engine](../../fenrir-game-build/spec.md) has it there.

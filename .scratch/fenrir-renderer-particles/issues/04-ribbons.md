@@ -9,8 +9,9 @@ Spec: [Particles](../spec.md). ADR-0089.
 
 **Status:** ready-for-agent
 
-Stacked on 03. On the core stack 01, 02, 03, 04, 05, 06, 09, 10, 11, 12.
+Stacked on 03. On the core stack 01, 02, 09, 10, 03, 04, 05, 06, 11, 12: CPU bursts, then GPU simulation, then the rest, as decided.
 
 - [ ] A CPU test of the strip built from particles in spawn order, with its widths and colours.
 - [ ] Null-backend tests: a ribbon emitter produces one strip draw in the transparent pass.
 - [ ] ParticleDemo's Ribbons scene works by hand; smoke runs pass.
+- [ ] The API description and generated C# bindings are current with this ticket's modules.

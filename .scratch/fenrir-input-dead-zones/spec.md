@@ -41,7 +41,7 @@ FenrirInput applies a dead zone to every gamepad's sticks and triggers before an
 - **FenrirUI** keeps `UIRoot::NavigationDeadZone`, a direction threshold, applied to the dead-zoned stick.
 - **C#:** the settings and the raw read, through FenrirInput's scripting extension and the generated bindings.
 - **PhysicsDemo's vehicle scenes**, C++ and C#, drop their own dead zones and read the engine's values.
-- **Glossary:** Dead zone is already defined.
+- **Glossary:** *Dead zone* is added by the first ticket; a trigger's dead zone is called its threshold, and `UIRoot::NavigationDeadZone` stays a navigation threshold.
 - **No ADR:** it is a building block within FenrirInput that reverses nothing.
 
 ## Testing Decisions

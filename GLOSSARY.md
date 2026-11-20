@@ -232,19 +232,15 @@ Where an entity is in the scene, as opposed to its `Transform`, which is relativ
 *Avoid:* global transform, absolute transform.
 
 **Scene resource**
-State a package or a script assembly keeps in one scene, one value per type, ended with the scene (a scene's physics world is one).
+State a package keeps in one scene, one value per type, ended with the scene (a scene's physics world is one).
 *Avoid:* singleton, global, scene component (a *component* belongs to an entity).
 
 **App resource**
-State a package or a script assembly keeps for the whole app rather than one scene, one value per type, ended with the App (the input devices and the asset store are ones).
+State a package keeps for the whole app rather than one scene, one value per type, ended with the App (the input devices and the asset store are ones).
 *Avoid:* singleton, global, app-wide state (informal).
 
-**Scene request**
-A create, activate or destroy of a scene, by name, queued and applied at the end of the frame in the order made, so no system sees a scene change mid-frame; what C# uses to change scenes.
-*Avoid:* scene change (alone), level load (the game's words).
-
 **Time scale**
-How fast game time runs against real time, one value for the whole app: it scales the fixed tick's accumulation and the frame's delta time, while the fixed step itself stays the same.
+How fast game time runs against real time: one value for the whole app, slowing or speeding everything that runs on game time together.
 *Avoid:* game speed, slow motion (an effect a game makes with it), per-scene time scale.
 
 **Pause**
@@ -489,7 +485,7 @@ A full-screen pass a game adds to the frame at one of the renderer's named point
 *Avoid:* render feature (Unity's, and the renderer's internal word), custom pass, post-process (the renderer's own effects after transparents).
 
 **Render layer**
-One bit of a renderer's `layers` bitmask: a number a game gives a meaning to (outlined, receives decals), so a game pass or a decal can choose the entities it affects. Layer 0 is every renderer's default.
+A numbered group of renderers that a game gives a meaning to (outlined, receives decals), so a game pass or a decal can choose the entities it affects.
 *Avoid:* layer (alone, beside a UI root's layering), tag, culling layer (a camera's, not yet built).
 
 **Layer mask**
@@ -497,7 +493,7 @@ The entities on a render layer drawn by the renderer into a target of a game pas
 *Avoid:* stencil (there is none), selection mask, custom depth (Unreal's).
 
 **Particle effect**
-What a burst or an emitter plays: a stack of the engine's particle modules (spawn, motion, forces, collision, change over life, sub-emitters, render mode) and whether it simulates on the CPU or the GPU. The game defines it; the renderer runs it.
+What a burst or an emitter plays: the game's description of how its particles are born, move, change and are drawn, run by the renderer on the CPU or the GPU.
 *Avoid:* particle system (the whole feature), VFX, effect (alone, beside a game pass or a lens effect).
 
 **Ribbon**
@@ -814,9 +810,9 @@ The work `UIRoots` runs each frame after every UI root has laid out and before a
 Of an element: a click on it or under it, Tab and Shift+Tab, a gamepad direction and code can give it the focus, which sends it keys and text. Elements are not focusable until made so; the controls make themselves focusable.
 *Avoid:* tab stop, selectable (Unity's).
 
-**Directional navigation**
-Moving a UI root's focus to the focusable element nearest in a direction, from the D-pad, the left stick, the arrow keys or a direction the game sends, after the focused element has declined it, with A or Enter activating and B or Escape cancelling, while the root has the focus (ADR-0065).
-*Avoid:* gamepad navigation (its old name, from before the arrow keys), spatial navigation (the web's name), selection (Unity's).
+**Gamepad navigation**
+Moving a UI root's focus with the D-pad or the left stick to the focusable element nearest in that direction, with A activating and B cancelling, while the root has the focus (ADR-0065).
+*Avoid:* spatial navigation (the web's name), selection (Unity's).
 
 **Pointer ray**
 The ray, in world space, a game gives a world root each frame with its button's state (`UIRoot::SetPointerRay`): the root meets it with its quad and hit-tests there. Which camera and cursor, or controller, it comes from is the game's choice (ADR-0057's line).
@@ -1129,10 +1125,6 @@ A callback registered on FenrirInput with a priority, such as a UI, that sees ea
 **Input claim**
 What a router says it is doing with input in a window: the pointer is over it, it has captured the pointer, it has keyboard focus, or it wants text; plus an app-wide gamepad claim. Claims describe the interaction and drive text input; routers decide what is consumed.
 *Avoid:* capture flag, want-capture, focus (alone).
-
-**Dead zone**
-The part of a stick's or trigger's travel, near rest, that FenrirInput reads as zero, rescaling the rest so the value still runs to full: radial for a stick, so the direction is kept. Raw values stay readable.
-*Avoid:* deadband, threshold (a navigation threshold is a direction cut-off, not a dead zone).
 
 **Control owner**
 Whoever took a key's, button's or pointer's press: the router that consumed it, or the game. Its repeats and its release go to the same owner, and a cancelled control's release goes to no one.
