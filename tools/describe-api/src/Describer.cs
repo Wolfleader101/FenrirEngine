@@ -1088,7 +1088,8 @@ internal sealed class Describer
         var element = type.Element!;
         if (init is null)
         {
-            // Values with defaults of their own: a nested struct's, an empty entity, an empty handle.
+            // Only these kinds have a default without an initialiser (T{}, the empty entity, the empty handle); a
+            // scalar's would be indeterminate.
             if (element.Kind is not ("struct" or "entity" or "reference"))
             {
                 throw Error(at, subject, "has no default member initialiser");

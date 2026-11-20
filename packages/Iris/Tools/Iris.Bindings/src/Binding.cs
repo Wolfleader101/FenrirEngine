@@ -545,8 +545,8 @@ internal sealed class Binding
                 if (!types.ContainsKey(handle))
                 {
                     throw new BindingException(
-                        $"{type.Source}: {type.Name}::{member}: a reference to {kind.Target}, whose handle {handle} no " +
-                        "description read describes");
+                        $"{type.Source}: {type.Name}::{member}: an asset handle of {kind.Target}, but no description " +
+                        $"read describes {handle}");
                 }
             }
         }

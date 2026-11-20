@@ -87,7 +87,7 @@ Described when a field uses it, or when the selection names it with the role `en
 | `fixed-string` | `length` bytes of UTF-8 text, zero-terminated: a C array of `char` or `char8_t` (`char name[256]`), holding at most `length` - 1 bytes. A reader cuts longer text at `length` - 1 bytes on a UTF-8 boundary. An array of `signed char`, `unsigned char` or `std::uint8_t`, and a `std::array` of `char`, stay an `array` of `u8`. |
 | `reference` | 8 bytes: an asset handle (`Fenrir::AssetHandle<T>`, recognised by its qualified name), a `u32` slot index then a `u32` generation; `target` names `T`. The handle is never described for the kind. |
 
-Anything else (a reference, `long double`, `wchar_t`, a bit-field, ...) fails the tool.
+Anything else (a C++ reference, `T&`, `long double`, `wchar_t`, a bit-field, ...) fails the tool.
 
 ## Defaults
 
