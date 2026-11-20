@@ -27,3 +27,4 @@ Yes: it must be resolved before the game is complete (the user, 2026-11-19). The
 - 2026-11-19, round 4 of [Engine gaps for Flightless Frenzy](../map.md): particles are spec-ready in [What is the engine's particle system?](25-what-the-particle-system-is.md); decals are their own block in [What is a decal?](36-what-is-a-decal.md). The status changes when that resolves.
 - 2026-11-19, round 5 of [Engine gaps for Flightless Frenzy](../map.md): decals are spec-ready in [What is a decal?](36-what-is-a-decal.md); with the particles, the gap is settled.
 - 2026-11-20: the particles spec is written, [Particles](../../fenrir-renderer-particles/spec.md), with ADR-0077, `ready-for-agent` for `/to-tickets`.
+- 2026-11-20: particle tickets cut, `.scratch/fenrir-renderer-particles/issues/01` to `12` (core stack 01-06, 09-12; 07 beside from 03, 08 beside from 06).
