@@ -24,3 +24,4 @@ No. Menus work with the mouse, Tab and a gamepad today.
 - 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [Do arrow keys move UI focus?](30-do-arrow-keys-move-ui-focus.md).
 - 2026-11-19, round 1 of charting [Engine gaps for Flightless Frenzy](../map.md): spec-ready in [Do arrow keys move UI focus?](30-do-arrow-keys-move-ui-focus.md).
 - 2026-11-20: the spec is written, [Arrow keys move UI focus](../../fenrir-ui-arrow-keys/spec.md), `ready-for-agent` for `/to-tickets`.
+- 2026-11-20: tickets cut, `.scratch/fenrir-ui-arrow-keys/issues/01` to `03` (one stack).
