@@ -61,28 +61,6 @@
       ]
     },
     {
-      "name": "Fenrir::Entity",
-      "category": "struct",
-      "role": "nested",
-      "size": 16,
-      "alignment": 8,
-      "doc": "Entity class that is used to interact with the entity list. This forms the basis of the ECS",
-      "fields": [
-        {
-          "name": "m_entityId",
-          "offset": 0,
-          "kind": "u32",
-          "default": 4294967295
-        },
-        {
-          "name": "m_entityList",
-          "offset": 8,
-          "kind": "pointer",
-          "default": null
-        }
-      ]
-    },
-    {
       "name": "Fenrir::AnimationEvent",
       "category": "struct",
       "role": "event",
@@ -93,25 +71,23 @@
         {
           "name": "skeleton",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The skeleton entity whose playback crossed the event."
         },
         {
           "name": "layer",
           "offset": 16,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The layer that played the clip: the skeleton entity for its `Animator`."
         },
         {
           "name": "clip",
           "offset": 32,
-          "kind": "struct",
-          "type": "Fenrir::AssetHandle<Fenrir::Clip>",
-          "default": {},
+          "kind": "reference",
+          "target": "Fenrir::Clip",
+          "default": null,
           "doc": "The clip."
         },
         {
@@ -163,25 +139,23 @@
         {
           "name": "skeleton",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The skeleton entity."
         },
         {
           "name": "layer",
           "offset": 16,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The layer that played the clip: the skeleton entity for its `Animator`."
         },
         {
           "name": "clip",
           "offset": 32,
-          "kind": "struct",
-          "type": "Fenrir::AssetHandle<Fenrir::Clip>",
-          "default": {},
+          "kind": "reference",
+          "target": "Fenrir::Clip",
+          "default": null,
           "doc": "The clip whose events were dropped."
         },
         {
@@ -284,9 +258,8 @@
         {
           "name": "skeleton",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The skeleton entity it layers onto; it need not be the layer's ECS parent."
         },
         {
@@ -314,9 +287,9 @@
         {
           "name": "mask",
           "offset": 28,
-          "kind": "struct",
-          "type": "Fenrir::AssetHandle<Fenrir::BoneMask>",
-          "default": {},
+          "kind": "reference",
+          "target": "Fenrir::BoneMask",
+          "default": null,
           "doc": "The bones it reaches, by engine name; empty reaches every bone at 1."
         },
         {
@@ -330,9 +303,9 @@
         {
           "name": "clip",
           "offset": 40,
-          "kind": "struct",
-          "type": "Fenrir::AssetHandle<Fenrir::Clip>",
-          "default": {},
+          "kind": "reference",
+          "target": "Fenrir::Clip",
+          "default": null,
           "doc": "The clip to play; empty contributes nothing."
         },
         {
@@ -385,9 +358,9 @@
         {
           "name": "clip",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::AssetHandle<Fenrir::Clip>",
-          "default": {},
+          "kind": "reference",
+          "target": "Fenrir::Clip",
+          "default": null,
           "doc": "The clip to play; empty plays nothing and leaves the base pose alone."
         },
         {
@@ -440,25 +413,23 @@
         {
           "name": "skeleton",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The skeleton entity."
         },
         {
           "name": "layer",
           "offset": 16,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The layer that played the clip: the skeleton entity for its `Animator`."
         },
         {
           "name": "clip",
           "offset": 32,
-          "kind": "struct",
-          "type": "Fenrir::AssetHandle<Fenrir::Clip>",
-          "default": {},
+          "kind": "reference",
+          "target": "Fenrir::Clip",
+          "default": null,
           "doc": "The clip that finished."
         }
       ]

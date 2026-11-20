@@ -78,6 +78,15 @@ public sealed class DescribeTests
                 "(reached through Failing::EnumeratorCommand::tint)")]
     [InlineData("UnevaluatedDefault",
                 "Failing::UnevaluatedDefault::count: the default 'Count() * 2' is not one the description records")]
+    [InlineData("NamedEntity",
+                "Failing::NamedEntity::owner: the default '{7, nullptr}' is not one an entity records: its default " +
+                "is the empty entity (no initialiser, {} or Entity())")]
+    [InlineData("NamedAsset",
+                "Failing::NamedAsset::mesh: the default '{1, 1}' is not one a reference records: its default is the " +
+                "empty handle (no initialiser, {} or AssetHandle<T>())")]
+    [InlineData("ComputedText",
+                "Failing::ComputedText::label: the default '{static_cast<char>(Count())}' is not one a fixed string " +
+                "records: a string literal, a braced list of character constants, or {}")]
     public void EachUndescribableTypeFailsNamingTheTypeAndMember(string type, string diagnostic)
     {
         using var directory = new TemporaryDirectory();
@@ -263,6 +272,46 @@ public sealed class DescribeTests
                      Of("Fixture::Columns"));
         // A pointer is not a value a visitor presents, so a bound type holding one records no components.
         Assert.Null(Of("Fixture::Handle"));
+    }
+
+    [Fact]
+    public void AnEntityAFixedStringAndAnAssetHandleAreRecordedAsTheirOwnKinds()
+    {
+        var types = Describer.Describe(Selection.Read(FixtureSelection), []).Types;
+        var socket = (StructDescription)types.Single(type => type.Name == "Fixture::Socket");
+        FieldDescription Of(string name) => socket.Fields.Single(field => field.Name == name);
+
+        Assert.Equal(new FieldType("entity"), Of("owner").Type);
+        Assert.Equal(new DefaultValue.Null(), Of("owner").Default);
+        Assert.Equal(new DefaultValue.Null(), Of("target").Default);
+        Assert.Equal(16, Of("target").Offset - Of("owner").Offset);
+        Assert.Equal(new FieldType("fixed-string", Length: 32), Of("label").Type);
+        Assert.Equal(new DefaultValue.Text("Socket"), Of("label").Default);
+        Assert.Equal(new FieldType("fixed-string", Length: 8), Of("title").Type);
+        Assert.Equal(new DefaultValue.Text(""), Of("title").Default);
+        Assert.Equal(new FieldType("reference", Target: "Fenrir::Mesh"), Of("mesh").Type);
+        Assert.Equal(new DefaultValue.Null(), Of("mesh").Default);
+        Assert.Equal(new DefaultValue.Null(), Of("lod").Default);
+        Assert.Equal(8, Of("lod").Offset - Of("mesh").Offset);
+        // The kinds name no described type: the engine's entity and handle are never described for them.
+        Assert.DoesNotContain(types, type => type.Name.StartsWith("Fenrir::", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void BytesStayAnArrayOfU8AndACharArrayIsAFixedStringItsCharactersSpell()
+    {
+        var types = Describer.Describe(Selection.Read(FixtureSelection), []).Types;
+        var socket = (StructDescription)types.Single(type => type.Name == "Fixture::Socket");
+        var body = (StructDescription)types.Single(type => type.Name == "Fixture::Body");
+        var tag = (StructDescription)types.Single(type => type.Name == "Fixture::Tag");
+
+        Assert.Equal(new FieldType("array", Element: new FieldType("u8"), Length: 4),
+                     socket.Fields.Single(field => field.Name == "bytes").Type);
+        Assert.Equal(new FieldType("array", Element: new FieldType("u8"), Length: 3),
+                     body.Fields.Single(field => field.Name == "zeros").Type);
+        var label = tag.Fields.Single(field => field.Name == "m_label");
+        Assert.Equal((new FieldType("fixed-string", Length: 4), (DefaultValue)new DefaultValue.Text("a")),
+                     (label.Type, label.Default));
     }
 
     [Fact]

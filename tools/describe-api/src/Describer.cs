@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Text;
 using ClangSharp;
 using ClangSharp.Interop;
 using Type = ClangSharp.Type;
@@ -609,6 +610,17 @@ internal sealed class Describer
 
         switch (type.Handle.kind)
         {
+            // The engine's own fixed-layout values, recognised by qualified name: the tool is binding-agnostic but not
+            // engine-agnostic. Neither is described for the kind.
+            case CXTypeKind.CXType_Record when IsEngineEntity(type):
+                return new FieldType("entity");
+            case CXTypeKind.CXType_Record when AssetHandleTarget(type) is { } target:
+                return new FieldType("reference", Target: target)
+                {
+                    SelectedHandle = m_names.GetValueOrDefault(type.AsString),
+                };
+            case CXTypeKind.CXType_ConstantArray when IsTextUnit(((ArrayType)type).ElementType.CanonicalType):
+                return new FieldType("fixed-string", Length: type.Handle.ArraySize);
             case CXTypeKind.CXType_Enum when IsHandle(type):
                 var enumDecl = (EnumDecl)type.AsTagDecl!.Definition!;
                 return new FieldType(IntegerKind(enumDecl.IntegerType.CanonicalType) ??
@@ -665,11 +677,37 @@ internal sealed class Describer
         };
     }
 
+    /// <summary><c>Fenrir::Entity</c>, the <c>entity</c> kind.</summary>
+    private static bool IsEngineEntity(Type canonical) =>
+        canonical.AsCXXRecordDecl is { Name: "Entity" } record && IsInFenrirNamespace(record);
+
+    /// <summary>
+    /// The canonical name of <c>T</c> when the type is a <c>Fenrir::AssetHandle&lt;T&gt;</c>, the <c>reference</c> kind's
+    /// target; null for any other type.
+    /// </summary>
+    private static string? AssetHandleTarget(Type canonical) =>
+        canonical.AsTagDecl is ClassTemplateSpecializationDecl { Name: "AssetHandle" } handle && IsInFenrirNamespace(handle) &&
+        handle.TemplateArgs is [{ Kind: CXTemplateArgumentKind.CXTemplateArgumentKind_Type } argument]
+            ? argument.AsType.CanonicalType.AsString
+            : null;
+
+    private static bool IsInFenrirNamespace(Decl decl) =>
+        decl.DeclContext is NamespaceDecl { Name: "Fenrir", DeclContext: TranslationUnitDecl };
+
+    /// <summary>
+    /// A <c>char</c> of either signedness or a <c>char8_t</c>: a byte of UTF-8 text, so an array of them is a
+    /// <c>fixed-string</c>. A <c>signed char</c>, <c>unsigned char</c> and <c>std::uint8_t</c> are bytes, not text.
+    /// </summary>
+    private static bool IsTextUnit(Type canonical) =>
+        canonical.Handle.kind is CXTypeKind.CXType_Char_S or CXTypeKind.CXType_Char_U ||
+        // libclang has no kind of its own for char8_t, so it is known by its spelling.
+        canonical.AsString == "char8_t";
+
     /// <summary>The <c>array</c> kind: <paramref name="length"/> elements of <paramref name="elementType"/>, whether a C array's or a <c>std::array</c>'s, never an array of arrays.</summary>
     private FieldType ArrayField(Type elementType, long length, Decl at, string subject)
     {
         var element = Classify(elementType, at, subject);
-        if (element.Kind == "array")
+        if (element.Kind is "array" or "fixed-string")
         {
             throw Error(at, subject, "an array of arrays, which the kinds cannot express");
         }
@@ -721,9 +759,16 @@ internal sealed class Describer
             return StructDefault(type, init, at, subject);
         }
 
-        if (type.Kind == "array")
+        switch (type.Kind)
         {
-            return ArrayDefault(type, init, at, subject);
+            case "array":
+                return ArrayDefault(type, init, at, subject);
+            case "entity":
+                return EmptyDefault(init, at, subject, "an entity", "the empty entity", "Entity()");
+            case "reference":
+                return EmptyDefault(init, at, subject, "a reference", "the empty handle", "AssetHandle<T>()");
+            case "fixed-string":
+                return FixedStringDefault(type, init, at, subject);
         }
 
         if (init is null)
@@ -766,6 +811,82 @@ internal sealed class Describer
         }
 
         throw UnknownDefault(init, at, subject);
+    }
+
+    /// <summary>
+    /// An entity's or reference's default, which names nothing: no initialiser, or the value's own defaults
+    /// (<c>{}</c>, <c>Entity()</c>). Recorded as <c>null</c>.
+    /// </summary>
+    private DefaultValue EmptyDefault(Expr? init, Decl at, string subject, string what, string empty, string spelling)
+    {
+        if (init is null || IsOwnDefaults(init))
+        {
+            return new DefaultValue.Null();
+        }
+
+        throw Error(at, subject,
+                    $"the default '{SourceText(init)}' is not one {what} records: its default is {empty} (no " +
+                    $"initialiser, {{}} or {spelling})");
+    }
+
+    /// <summary>
+    /// A fixed string's default, the text its initialiser spells: a string literal, a braced list of character
+    /// constants (ending at the first zero), or <c>{}</c> or no initialiser for the empty string. The text must leave
+    /// room for its terminator and be UTF-8.
+    /// </summary>
+    private DefaultValue FixedStringDefault(FieldType type, Expr? init, Decl at, string subject)
+    {
+        if (init is null || IsZeroInit(Strip(init)))
+        {
+            return new DefaultValue.Text("");
+        }
+
+        byte[]? bytes = Strip(init) switch
+        {
+            StringLiteral literal => Encoding.UTF8.GetBytes(literal.String),
+            InitListExpr list => CharacterBytes(list, at, subject),
+            _ => null,
+        };
+        if (bytes is null)
+        {
+            throw Error(at, subject,
+                        $"the default '{SourceText(init)}' is not one a fixed string records: a string literal, a " +
+                        "braced list of character constants, or {}");
+        }
+
+        var end = Array.IndexOf(bytes, (byte)0);
+        var text = end < 0 ? bytes : bytes[..end];
+        if (text.Length >= type.Length)
+        {
+            throw Error(at, subject,
+                        $"its default fills all {type.Length} bytes, leaving no room for the terminator a fixed string keeps");
+        }
+
+        try
+        {
+            return new DefaultValue.Text(new UTF8Encoding(false, true).GetString(text));
+        }
+        catch (DecoderFallbackException)
+        {
+            throw Error(at, subject, $"the default '{SourceText(init)}' is not UTF-8 text");
+        }
+    }
+
+    // A braced list's characters as bytes, or null when one is not a constant libclang evaluates.
+    private byte[]? CharacterBytes(InitListExpr list, Decl at, string subject)
+    {
+        var bytes = new List<byte>();
+        foreach (var item in list.Inits.Cast<Expr>())
+        {
+            if (TryEvaluate(item, "u8", at, subject) is not DefaultValue.Number number)
+            {
+                return null;
+            }
+
+            bytes.Add(byte.Parse(number.Spelling, CultureInfo.InvariantCulture));
+        }
+
+        return [.. bytes];
     }
 
     private DefaultValue StructDefault(FieldType type, Expr? init, Decl at, string subject)
@@ -967,12 +1088,14 @@ internal sealed class Describer
         var element = type.Element!;
         if (init is null)
         {
-            if (element.Kind != "struct")
+            // Only these kinds have a default without an initialiser (T{}, the empty entity, the empty handle); a
+            // scalar's would be indeterminate.
+            if (element.Kind is not ("struct" or "entity" or "reference"))
             {
                 throw Error(at, subject, "has no default member initialiser");
             }
 
-            return new DefaultValue.Array(Enumerable.Repeat<DefaultValue>(DefaultValue.TypeDefaults, (int)type.Length).ToList());
+            return new DefaultValue.Array(Enumerable.Repeat(Zero(element, at, subject), (int)type.Length).ToList());
         }
 
         if (Strip(init) is not InitListExpr list)
@@ -1014,7 +1137,8 @@ internal sealed class Describer
     private DefaultValue Zero(FieldType type, Decl at, string subject) => type.Kind switch
     {
         "bool" => new DefaultValue.Bool(false),
-        "pointer" => new DefaultValue.Null(),
+        "pointer" or "entity" or "reference" => new DefaultValue.Null(),
+        "fixed-string" => new DefaultValue.Text(""),
         "struct" => DefaultValue.TypeDefaults,
         "array" => new DefaultValue.Array(Enumerable.Range(0, (int)type.Length).Select(_ => Zero(type.Element!, at, subject)).ToList()),
         "enum" => new DefaultValue.Text(

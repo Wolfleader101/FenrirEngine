@@ -781,15 +781,9 @@
         {
           "name": "m_label",
           "offset": 16,
-          "kind": "array",
-          "elementKind": "u8",
+          "kind": "fixed-string",
           "length": 4,
-          "default": [
-            97,
-            0,
-            0,
-            0
-          ],
+          "default": "a",
           "doc": "Characters: bytes, on every target."
         }
       ]

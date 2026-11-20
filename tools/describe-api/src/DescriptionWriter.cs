@@ -231,6 +231,11 @@ internal static class DescriptionWriter
             json.WriteString("type", type.TypeName);
         }
 
+        if (type.Target is not null)
+        {
+            json.WriteString("target", type.Target);
+        }
+
         if (type.Element is not null)
         {
             json.WriteString("elementKind", type.Element.Kind);
@@ -239,6 +244,14 @@ internal static class DescriptionWriter
                 json.WriteString("elementType", type.Element.TypeName);
             }
 
+            if (type.Element.Target is not null)
+            {
+                json.WriteString("elementTarget", type.Element.Target);
+            }
+        }
+
+        if (type.Element is not null || type.Kind == "fixed-string")
+        {
             json.WriteNumber("length", type.Length);
         }
     }

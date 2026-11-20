@@ -25,5 +25,6 @@ private-members = ["Fixture::Tag"]
 "Fixture::Dial" = "component"
 "Fixture::Contacts" = "component"
 "Fixture::Folder" = "component"
+"Fixture::Socket" = "component"
 # Held by no field: described because the selection names it.
 "Fixture::Heading" = "enum"

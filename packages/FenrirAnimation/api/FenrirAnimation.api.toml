@@ -9,10 +9,6 @@ headers = [
     "../../FenrirAssets/include/FenrirAssets/BoneMaskData.hpp",
 ]
 
-# The layer and the events hold the engine's Entity, which keeps its value and entity list private: described here as
-# nested with the layout FenrirECS shares, and mirrored by the built-in binding.
-private-members = ["Fenrir::Entity"]
-
 [types]
 # The animation extension's components.
 "Fenrir::Animator" = "component"

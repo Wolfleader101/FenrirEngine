@@ -572,9 +572,9 @@
         {
           "name": "dirt",
           "offset": 24,
-          "kind": "struct",
-          "type": "Fenrir::AssetHandle<Fenrir::Image>",
-          "default": {},
+          "kind": "reference",
+          "target": "Fenrir::Image",
+          "default": null,
           "doc": "A greyscale image of the dirt on the lens, stretched over the view; none by default. A flat image with pixels; anything else (a cubemap, a render target) has no dirt, logged once."
         },
         {
@@ -895,9 +895,9 @@
         {
           "name": "image",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::AssetHandle<Fenrir::Image>",
-          "default": {}
+          "kind": "reference",
+          "target": "Fenrir::Image",
+          "default": null
         }
       ]
     },
@@ -1145,9 +1145,9 @@
         {
           "name": "cubemap",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::AssetHandle<Fenrir::Image>",
-          "default": {}
+          "kind": "reference",
+          "target": "Fenrir::Image",
+          "default": null
         },
         {
           "name": "intensity",
@@ -1224,28 +1224,6 @@
       ]
     },
     {
-      "name": "Fenrir::Entity",
-      "category": "struct",
-      "role": "nested",
-      "size": 16,
-      "alignment": 8,
-      "doc": "Entity class that is used to interact with the entity list. This forms the basis of the ECS",
-      "fields": [
-        {
-          "name": "m_entityId",
-          "offset": 0,
-          "kind": "u32",
-          "default": 4294967295
-        },
-        {
-          "name": "m_entityList",
-          "offset": 8,
-          "kind": "pointer",
-          "default": null
-        }
-      ]
-    },
-    {
       "name": "Fenrir::InstancedMeshRenderer",
       "category": "struct",
       "role": "component",
@@ -1256,23 +1234,23 @@
         {
           "name": "mesh",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::AssetHandle<Fenrir::Mesh>",
-          "default": {}
+          "kind": "reference",
+          "target": "Fenrir::Mesh",
+          "default": null
         },
         {
           "name": "material",
           "offset": 8,
-          "kind": "struct",
-          "type": "Fenrir::AssetHandle<Fenrir::Material>",
-          "default": {}
+          "kind": "reference",
+          "target": "Fenrir::Material",
+          "default": null
         },
         {
           "name": "instances",
           "offset": 16,
-          "kind": "struct",
-          "type": "Fenrir::AssetHandle<Fenrir::InstanceList>",
-          "default": {}
+          "kind": "reference",
+          "target": "Fenrir::InstanceList",
+          "default": null
         },
         {
           "name": "castShadows",
@@ -1434,16 +1412,16 @@
         {
           "name": "mesh",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::AssetHandle<Fenrir::Mesh>",
-          "default": {}
+          "kind": "reference",
+          "target": "Fenrir::Mesh",
+          "default": null
         },
         {
           "name": "material",
           "offset": 8,
-          "kind": "struct",
-          "type": "Fenrir::AssetHandle<Fenrir::Material>",
-          "default": {}
+          "kind": "reference",
+          "target": "Fenrir::Material",
+          "default": null
         },
         {
           "name": "visible",
@@ -1472,9 +1450,9 @@
         {
           "name": "image",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::AssetHandle<Fenrir::Image>",
-          "default": {}
+          "kind": "reference",
+          "target": "Fenrir::Image",
+          "default": null
         },
         {
           "name": "intensity",
@@ -1757,9 +1735,8 @@
         {
           "name": "skeleton",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The skeleton entity whose pose skins the mesh."
         }
       ]

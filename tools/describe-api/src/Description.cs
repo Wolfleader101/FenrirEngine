@@ -50,15 +50,33 @@ internal static class Roles
     };
 }
 
-/// <summary>A field's kind: what its bytes hold (SCHEMA.md, "Kinds").</summary>
-internal sealed record FieldType(string Kind, string? TypeName = null, FieldType? Element = null, long Length = 0)
+/// <summary>
+/// A field's kind: what its bytes hold (SCHEMA.md, "Kinds"). <see cref="TypeName" /> names the described type of an
+/// <c>enum</c> or <c>struct</c>; <see cref="Element" /> and <see cref="Length" /> are an <c>array</c>'s, and
+/// <see cref="Length" /> alone a <c>fixed-string</c>'s bytes; <see cref="Target" /> is the type a <c>reference</c>
+/// names, which is never described for it.
+/// </summary>
+internal sealed record FieldType(string Kind, string? TypeName = null, FieldType? Element = null, long Length = 0,
+                                 string? Target = null)
 {
+    /// <summary>
+    /// For a <c>reference</c> whose handle the selection also selects as a bound type (for a binding's mapping): that
+    /// type's name, which the dependency order keeps before the types holding the reference, as it did when they held
+    /// the handle as a struct. Never written.
+    /// </summary>
+    public string? SelectedHandle { get; init; }
+
     /// <summary>The described types this kind refers to, for the dependency order.</summary>
     public IEnumerable<string> References()
     {
         if (TypeName is not null)
         {
             yield return TypeName;
+        }
+
+        if (SelectedHandle is not null)
+        {
+            yield return SelectedHandle;
         }
 
         if (Element is not null)

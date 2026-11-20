@@ -13,10 +13,10 @@
 
 **Touches:** `tools/describe-api/src/` (`Describer.cs`, `Description.cs`, `DescriptionWriter.cs`), `tools/describe-api/SCHEMA.md`, `tools/describe-api/tests/`, `packages/Iris/Tools/Iris.Bindings/` (the kind mapping, its tests and fixture), every `packages/*/api/*.api.json` and `*.api.toml` (`private-members` lists), the generated files under `packages/*/Scripting/src/Generated/` and `packages/*/Managed/*/Generated/` where they regenerate
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The fixture header gains a component with an `Entity`, a `char[32]` and an `AssetHandle<Mesh>` field; `Fixture.api.json` records `entity`, `fixed-string` with `length` 32, and `reference` with `target`, compared byte for byte.
-- [ ] `FenrirPhysics.api.json` records `Joint.bodyA` as `entity`, `FenrirECS.api.json` records `Name.name` as `fixed-string`, `FenrirRenderer.api.json` records `MeshRenderer`'s mesh as `reference` to `Fenrir::Mesh`.
-- [ ] `fenrir-generate-bindings` leaves every generated C# file and native mapping byte-identical, and the scripting tests pass unchanged.
-- [ ] Iris.Bindings' tests cover the three kinds' mappings.
-- [ ] `std::uint8_t[N]` still describes as an `array` of `u8`.
+- [x] The fixture header gains a component with an `Entity`, a `char[32]` and an `AssetHandle<Mesh>` field; `Fixture.api.json` records `entity`, `fixed-string` with `length` 32, and `reference` with `target`, compared byte for byte.
+- [x] `FenrirPhysics.api.json` records `Joint.bodyA` as `entity`, `FenrirECS.api.json` records `Name.name` as `fixed-string`, `FenrirRenderer.api.json` records `MeshRenderer`'s mesh as `reference` to `Fenrir::Mesh`.
+- [x] `fenrir-generate-bindings` leaves every generated C# file and native mapping byte-identical, and the scripting tests pass unchanged.
+- [x] Iris.Bindings' tests cover the three kinds' mappings.
+- [x] `std::uint8_t[N]` still describes as an `array` of `u8`.
