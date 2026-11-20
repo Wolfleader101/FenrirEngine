@@ -406,9 +406,16 @@ TEST_CASE("A tagged union's description holds its tag, union offset, alternative
 
     INFO("its default alternative is m_box, which the default constructor holds");
     REQUIRE(shape.defaultAlternative == 0);
+}
 
-    INFO("a struct is no tagged union");
-    REQUIRE_FALSE(fixture.Get("Fixture::Collider").IsTaggedUnion());
+TEST_CASE("A struct holding a tagged union is no tagged union itself")
+{
+    Registered fixture;
+
+    INFO("Collider holds a Shape, but is a struct of fields with no alternatives");
+    const TypeDescription& collider = fixture.Get("Fixture::Collider");
+    REQUIRE_FALSE(collider.IsTaggedUnion());
+    REQUIRE(collider.fields.size() == 2);
 }
 
 TEST_CASE("A tagged union in an app resource registers in its role")
@@ -520,10 +527,17 @@ TEST_CASE("Selecting a tag value no alternative has changes nothing")
     INFO("ShapeType has no value 9, so nothing is selected and the sphere stays");
     REQUIRE_FALSE(description.SelectAlternative(&shape, 9));
     REQUIRE(shape.Type() == Fixture::ShapeType::Sphere);
+}
 
-    INFO("a struct has no alternatives to select");
+TEST_CASE("Selecting an alternative of a struct, which has none, changes nothing")
+{
+    Registered fixture;
     Fixture::Collider collider;
+    collider.solid = false;
+
+    INFO("Collider is a struct, so no tag value selects anything in it");
     REQUIRE_FALSE(fixture.Get("Fixture::Collider").SelectAlternative(&collider, 0));
+    REQUIRE_FALSE(collider.solid);
 }
 
 namespace
@@ -560,11 +574,17 @@ TEST_CASE("Writing a tagged union's tag through a value reference is refused")
     INFO("the tag's write is refused, so the shape is still a box");
     REQUIRE(writer.written == std::vector<bool>{false});
     REQUIRE(shape.Type() == Fixture::ShapeType::Box);
+}
 
-    INFO("an enum field that is no tag is written");
+TEST_CASE("Writing an enum field that is no tag through a value reference is taken")
+{
+    Registered fixture;
     Fixture::Body body;
-    EnumWriter bodyWriter(0);
-    fixture.Get("Fixture::Body").Visit(static_cast<void*>(&body), bodyWriter);
-    REQUIRE(bodyWriter.written.front());
+
+    EnumWriter writer(0);
+    fixture.Get("Fixture::Body").Visit(static_cast<void*>(&body), writer);
+
+    INFO("Body::motion is a plain enum field, so its write is taken and it becomes Still");
+    REQUIRE(writer.written.front());
     REQUIRE(body.motion == Fixture::Motion::Still);
 }

@@ -161,13 +161,18 @@ namespace Fenrir
         std::string_view doc;
     };
 
-    /** @brief One alternative of a described tagged union: a member of its anonymous union. */
+    /**
+     * @brief One alternative of a described tagged union: a member of its anonymous union, an entry of its API
+     * description's `kinds`.
+     */
     struct Alternative
     {
         /** @brief The tag value that makes it the live alternative, widened to 64 bits. */
         std::int64_t tag = 0;
-        /** @brief The member: its name, its value's kind, its offset (the union's, where every alternative starts) and
-         * its doc. Fixed-layout kinds only. */
+        /**
+         * @brief The member: its name, its value's kind, its offset (the union's, where every alternative starts) and
+         * its doc. Fixed-layout kinds only.
+         */
         FieldInfo field;
     };
 } // namespace Fenrir

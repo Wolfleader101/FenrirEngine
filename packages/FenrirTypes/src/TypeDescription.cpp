@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstring>
 #include <new>
+#include <span>
 
 namespace Fenrir
 {
@@ -63,6 +64,15 @@ namespace Fenrir
                 for (std::size_t i = 0; i < type.count; ++i)
                     EndValue(static_cast<std::byte*>(at) + i * SizeOf(*type.element), *type.element);
         }
+
+        // The alternative among `alternatives` that `tagValue` selects; null when none does.
+        const Alternative* Selected(std::span<const Alternative> alternatives, std::int64_t tagValue) noexcept
+        {
+            for (const Alternative& alternative : alternatives)
+                if (alternative.tag == tagValue)
+                    return &alternative;
+            return nullptr;
+        }
     } // namespace
 
     void TypeDescription::Construct(void* instance) const
@@ -107,25 +117,13 @@ namespace Fenrir
     {
         if (!IsTaggedUnion())
             return nullptr;
-        const std::int64_t live =
-            ConstValueRef(static_cast<const std::byte*>(instance) + tag.offset, tag.type).EnumValue();
-        for (const Alternative& alternative : alternatives)
-            if (alternative.tag == live)
-                return &alternative;
-        return nullptr;
+        return Selected(alternatives,
+                        ConstValueRef(static_cast<const std::byte*>(instance) + tag.offset, tag.type).EnumValue());
     }
 
     bool TypeDescription::SelectAlternative(void* instance, std::int64_t tagValue) const
     {
-        const Alternative* next = nullptr;
-        for (const Alternative& alternative : alternatives)
-        {
-            if (alternative.tag == tagValue)
-            {
-                next = &alternative;
-                break;
-            }
-        }
+        const Alternative* next = Selected(alternatives, tagValue);
         if (next == nullptr)
             return false;
 

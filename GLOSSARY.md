@@ -180,7 +180,7 @@ Everything that lets one language use the engine: the generated mirrors of the e
 *Avoid:* wrapper, scripting language (a binding may be no scripting at all).
 
 **Tagged union**
-A value that holds exactly one of several kinds, with a tag saying which one (a collision shape, a joint kind, a vehicle kind). In C# it is a struct with one view per kind, and the view throws if the value holds another kind. The author writes the tag and the storage; FenrirScripting's `[TaggedUnion]` generator writes the rest. FenrirTypes describes one by its tag and its *alternatives*, the union's members: a visit pushes the tag, then the live alternative alone, and `TypeDescription::SelectAlternative` is the one door that changes the tag.
+A value that holds exactly one of several kinds, with a tag saying which one (a collision shape, a joint kind, a vehicle kind). In C# it is a struct with one view per kind, and the view throws if the value holds another kind. The author writes the tag and the storage; FenrirScripting's `[TaggedUnion]` generator writes the rest. FenrirTypes describes one by its tag and its *alternatives*, the union's members (the API description's `kinds`, each holding one kind): a visit pushes the tag, then the live alternative alone, and `TypeDescription::SelectAlternative` is the one door that changes the tag.
 *Avoid:* variant, sum type, discriminated union (a proposed C# language feature, not this).
 
 **Extension stage**

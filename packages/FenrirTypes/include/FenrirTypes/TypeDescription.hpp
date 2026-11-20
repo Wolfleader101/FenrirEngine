@@ -76,8 +76,10 @@ namespace Fenrir
         FieldInfo tag;
         /** @brief For a tagged union: the offset of its anonymous union, where every alternative's value starts. */
         std::size_t unionOffset = 0;
-        /** @brief For a tagged union: its alternatives, the union's members, in declaration order; empty for any other
-         * type. */
+        /**
+         * @brief For a tagged union: its alternatives, the union's members, in declaration order; empty for any other
+         * type.
+         */
         std::span<const Alternative> alternatives;
         /** @brief For a tagged union: the index in `alternatives` of the one the default constructor holds. */
         std::size_t defaultAlternative = 0;
