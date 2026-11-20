@@ -94,7 +94,7 @@ Anything else (a C++ reference, `T&`, `long double`, `wchar_t`, a bit-field, ...
 
 ## Owning kinds
 
-A `data-asset` or `settings` type is reached by member through a generated visitor, so it may hold the owning kinds. It, and every struct whose layout holds an owning kind, records no `size`, `alignment` or field `offset`: they are the standard library's. A `data-asset` may extend one other, recorded as `base`, and its `fields` are only those it declares. Iris.Bindings skips every `data-asset` and `settings` type and every nested type nothing else reaches, without failing or logging (the C# spec binds them), and fails naming the field on an owning kind or a missing layout in any type it binds.
+A `data-asset` or `settings` type is reached by member through a generated visitor, so it may hold the owning kinds. It, and every struct whose layout holds an owning kind, records no `size`, `alignment` or field `offset`: they are the standard library's. A `data-asset` may extend one other, recorded as `base`, and its `fields` are only those it declares. Iris.Bindings skips every `data-asset` and `settings` type and every nested type and enum that only they reach, without failing or logging (the C# spec binds them), and fails naming the field on an owning kind or a missing layout in any type it binds.
 
 ## Defaults
 

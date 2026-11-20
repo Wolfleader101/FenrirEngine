@@ -263,7 +263,8 @@ internal static class DescriptionWriter
                 json.WriteString("elementTarget", type.Element.Target);
             }
 
-            // A list's or optional's element that has an element or length of its own records them all in `element`.
+            // The element keys above say one level only, so an element with keys of its own (a list of lists, of arrays, of
+            // fixed strings) is recorded whole, as a field's kind would be.
             if (type.Element.Element is not null || type.Element.Kind == "fixed-string")
             {
                 json.WriteStartObject("element");

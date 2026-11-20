@@ -129,38 +129,18 @@ internal static class Description
     // describe-api's owning kinds (SCHEMA.md of the input format, "Owning kinds"), which only skipped types hold.
     private static bool IsOwningKind(string kind) => kind is "string" or "list" or "optional" or "path";
 
-    // The types a binding binds: all but the nested types that no other type reaches except through a skipped one (a
-    // data asset's table row), each checked to hold no owning kind and to have a layout.
-    private static List<DescribedType> Bound(List<DescribedType> types, HashSet<string> skippedReach)
+    // The types a binding binds: all but the nested types and enums that a skipped type reaches and no selected type
+    // does (a data asset's table row, a settings type's mode), each checked to hold no owning kind and to have a layout.
+    // An enum a selection names for a native and only a skipped type holds is dropped too: a description does not say
+    // which enums were selected.
+    private static List<DescribedType> Bound(List<DescribedType> types, IEnumerable<string> namedBySkipped)
     {
         var byName = types.ToDictionary(type => type.Name, StringComparer.Ordinal);
-        var fromSkipped = new HashSet<string>(skippedReach, StringComparer.Ordinal);
-        var next = new Queue<string>(skippedReach);
-        while (next.Count > 0)
-        {
-            if (byName.TryGetValue(next.Dequeue(), out var held))
-            {
-                foreach (var name in Binding.Named(held).Where(name => name is not null && fromSkipped.Add(name)))
-                {
-                    next.Enqueue(name!);
-                }
-            }
-        }
-
-        var reached = new HashSet<string>(StringComparer.Ordinal);
-        var queue = new Queue<DescribedType>(types.Where(type => type.Role != Role.Nested));
-        while (queue.Count > 0)
-        {
-            foreach (var name in Binding.Named(queue.Dequeue()))
-            {
-                if (name is not null && byName.TryGetValue(name, out var held) && reached.Add(name))
-                {
-                    queue.Enqueue(held);
-                }
-            }
-        }
-
-        var bound = types.Where(type => type.Role != Role.Nested || reached.Contains(type.Name) ||
+        var fromSkipped = Reached(namedBySkipped);
+        var fromSelected = Reached(types.Where(type => type.Role is not (Role.Nested or Role.None))
+                                        .SelectMany(Binding.Named)
+                                        .OfType<string>());
+        var bound = types.Where(type => type.Role is not (Role.Nested or Role.None) || fromSelected.Contains(type.Name) ||
                                         !fromSkipped.Contains(type.Name))
                          .ToList();
         foreach (var type in bound)
@@ -184,6 +164,25 @@ internal static class Description
         }
 
         return bound;
+
+        // These names and every described type they reach through fields, tags and kinds.
+        HashSet<string> Reached(IEnumerable<string> names)
+        {
+            var reached = new HashSet<string>(names, StringComparer.Ordinal);
+            var next = new Queue<string>(reached);
+            while (next.Count > 0)
+            {
+                if (byName.TryGetValue(next.Dequeue(), out var held))
+                {
+                    foreach (var name in Binding.Named(held).OfType<string>().Where(reached.Add))
+                    {
+                        next.Enqueue(name);
+                    }
+                }
+            }
+
+            return reached;
+        }
     }
 
     // Whether two descriptions of a type that is not a bound type record the same fields, tag, kinds and values. Docs may
@@ -388,9 +387,10 @@ internal static class Description
                 return new FieldKind("struct", HandleType(target), null, null, 0) { Target = target };
             case "fixed-string":
                 return new FieldKind("array", null, "u8", null, Integer(field, "length", where));
-            case "string" or "list" or "optional" or "path":
-                // Read only to be skipped, or refused (Bound): what it names is what Binding.Named reaches through it.
-                return new FieldKind(kind, NamesIn(field).FirstOrDefault(), null, null, 0);
+            case var owning when IsOwningKind(owning):
+                // Read only to be dropped or refused (Bound). A list or optional names one type at most, its innermost
+                // element's, kept as the type Binding.Named reaches through it.
+                return new FieldKind(kind, NamesIn(field).SingleOrDefault(), null, null, 0);
             default:
                 return new FieldKind(kind, OptionalString(field, "type"), null, null, 0);
         }

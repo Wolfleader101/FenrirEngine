@@ -198,7 +198,7 @@ bind as the shapes they hold: an `entity` as the mirror of `Fenrir::Entity` (the
 description), a `fixed-string` as the array of `u8` its bytes are (a `fixed` buffer when `fixed-buffers` names it, its
 default text as those bytes), and a `reference` as the bound type `Fenrir::AssetHandle<target>`, which a description read
 must describe and `[bound-types]` bind; one no description describes fails naming the field. A `data-asset` or
-`settings` type is skipped, with every nested type that nothing but such types reaches, generating nothing and logging
+`settings` type is skipped, with every nested type and enum that nothing but such types reaches, generating nothing and logging
 nothing, until the C# spec binds them; an owning kind (`string`, `list`, `optional`, `path`) in any type it binds fails
 naming the field.
 

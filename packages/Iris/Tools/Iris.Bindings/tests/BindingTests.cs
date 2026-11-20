@@ -1515,6 +1515,30 @@ public sealed class BindingTests
     }
 
     [Fact]
+    public void AnEnumOnlyASkippedTypeHoldsIsSkippedToo()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "");
+        var description = WriteDescription(directory, root =>
+        {
+            root["types"]!.AsArray().Insert(0, new JsonObject
+            {
+                ["name"] = "Fixture::Grade", ["category"] = "enum", ["size"] = 4, ["alignment"] = 4, ["underlying"] = "i32",
+                ["values"] = new JsonArray(new JsonObject { ["name"] = "Common", ["value"] = 0 }),
+            });
+            Type(root, "Fixture::Stat")["fields"]!.AsArray().Add(new JsonObject
+            {
+                ["name"] = "grade", ["kind"] = "enum", ["type"] = "Fixture::Grade", ["default"] = "Common",
+            });
+        });
+
+        var changes = Changes(Generator.Generate(config, [FixtureDescription]), Generator.Generate(config, [description]));
+
+        Assert.True(changes.Count == 0, "An enum only a data asset's row holds changed the binding:\n" +
+                                        string.Join("\n", changes));
+    }
+
+    [Fact]
     public void AnOwningKindInAnyOtherRoleFailsNamingTheField()
     {
         using var directory = new TemporaryDirectory();
