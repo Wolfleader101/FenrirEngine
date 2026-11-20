@@ -17,6 +17,9 @@ add_library(FenrirTypes STATIC
 
 target_include_directories(FenrirTypes PUBLIC include)
 
+# The test package both description tools run on, which the describe step reaches with the tests off.
+add_subdirectory(Tests/Package)
+
 # Tests that use Catch2: only with -DFENRIR_BUILD_TESTS=ON (see the root CMakeLists.txt).
 if(FENRIR_BUILD_TESTS)
     add_subdirectory(Tests)

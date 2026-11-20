@@ -33,6 +33,31 @@ public sealed class GenerateTests
                     FirstDifference(committedSource, generated.Source));
     }
 
+    // FenrirTypes' test package: a header no engine package owns, holding data assets, a settings type and every doc
+    // command, which describe-api describes and this tool registers for real.
+    private static string TestPackageSelection =>
+        Path.Combine(RepositoryDirectory(), "packages", "FenrirTypes", "Tests", "Package", "TestPackage.api.toml");
+
+    [Fact]
+    public void TheTestPackageGivesTheCommittedHeaderAndSourceByteForByteSkippingNothing()
+    {
+        var registration = Registration.Read(TestPackageSelection)!;
+
+        var generated = Generator.Generate(registration, File.ReadAllText(registration.DescriptionPath),
+                                           skipUnsupported: false);
+
+        var committedHeader = File.ReadAllText(registration.HeaderPath);
+        Assert.True(committedHeader == generated.Header,
+                    "The test package's registration header differs from the committed one. If the change is meant, " +
+                    "regenerate it (the fenrir-generate-type-registry target) and review the diff.\n" +
+                    FirstDifference(committedHeader, generated.Header));
+        var committedSource = File.ReadAllText(registration.SourcePath);
+        Assert.True(committedSource == generated.Source,
+                    "The test package's registration source differs from the committed one. If the change is meant, " +
+                    "regenerate it (the fenrir-generate-type-registry target) and review the diff.\n" +
+                    FirstDifference(committedSource, generated.Source));
+    }
+
     [Fact]
     public void TheGeneratedFilesStartWithTheGeneratedLineAndHaveOnlyLineFeeds()
     {
