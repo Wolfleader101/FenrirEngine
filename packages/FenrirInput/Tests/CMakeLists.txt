@@ -8,3 +8,8 @@ add_executable(FenrirInputTests InputTestApp.hpp KeyboardEdges.cpp Keys.cpp Mous
                                 Routers.cpp ControlOwners.cpp InputClaims.cpp)
 target_link_libraries(FenrirInputTests PRIVATE FenrirInput Catch2::Catch2WithMain)
 add_test(NAME FenrirInput COMMAND FenrirInputTests)
+
+# Its registration against its description: each described type, default-constructed through its registered
+# description, holds the defaults api/FenrirInput.api.json records (tools/generate-type-registry writes the test).
+target_sources(FenrirInputTests PRIVATE Generated/FenrirInputTypesDefaultsTests.cpp)
+target_link_libraries(FenrirInputTests PRIVATE FenrirTypesTesting)

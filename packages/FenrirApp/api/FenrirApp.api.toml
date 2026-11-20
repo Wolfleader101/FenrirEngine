@@ -6,3 +6,13 @@ headers = ["../include/FenrirApp/App.hpp"]
 # What one read of an event queue yields through a reader's cursor: the older and newer parts of the queue's buffers
 # and how many events the reader missed. The built-in scripting binding's EventReadAfter native gives C# one of these.
 "Fenrir::RawEventRange" = "shared-struct"
+
+# What tools/generate-type-registry writes for the package (ADR-0074): its types' descriptions, the function registering
+# them, compiled into FenrirApp, and the test that their registered descriptions construct the defaults the description
+# records.
+[registration]
+header = "../include/FenrirApp/Generated/FenrirAppTypes.hpp"
+source = "../src/Generated/FenrirAppTypes.cpp"
+test = "../Tests/Generated/FenrirAppTypesDefaultsTests.cpp"
+function = "Fenrir::Generated::RegisterFenrirAppTypes"
+includes = ["FenrirApp/App.hpp"]

@@ -112,6 +112,13 @@ generated from their headers by `tools/describe-api`. The ordinary build never r
 `cmake --build out/build/clang-x64-debug --target fenrir-describe-api` does (it needs the .NET SDK), and CI fails on a pull request
 whose descriptions are stale. See `tools/describe-api/README.md`.
 
+Each described package also commits its type registration (ADR-0074), generated from its description by
+`tools/generate-type-registry`: `include/<Package>/Generated/<Package>Types.hpp`, `src/Generated/<Package>Types.cpp` and a
+defaults test in `Tests/Generated/`. The package compiles it and links FenrirTypes, so the App's `TypeRegistry` app resource
+knows the package's types by name once its `Install` has run (FenrirMath's, FenrirECS's and FenrirApp's from the App's
+constructor). After `fenrir-describe-api`, the `fenrir-generate-bindings` target regenerates the bindings and then
+`fenrir-generate-type-registry` the registrations; see `tools/generate-type-registry/README.md`.
+
 A C# binding is generated from those descriptions and committed too: FenrirPhysics's components, events and shared
 structs are written once, in its headers, and `packages/Iris/Tools/Iris.Bindings` generates their C# mirrors
 (`packages/FenrirPhysics/Managed/Fenrir.Physics/Generated`), their Iris mappings and the extension's registration lists

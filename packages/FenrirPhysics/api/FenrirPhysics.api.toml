@@ -50,3 +50,23 @@ headers = [
 # Types every binding has its own of.
 "Fenrir::Math::Vec3" = "bound-type"
 "Fenrir::Math::Quat" = "bound-type"
+
+# What tools/generate-type-registry writes for the package (ADR-0074): its types' descriptions, the function registering
+# them, compiled into FenrirPhysics, and the test that their registered descriptions construct the defaults the
+# description records. It uses the registrations of the packages registering the types it holds of theirs (FenrirMath's
+# vector, quaternion and box), which it points at rather than describing them again.
+[registration]
+header = "../include/FenrirPhysics/Generated/FenrirPhysicsTypes.hpp"
+source = "../src/Generated/FenrirPhysicsTypes.cpp"
+test = "../Tests/Generated/FenrirPhysicsTypesDefaultsTests.cpp"
+function = "Fenrir::Generated::RegisterFenrirPhysicsTypes"
+includes = [
+    "FenrirPhysics/Components.hpp",
+    "FenrirPhysics/Joints.hpp",
+    "FenrirPhysics/Characters.hpp",
+    "FenrirPhysics/Vehicles.hpp",
+    "FenrirPhysics/Events.hpp",
+    "FenrirPhysics/Queries.hpp",
+    "FenrirPhysics/PhysicsWorld.hpp",
+]
+uses = ["../../FenrirMath/api/FenrirMath.api.toml"]

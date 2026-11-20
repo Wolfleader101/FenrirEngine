@@ -18,3 +18,13 @@ private-members = ["Fenrir::Math::Frustum"]
 "Fenrir::Math::Vec4" = "bound-type"
 "Fenrir::Math::Quat" = "bound-type"
 "Fenrir::Math::Mat4" = "bound-type"
+
+# What tools/generate-type-registry writes for the package (ADR-0074): its types' descriptions, the function registering
+# them, compiled into FenrirMath, and the test that their registered descriptions construct the defaults the description
+# records.
+[registration]
+header = "../include/FenrirMath/Generated/FenrirMathTypes.hpp"
+source = "../src/Generated/FenrirMathTypes.cpp"
+test = "../Tests/Generated/FenrirMathTypesDefaultsTests.cpp"
+function = "Fenrir::Generated::RegisterFenrirMathTypes"
+includes = ["FenrirMath/Colour.hpp", "FenrirMath/Math.hpp", "FenrirMath/Frustum.hpp"]

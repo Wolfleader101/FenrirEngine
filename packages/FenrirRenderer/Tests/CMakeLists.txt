@@ -100,3 +100,8 @@ fenrir_add_shaders(FenrirRendererGlTests PROGRAM GlFourTextures VERTEX ../Shader
                    FRAGMENT OpenGL/fixtures/four_textures.frag EMBED)
 add_test(NAME FenrirRenderer-GL COMMAND FenrirRendererGlTests)
 set_tests_properties(FenrirRenderer-GL PROPERTIES SKIP_RETURN_CODE 4 TIMEOUT 300 LABELS gl)
+
+# Its registration against its description: each described type, default-constructed through its registered
+# description, holds the defaults api/FenrirRenderer.api.json records (tools/generate-type-registry writes the test).
+target_sources(FenrirRendererTests PRIVATE Generated/FenrirRendererTypesDefaultsTests.cpp)
+target_link_libraries(FenrirRendererTests PRIVATE FenrirTypesTesting)

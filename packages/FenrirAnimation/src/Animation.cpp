@@ -4,9 +4,11 @@
 
 #include "AnimationState.hpp"
 #include "Animators.hpp"
+#include "FenrirAnimation/Generated/FenrirAnimationTypes.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "FenrirSkeleton/Skeletons.hpp"
+#include "FenrirTypes/TypeRegistry.hpp"
 
 namespace Fenrir
 {
@@ -24,6 +26,9 @@ namespace Fenrir
 
     Animation Animation::Install(App& app, Skeletons& skeletons, AnimationConfig config)
     {
+        // Its types first (ADR-0074), before any resource or system: a second Install registers nothing again.
+        Generated::RegisterFenrirAnimationTypes(app.GetResource<TypeRegistry>());
+
         if (!skeletons.IsValid())
         {
             app.Logger()->Error("{}", "Animation::Install: FenrirSkeleton is not installed (the Skeletons owner is not "

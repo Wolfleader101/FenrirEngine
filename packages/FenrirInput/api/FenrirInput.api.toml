@@ -20,3 +20,15 @@ headers = ["../include/FenrirInput/InputTypes.hpp", "../include/FenrirInput/Inpu
 
 # FenrirMath's vector, which the mouse events hold (FenrirMath.api.toml).
 "Fenrir::Math::Vec2" = "bound-type"
+
+# What tools/generate-type-registry writes for the package (ADR-0074): its types' descriptions, the function registering
+# them, compiled into FenrirInput, and the test that their registered descriptions construct the defaults the
+# description records. It uses the registrations of the packages registering the types it holds of theirs (FenrirMath's
+# two-component vector), which it points at rather than describing them again.
+[registration]
+header = "../include/FenrirInput/Generated/FenrirInputTypes.hpp"
+source = "../src/Generated/FenrirInputTypes.cpp"
+test = "../Tests/Generated/FenrirInputTypesDefaultsTests.cpp"
+function = "Fenrir::Generated::RegisterFenrirInputTypes"
+includes = ["FenrirInput/InputTypes.hpp", "FenrirInput/InputEvents.hpp"]
+uses = ["../../FenrirMath/api/FenrirMath.api.toml"]

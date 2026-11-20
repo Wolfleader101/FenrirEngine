@@ -7,3 +7,13 @@ headers = ["../include/FenrirScripting/Errors.hpp"]
 [types]
 "Fenrir::RegistryError" = "enum"
 "Fenrir::ChangeError" = "enum"
+
+# What tools/generate-type-registry writes for the package (ADR-0074): its types' descriptions, the function registering
+# them, compiled into FenrirScripting, and the test that their registered descriptions construct the defaults the
+# description records.
+[registration]
+header = "../include/FenrirScripting/Generated/FenrirScriptingTypes.hpp"
+source = "../src/Generated/FenrirScriptingTypes.cpp"
+test = "../Tests/Generated/FenrirScriptingTypesDefaultsTests.cpp"
+function = "Fenrir::Generated::RegisterFenrirScriptingTypes"
+includes = ["FenrirScripting/Errors.hpp"]

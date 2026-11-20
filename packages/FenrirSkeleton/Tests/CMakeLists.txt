@@ -8,3 +8,8 @@ add_executable(FenrirSkeletonTests PublicHeaders.cpp Instances.cpp Generations.c
                                    Spawning.cpp Install.cpp SkeletonTest.hpp)
 target_link_libraries(FenrirSkeletonTests PRIVATE FenrirSkeleton Catch2::Catch2WithMain)
 add_test(NAME FenrirSkeleton COMMAND FenrirSkeletonTests)
+
+# Its registration against its description: each described type, default-constructed through its registered
+# description, holds the defaults api/FenrirSkeleton.api.json records (tools/generate-type-registry writes the test).
+target_sources(FenrirSkeletonTests PRIVATE Generated/FenrirSkeletonTypesDefaultsTests.cpp)
+target_link_libraries(FenrirSkeletonTests PRIVATE FenrirTypesTesting)
