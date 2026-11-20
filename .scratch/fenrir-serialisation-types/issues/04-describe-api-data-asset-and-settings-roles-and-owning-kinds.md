@@ -13,10 +13,10 @@
 
 **Touches:** `tools/describe-api/src/` (`Selection.cs`, `Describer.cs`, `Description.cs`, `DescriptionWriter.cs`), `tools/describe-api/SCHEMA.md`, `tools/describe-api/README.md`, `tools/describe-api/tests/`, `packages/Iris/Tools/Iris.Bindings/` (the role and kind skip, its tests)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The fixture header gains a `data-asset` `WeaponData` with a `string`, a `list` of a nested struct, an `optional<float>` and a `reference`, a `Sword` extending it with members of its own, and a `settings` type with a `path` and a `list` of strings; `Fixture.api.json` records the roles, `base`, the kinds without offsets, compared byte for byte.
-- [ ] `Failing.hpp` gains a component with a `std::string`, a `data-asset` with a virtual destructor, one extending a `shared-struct`, and a nested struct reached from both a component and a data asset, each failing with its diagnostic.
-- [ ] Iris.Bindings regenerates the fixture copy's bindings with the new types absent and the existing output byte-identical; its tests cover the skip.
-- [ ] Every package's description and binding regenerates byte-identical (no engine header is in either role yet).
-- [ ] `SCHEMA.md` documents both roles, the four kinds, `base`, the nested-value rule and the per-role refusals.
+- [x] The fixture header gains a `data-asset` `WeaponData` with a `string`, a `list` of a nested struct, an `optional<float>` and a `reference`, a `Sword` extending it with members of its own, and a `settings` type with a `path` and a `list` of strings; `Fixture.api.json` records the roles, `base`, the kinds without offsets, compared byte for byte.
+- [x] `Failing.hpp` gains a component with a `std::string`, a `data-asset` with a virtual destructor, one extending a `shared-struct`, and a nested struct reached from both a component and a data asset, each failing with its diagnostic.
+- [x] Iris.Bindings regenerates the fixture copy's bindings with the new types absent and the existing output byte-identical; its tests cover the skip.
+- [x] Every package's description and binding regenerates byte-identical (no engine header is in either role yet).
+- [x] `SCHEMA.md` documents both roles, the four kinds, `base`, the nested-value rule and the per-role refusals.
