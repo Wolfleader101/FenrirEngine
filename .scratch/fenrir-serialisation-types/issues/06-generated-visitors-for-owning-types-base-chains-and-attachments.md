@@ -12,17 +12,11 @@
 
 **Touches:** `tools/generate-type-registry/src/` and `tests/`, `packages/FenrirTypes/` (`Tests/Package/` new, `Tests/CMakeLists.txt`, the hook declarations in `include/FenrirTypes/`), `tools/describe-api/tests/Fixture/` (the fixture's `.api.toml` if the ticket-05 skip flag goes)
 
-**Status:** resolved
+**Status:** ready-for-agent
 
-- [x] The registry generator writes a generated visitor for every `data-asset` and `settings` type in the test package, compiled and committed; the ticket-05 skip of those roles is removed.
-- [x] A recording `FieldVisitor` over a `Sword` instance sees `WeaponData`'s fields first, then `Sword`'s, with a `string`, a `list` of nested structs, an `optional` and a `path` reachable and writable through `ValueRef`.
-- [x] `IsA("Test::Sword", "Test::WeaponData")` is true and the reverse false; registering `Sword` before `WeaponData` is a diagnostic naming both.
-- [x] The generated registration calls the role hooks, which are no-ops in this ticket and compile without FenrirECS.
-- [x] `fenrir-describe-api` and `fenrir-generate-type-registry` regenerate the test package's description and registration byte-identical, and the xunit tests compare them against committed copies.
-- [x] Every metadata command, `@version`, `@formerly`, `@transient` and `@editor-only` round-trips from the test header through the description into the registration's `TypeDescription`.
-
-## Comments
-
-- Built in `claude/ser-types-06-owning-visitors-and-role-hooks`. The hooks are declared in `FenrirTypes/RoleHooks.hpp` as `template <typename T> bool AttachX(TypeRegistry&, const TypeDescription&)`. The generated header defines a hook's no-op only while its `FENRIR_TYPES_ATTACH_<ROLE>_DEFINED` macro is unset. Ticket 08's defining headers set that macro and are listed in `[registration] includes`, so 08 needs no generator change. `event` gets no hook: the spec's attachments name components and the two resource roles only.
-- The test package's registration is compared byte for byte by the generator's xunit tests. Its description (`TestPackage.api.json`) is checked only by CI's dirty-tree check: an xunit comparison would sit in `tools/describe-api/tests/`, which is outside this ticket's Touches. Ticket 10 or a follow-up can add one.
-- `Tests/Package/CMakeLists.txt` is added from `packages/FenrirTypes/CMakeLists.txt` whatever `FENRIR_BUILD_TESTS` says, because CI's describe step configures with the tests off. Its package tests build their own executable, `FenrirTypesPackageTests`, since the package declares its own stand-ins for `Fenrir::Entity` and `Fenrir::AssetHandle`, as the fixture does.
+- [ ] The registry generator writes a generated visitor for every `data-asset` and `settings` type in the test package, compiled and committed; the ticket-05 skip of those roles is removed.
+- [ ] A recording `FieldVisitor` over a `Sword` instance sees `WeaponData`'s fields first, then `Sword`'s, with a `string`, a `list` of nested structs, an `optional` and a `path` reachable and writable through `ValueRef`.
+- [ ] `IsA("Test::Sword", "Test::WeaponData")` is true and the reverse false; registering `Sword` before `WeaponData` is a diagnostic naming both.
+- [ ] The generated registration calls the role hooks, which are no-ops in this ticket and compile without FenrirECS.
+- [ ] `fenrir-describe-api` and `fenrir-generate-type-registry` regenerate the test package's description and registration byte-identical, and the xunit tests compare them against committed copies.
+- [ ] Every metadata command, `@version`, `@formerly`, `@transient` and `@editor-only` round-trips from the test header through the description into the registration's `TypeDescription`.
