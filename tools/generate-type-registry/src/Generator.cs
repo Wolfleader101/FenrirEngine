@@ -99,7 +99,7 @@ internal static class Generator
         var category = type.GetProperty("category").GetString();
         if (category == "tagged-union")
         {
-            return $"{name}: a tagged union, which FenrirTypes does not describe yet";
+            return $"{name}: a tagged union, which is not yet described by FenrirTypes";
         }
 
         var role = type.TryGetProperty("role", out var roleValue) ? roleValue.GetString() : null;

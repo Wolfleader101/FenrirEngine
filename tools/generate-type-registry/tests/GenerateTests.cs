@@ -141,6 +141,36 @@ public sealed class GenerateTests
     }
 
     [Fact]
+    public void ATaggedUnionFailsNamingTheTypeUntilFenrirTypesDescribesOne()
+    {
+        var description = Description(TaggedUnion("Test::Shape"),
+                                      Type("Test::Collider", "struct", "component",
+                                           Field("shape", "\"kind\": \"struct\", \"type\": \"Test::Shape\"")));
+
+        AssertFails(description, "Test::Shape: a tagged union, which is not yet described by FenrirTypes",
+                    skipUnsupported: false);
+    }
+
+    [Fact]
+    public void SkippingUnsupportedTypesLeavesOutTaggedUnionsAndWhatHoldsThem()
+    {
+        var description = Description(TaggedUnion("Test::Shape"),
+                                      Type("Test::Collider", "struct", "component",
+                                           Field("shape", "\"kind\": \"struct\", \"type\": \"Test::Shape\"")),
+                                      Type("Test::Plain", "struct", "component", Field("value", "\"kind\": \"i32\"")));
+        using var directory = new TemporaryDirectory();
+        var registration = Registration.Read(WriteRegisteredSelection(directory, description))!;
+
+        var generated = Generator.Generate(registration, description, skipUnsupported: true);
+
+        Assert.True(generated.Header.Contains("Fenrir::Describe<Test::Plain>", StringComparison.Ordinal),
+                    "A type holding no tagged union should still be described.");
+        Assert.False(generated.Source.Contains("Test::Shape", StringComparison.Ordinal) ||
+                     generated.Source.Contains("Test::Collider", StringComparison.Ordinal),
+                     "A tagged union, and a type holding one, should be left out.");
+    }
+
+    [Fact]
     public void SkippingUnsupportedTypesLeavesOutByMemberTypesAndWhatHoldsThem()
     {
         var description = Description(
@@ -235,6 +265,12 @@ public sealed class GenerateTests
 
     private static string TypeWithoutLayout(string name, string role, params string[] fields) =>
         $"{{\"name\": \"{name}\", \"category\": \"struct\", \"role\": \"{role}\", \"fields\": [{string.Join(", ", fields)}]}}";
+
+    // A tagged union of one kind, in the shape describe-api records one.
+    private static string TaggedUnion(string name) =>
+        $"{{\"name\": \"{name}\", \"category\": \"tagged-union\", \"role\": \"nested\", \"size\": 8, \"alignment\": 4, " +
+        "\"tag\": {\"name\": \"m_type\", \"offset\": 0, \"kind\": \"u8\", \"default\": 0}, \"unionOffset\": 4, " +
+        "\"kinds\": [{\"name\": \"m_radius\", \"tag\": \"Sphere\", \"kind\": \"f32\"}], \"defaultKind\": \"m_radius\"}";
 
     private static string Field(string name, string kind) =>
         $"{{\"name\": \"{name}\", \"offset\": 0, {kind}, \"default\": 0}}";
