@@ -947,7 +947,7 @@ internal static class Generator
 
     // The defaults test: per described struct or tagged union, its instance default-constructed through its
     // description and visited through it, each value it reaches against the default the description records
-    // (FenrirTypes/Testing/Defaults.hpp walks it). A bound type has no defaults of its own to check, and an enum none.
+    // (FenrirTypesTesting/Defaults.hpp walks it). A bound type has no defaults of its own to check, and an enum none.
     private static string WriteTest(Registration registration, List<Described> types, Dictionary<string, UsedType> used)
     {
         var jsons = types.ToDictionary(type => type.Name, type => type.Json, StringComparer.Ordinal);
@@ -965,7 +965,7 @@ internal static class Generator
         text.Line();
         text.Line($"#include \"{registration.HeaderInclude}\"");
         text.Line();
-        text.Line("#include \"FenrirTypes/Testing/Defaults.hpp\"");
+        text.Line("#include \"FenrirTypesTesting/Defaults.hpp\"");
         text.Line();
         text.Line("#include <catch2/catch_test_macros.hpp>");
         text.Line();

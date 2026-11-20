@@ -4,7 +4,7 @@
 include("${CMAKE_CURRENT_LIST_DIR}/../../../cmake/FenrirCatch2.cmake")
 fenrir_add_catch2()
 
-# What each package's generated defaults test checks with (Support/FenrirTypes/Testing/Defaults.hpp): a described type
+# What each package's generated defaults test checks with (Support/FenrirTypesTesting/Defaults.hpp): a described type
 # default-constructed through its description, visited through it and compared with the defaults its API description
 # records. The packages' tests link it; it uses Catch2, which they link.
 add_library(FenrirTypesTesting INTERFACE)
