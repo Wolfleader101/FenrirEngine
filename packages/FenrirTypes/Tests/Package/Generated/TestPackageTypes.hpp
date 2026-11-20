@@ -16,9 +16,9 @@ namespace Fenrir
     class TypeRegistry;
 } // namespace Fenrir
 
-// The no-op AttachAppResource, until the package that hangs the role's attachments defines it.
-#ifndef FENRIR_TYPES_NO_OP_ATTACH_APP_RESOURCE
-#define FENRIR_TYPES_NO_OP_ATTACH_APP_RESOURCE
+// A no-op AttachAppResource, unless a header this registration includes defines it (FENRIR_TYPES_ATTACH_APP_RESOURCE_DEFINED).
+#ifndef FENRIR_TYPES_ATTACH_APP_RESOURCE_DEFINED
+#define FENRIR_TYPES_ATTACH_APP_RESOURCE_DEFINED
 template <typename T>
 inline bool Fenrir::AttachAppResource(Fenrir::TypeRegistry&, const Fenrir::TypeDescription&)
 {
@@ -26,9 +26,9 @@ inline bool Fenrir::AttachAppResource(Fenrir::TypeRegistry&, const Fenrir::TypeD
 }
 #endif
 
-// The no-op AttachComponent, until the package that hangs the role's attachments defines it.
-#ifndef FENRIR_TYPES_NO_OP_ATTACH_COMPONENT
-#define FENRIR_TYPES_NO_OP_ATTACH_COMPONENT
+// A no-op AttachComponent, unless a header this registration includes defines it (FENRIR_TYPES_ATTACH_COMPONENT_DEFINED).
+#ifndef FENRIR_TYPES_ATTACH_COMPONENT_DEFINED
+#define FENRIR_TYPES_ATTACH_COMPONENT_DEFINED
 template <typename T>
 inline bool Fenrir::AttachComponent(Fenrir::TypeRegistry&, const Fenrir::TypeDescription&)
 {
@@ -36,9 +36,9 @@ inline bool Fenrir::AttachComponent(Fenrir::TypeRegistry&, const Fenrir::TypeDes
 }
 #endif
 
-// The no-op AttachSceneResource, until the package that hangs the role's attachments defines it.
-#ifndef FENRIR_TYPES_NO_OP_ATTACH_SCENE_RESOURCE
-#define FENRIR_TYPES_NO_OP_ATTACH_SCENE_RESOURCE
+// A no-op AttachSceneResource, unless a header this registration includes defines it (FENRIR_TYPES_ATTACH_SCENE_RESOURCE_DEFINED).
+#ifndef FENRIR_TYPES_ATTACH_SCENE_RESOURCE_DEFINED
+#define FENRIR_TYPES_ATTACH_SCENE_RESOURCE_DEFINED
 template <typename T>
 inline bool Fenrir::AttachSceneResource(Fenrir::TypeRegistry&, const Fenrir::TypeDescription&)
 {

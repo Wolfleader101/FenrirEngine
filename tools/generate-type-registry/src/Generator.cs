@@ -142,7 +142,7 @@ internal static class Generator
     // The FenrirTypes hook the registration hands a type of this role to once it registers, which hangs the role's
     // attachments (ADR-0074); null for a role with none.
     private static string? Hook(JsonElement type) =>
-        (type.TryGetProperty("role", out var role) ? role.GetString() : null) switch
+        Role(type) switch
         {
             "component" => "AttachComponent",
             "scene-resource" => "AttachSceneResource",
@@ -150,8 +150,15 @@ internal static class Generator
             _ => null,
         };
 
-    // AttachComponent as a macro's words: ATTACH_COMPONENT.
-    private static string Macro(string name)
+    // The type's role; null for an enum, which has none.
+    private static string? Role(JsonElement type) =>
+        type.TryGetProperty("role", out var role) ? role.GetString() : null;
+
+    // "a string", "an optional": the kind with its article, as a diagnostic names it.
+    private static string WithArticle(string kind) => $"{(kind is "optional" or "array" or "enum" or "entity" ? "an" : "a")} {kind}";
+
+    // A name in macro case: AttachComponent is ATTACH_COMPONENT.
+    private static string MacroCase(string name)
     {
         var macro = new StringBuilder();
         foreach (var c in name)
@@ -202,7 +209,7 @@ internal static class Generator
             return;
         }
 
-        var role = type.TryGetProperty("role", out var roleValue) ? roleValue.GetString() : null;
+        var role = Role(type);
         if (role is null || RoleName(role) is null)
         {
             throw new GenerateException($"{name}: its role '{role}' is not one generate-type-registry knows");
@@ -263,7 +270,7 @@ internal static class Generator
         if (kind is "string" or "list" or "optional" or "path")
         {
             throw new GenerateException(
-                $"{fieldName}: a{(kind == "optional" ? "n" : "")} {kind} in a type the description lays out, which is " +
+                $"{fieldName}: {WithArticle(kind)} in a type the description lays out, which is " +
                 "visited by offset; only a type visited by member, which records no size, holds the owning kinds");
         }
     }
@@ -304,9 +311,10 @@ internal static class Generator
         text.Line();
         foreach (var hook in hooks)
         {
-            // Guarded, so the headers of several registrations compile together.
-            var guard = $"FENRIR_TYPES_NO_OP_{Macro(hook)}";
-            text.Line($"// The no-op {hook}, until the package that hangs the role's attachments defines it.");
+            // Skipped where the package hanging the role's attachments has defined the hook (FenrirTypes/RoleHooks.hpp),
+            // and guarded, so the headers of several registrations compile together.
+            var guard = $"FENRIR_TYPES_{MacroCase(hook)}_DEFINED";
+            text.Line($"// A no-op {hook}, unless a header this registration includes defines it ({guard}).");
             text.Line($"#ifndef {guard}");
             text.Line($"#define {guard}");
             text.Line("template <typename T>");
@@ -635,68 +643,68 @@ internal static class Generator
         return "{" + string.Join(", ", entry) + "}";
     }
 
-    // A ValueType's designated initialisers for the value the keys describe (a field, or an element recorded whole);
-    // writes its element's ValueType, named `<id>_Element`, first. `cpp` is the value's C++ type, which a list's or
-    // optional's operations are instantiated over; null where the value is not reached by member.
-    private static string ValueTypeOf(Text text, string fieldName, JsonElement keys, string? cpp, string id,
+    // A ValueType's designated initialisers for the value `value` describes (a field, or an element recorded whole);
+    // writes its element's ValueType, named `<id>_Element`, first. `memberType` is the value's C++ type, which a list's
+    // or optional's operations are instantiated over; null where the value is not reached by member.
+    private static string ValueTypeOf(Text text, string fieldName, JsonElement value, string? memberType, string id,
                                       Dictionary<string, string> typeIds, Identifiers identifiers)
     {
-        var kind = keys.GetProperty("kind").GetString()!;
+        var kind = value.GetProperty("kind").GetString()!;
         var valueType = new List<string> { $".kind = Fenrir::Kind::{KindName(kind)}" };
         switch (kind)
         {
             case "enum" or "struct":
-                valueType.Add($".type = &{typeIds[keys.GetProperty("type").GetString()!]}");
+                valueType.Add($".type = &{typeIds[value.GetProperty("type").GetString()!]}");
                 break;
             case "array" or "list" or "optional":
-                var elementCpp = kind == "array" || cpp is null ? null : $"{cpp}::value_type";
+                var elementType = kind == "array" || memberType is null ? null : $"{memberType}::value_type";
                 var elementId = identifiers.Unique($"{id}_Element");
-                var element = ValueTypeOf(text, fieldName, ElementKeys(keys), elementCpp, elementId, typeIds, identifiers);
+                var element = ValueTypeOf(text, fieldName, ElementOf(value), elementType, elementId, typeIds, identifiers);
                 text.Line($"    constexpr Fenrir::ValueType {elementId}{{{element}}};");
                 valueType.Add($".element = &{elementId}");
                 if (kind == "array")
                 {
-                    valueType.Add($".count = {keys.GetProperty("length").GetInt64()}");
+                    valueType.Add($".count = {value.GetProperty("length").GetInt64()}");
                 }
-                else if (elementCpp is null)
+                else if (elementType is null)
                 {
                     throw new GenerateException(
-                        $"{fieldName}: a{(kind == "optional" ? "n" : "")} {kind} in an array, which the description never records");
+                        $"{fieldName}: {WithArticle(kind)} in an array, which the description never records");
                 }
                 else
                 {
                     valueType.Add(kind == "list"
-                                      ? $".list = &Fenrir::ListOperationsOf<{elementCpp}>"
-                                      : $".optional = &Fenrir::OptionalOperationsOf<{elementCpp}>");
+                                      ? $".list = &Fenrir::ListOperationsOf<{elementType}>"
+                                      : $".optional = &Fenrir::OptionalOperationsOf<{elementType}>");
                 }
 
                 break;
             case "fixed-string":
-                valueType.Add($".count = {keys.GetProperty("length").GetInt64()}");
+                valueType.Add($".count = {value.GetProperty("length").GetInt64()}");
                 break;
             case "reference":
-                valueType.Add($".target = {Literal(keys.GetProperty("target").GetString()!)}");
+                valueType.Add($".target = {Literal(value.GetProperty("target").GetString()!)}");
                 break;
         }
 
         return string.Join(", ", valueType);
     }
 
-    // The keys of an array's, list's or optional's element: recorded whole in `element` when it has keys of its own,
-    // else as `elementKind` with `elementType` or `elementTarget`.
-    private static JsonElement ElementKeys(JsonElement keys)
+    // The description of an array's, list's or optional's element: recorded whole in `element` when it has keys of its
+    // own, else as `elementKind` with `elementType` or `elementTarget`, which this gathers as an element's keys.
+    private static JsonElement ElementOf(JsonElement value)
     {
-        if (keys.TryGetProperty("element", out var element))
+        if (value.TryGetProperty("element", out var element))
         {
             return element;
         }
 
-        var flat = new Dictionary<string, string> { ["kind"] = keys.GetProperty("elementKind").GetString()! };
+        var flat = new Dictionary<string, string> { ["kind"] = value.GetProperty("elementKind").GetString()! };
         foreach (var (from, to) in new[] { ("elementType", "type"), ("elementTarget", "target") })
         {
-            if (keys.TryGetProperty(from, out var value))
+            if (value.TryGetProperty(from, out var key))
             {
-                flat[to] = value.GetString()!;
+                flat[to] = key.GetString()!;
             }
         }
 

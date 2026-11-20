@@ -8,7 +8,7 @@
 # fenrir_generate_type_registry(<target> <selection> [SKIP_UNSUPPORTED]) adds a package's registration to
 # fenrir-generate-type-registry. The selection path is relative to the calling CMakeLists.txt; one without a
 # [registration] table writes nothing. SKIP_UNSUPPORTED leaves out the types the tool cannot write yet (tagged unions,
-# which FenrirTypes does not describe yet), with the types holding them, instead of failing on them.
+# which FenrirTypes does not describe yet), with the types holding or extending them, instead of failing on them.
 
 # The same cached dotnet FenrirDescribeApi.cmake finds, when it is included first.
 find_program(FENRIR_DOTNET_EXECUTABLE NAMES dotnet HINTS "$ENV{DOTNET_ROOT}"

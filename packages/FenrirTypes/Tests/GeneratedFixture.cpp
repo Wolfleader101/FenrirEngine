@@ -110,10 +110,10 @@ TEST_CASE("The generated registration leaves out the types generate-type-registr
     }
 }
 
-TEST_CASE("A data asset extending another is visited base first, and is one over the chain")
+TEST_CASE("A read-only visit of a data asset extending another gives its base's fields first")
 {
     Registered fixture;
-    Fixture::Sword sword;
+    const Fixture::Sword sword;
     RecordingVisitor visitor;
 
     fixture.Get("Fixture::Sword").Visit(static_cast<const void*>(&sword), visitor);
@@ -121,12 +121,11 @@ TEST_CASE("A data asset extending another is visited base first, and is one over
     std::vector<std::string> names;
     for (const Seen& seen : visitor.seen)
         names.push_back(seen.name);
+    INFO("WeaponData's five fields should come before Sword's three, through the read-only visit");
     REQUIRE(names == std::vector<std::string>{"displayName", "stats", "cooldown", "mesh", "damage", "reach", "combos",
                                               "titles"});
+    INFO("the base's string should read as its default, the header's literal");
     REQUIRE(visitor.values.front().Text() == "Weapon");
-    REQUIRE(fixture.Get("Fixture::Sword").base == "Fixture::WeaponData");
-    REQUIRE(fixture.registry.IsA("Fixture::Sword", "Fixture::WeaponData"));
-    REQUIRE_FALSE(fixture.registry.IsA("Fixture::WeaponData", "Fixture::Sword"));
 }
 
 TEST_CASE("Each type's role is the one its selection gives, and an enum's is the enum role")

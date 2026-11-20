@@ -80,7 +80,7 @@ namespace
     }
 } // namespace
 
-TEST_CASE("The test package registers every type, each data asset after its base, the hooks no-ops")
+TEST_CASE("The test package registers every type it describes")
 {
     Registered package;
 
@@ -90,9 +90,29 @@ TEST_CASE("The test package registers every type, each data asset after its base
     for (std::string_view name : {"Test::Layers", "Test::Rarity", "Test::Vec2", "Test::Marker", "Test::Options",
                                   "Test::Stat", "Test::WeaponData", "Test::Sword", "Test::Weather"})
     {
-        INFO(name);
+        INFO(name << " should be registered under the test package");
         REQUIRE(package.Get(name).package == "TestPackage");
     }
+}
+
+TEST_CASE("Until a package defines them, the role hooks are no-ops that report success")
+{
+    TypeRegistry registry;
+    const TypeDescription& marker = Fenrir::Describe<Test::Marker>::Description();
+    const TypeDescription& weather = Fenrir::Describe<Test::Weather>::Description();
+    const TypeDescription& layers = Fenrir::Describe<Test::Layers>::Description();
+
+    INFO("the generated header's no-op hooks should return true and need no registered type");
+    REQUIRE(Fenrir::AttachComponent<Test::Marker>(registry, marker));
+    REQUIRE(Fenrir::AttachSceneResource<Test::Weather>(registry, weather));
+    REQUIRE(Fenrir::AttachAppResource<Test::Layers>(registry, layers));
+}
+
+TEST_CASE("Describe<T> of a data asset is the description the registration added")
+{
+    Registered package;
+
+    INFO("Describe<Test::Sword> should be the registered object, not a copy");
     REQUIRE(&Fenrir::Describe<Test::Sword>::Description() == package.registry.Find("Test::Sword"));
 }
 
@@ -102,10 +122,10 @@ TEST_CASE("A data asset, a settings type and a by-member nested struct each have
 
     for (std::string_view name : {"Test::WeaponData", "Test::Sword", "Test::Options", "Test::Stat"})
     {
-        INFO(name << " holds an owning kind, so is visited by member");
+        INFO(name << " holds an owning kind, so should be visited by member through a visit function");
         REQUIRE(package.Get(name).visit != nullptr);
     }
-    INFO("a fixed-layout type is visited by its offsets");
+    INFO("a fixed-layout type should be visited by its offsets, with no visit function");
     REQUIRE(package.Get("Test::Marker").visit == nullptr);
 }
 
@@ -117,19 +137,31 @@ TEST_CASE("Visiting a Sword gives its base WeaponData's fields first, then its o
 
     package.Get("Test::Sword").Visit(&sword, visitor);
 
+    INFO("WeaponData's displayName, stats and damage should come before Sword's edge, icon and titles");
     REQUIRE(visitor.names == std::vector<std::string>{"displayName", "stats", "damage", "edge", "icon", "titles"});
 }
 
-TEST_CASE("A data asset's base is recorded, and IsA answers over the chain")
+TEST_CASE("A data asset's description names the data asset it extends")
 {
     Registered package;
 
+    INFO("Sword extends WeaponData, as its header says");
     REQUIRE(package.Get("Test::Sword").base == "Test::WeaponData");
+    INFO("WeaponData extends nothing");
     REQUIRE(package.Get("Test::WeaponData").base.empty());
+}
+
+TEST_CASE("IsA answers over a data asset's base chain, by canonical or former name")
+{
+    Registered package;
+
+    INFO("a Sword is a WeaponData");
     REQUIRE(package.registry.IsA("Test::Sword", "Test::WeaponData"));
+    INFO("a type is itself");
     REQUIRE(package.registry.IsA("Test::Sword", "Test::Sword"));
+    INFO("a WeaponData is not a Sword");
     REQUIRE_FALSE(package.registry.IsA("Test::WeaponData", "Test::Sword"));
-    INFO("a former name of the derived type answers the same");
+    INFO("Sword's former name Test::Blade should answer as Sword does");
     REQUIRE(package.registry.IsA("Test::Blade", "Test::WeaponData"));
 }
 
@@ -137,14 +169,18 @@ TEST_CASE("Registering Sword before WeaponData is refused with a diagnostic nami
 {
     std::vector<std::string> diagnostics;
     TypeRegistry registry{[&](std::string_view message) { diagnostics.emplace_back(message); }};
-
+    INFO("Stat, which WeaponData's list holds, should register alone");
     REQUIRE(registry.Register(Fenrir::Describe<Test::Stat>::Description()));
-    REQUIRE_FALSE(registry.Register(Fenrir::Describe<Test::Sword>::Description()));
 
+    const bool added = registry.Register(Fenrir::Describe<Test::Sword>::Description());
+
+    INFO("Sword should be refused while its base is not registered");
+    REQUIRE_FALSE(added);
+    REQUIRE(registry.Find("Test::Sword") == nullptr);
+    INFO("one diagnostic should name the type and its base: " << (diagnostics.empty() ? "" : diagnostics.front()));
     REQUIRE(diagnostics.size() == 1);
     REQUIRE(diagnostics.front().find("Test::Sword") != std::string::npos);
     REQUIRE(diagnostics.front().find("Test::WeaponData") != std::string::npos);
-    REQUIRE(registry.Find("Test::Sword") == nullptr);
 }
 
 TEST_CASE("A list of nested structs is resized and filled through the visitor and read back from the struct")
@@ -154,11 +190,13 @@ TEST_CASE("A list of nested structs is resized and filled through the visitor an
     FieldsVisitor visitor([](const FieldInfo& field, ValueRef value) {
         if (field.name != "stats")
             return;
+        INFO("stats should be a list");
         REQUIRE(value.GetKind() == Kind::List);
         value.Resize(2);
         for (std::size_t i = 0; i < value.Size(); ++i)
         {
             ValueRef stat = value.Element(i);
+            INFO("each element should be a Stat, described by Stat's own description");
             REQUIRE(stat.Description() == &Fenrir::Describe<Test::Stat>::Description());
             FieldsVisitor statVisitor([i](const FieldInfo& statField, ValueRef statValue) {
                 if (statField.name == "name")
@@ -167,12 +205,14 @@ TEST_CASE("A list of nested structs is resized and filled through the visitor an
                     *statValue.Get<float>() = static_cast<float>(i) + 0.5f;
             });
             stat.Visit(statVisitor);
+            INFO("a Stat should be visited through its own visit function, name then value");
             REQUIRE(statVisitor.names == std::vector<std::string>{"name", "value"});
         }
     });
 
     package.Get("Test::Sword").Visit(&sword, visitor);
 
+    INFO("the resize and the written elements should be the struct's own vector");
     REQUIRE(sword.stats.size() == 2);
     REQUIRE(sword.stats[0].name == "weight");
     REQUIRE(sword.stats[0].value == 0.5f);
@@ -189,11 +229,13 @@ TEST_CASE("An optional is emplaced and cleared through the visitor")
     FieldsVisitor emplace([](const FieldInfo& field, ValueRef value) {
         if (field.name != "edge")
             return;
+        INFO("edge should be an empty optional by default");
         REQUIRE(value.GetKind() == Kind::Optional);
         REQUIRE_FALSE(value.HasValue());
         *value.Emplace().Get<float>() = 0.75f;
     });
     swordType.Visit(&sword, emplace);
+    INFO("the emplaced value should be the struct's optional's");
     REQUIRE(sword.edge == 0.75f);
 
     FieldsVisitor reset([](const FieldInfo& field, ValueRef value) {
@@ -201,6 +243,7 @@ TEST_CASE("An optional is emplaced and cleared through the visitor")
             value.Reset();
     });
     swordType.Visit(&sword, reset);
+    INFO("reset should empty the struct's optional");
     REQUIRE_FALSE(sword.edge.has_value());
 }
 
@@ -208,17 +251,16 @@ TEST_CASE("A string, a path and a list of strings are written through the visito
 {
     Registered package;
     Test::Sword sword;
-    FieldsVisitor visitor([](const FieldInfo& field, ValueRef value) {
-        if (field.name == "displayName")
+    std::vector<std::string> read;
+    FieldsVisitor visitor([&](const FieldInfo& field, ValueRef value) {
+        if (field.name == "displayName" && value.GetKind() == Kind::String)
         {
-            REQUIRE(value.GetKind() == Kind::String);
-            REQUIRE(value.Text() == "Weapon");
+            read.push_back(value.Text());
             value.SetText("Longsword");
         }
-        else if (field.name == "icon")
+        else if (field.name == "icon" && value.GetKind() == Kind::Path)
         {
-            REQUIRE(value.GetKind() == Kind::Path);
-            REQUIRE(value.Text() == "icons/sword.png");
+            read.push_back(value.Text());
             value.SetText("icons/longsword.png");
         }
         else if (field.name == "titles")
@@ -230,6 +272,9 @@ TEST_CASE("A string, a path and a list of strings are written through the visito
 
     package.Get("Test::Sword").Visit(&sword, visitor);
 
+    INFO("the string and the path should read as their defaults, the header's literals");
+    REQUIRE(read == std::vector<std::string>{"Weapon", "icons/sword.png"});
+    INFO("the base's string, the path and the list of strings should hold what was written");
     REQUIRE(sword.displayName == "Longsword");
     REQUIRE(sword.icon == std::filesystem::path("icons/longsword.png"));
     REQUIRE(sword.titles == std::vector<std::string>{"Oathkeeper"});
@@ -239,6 +284,7 @@ TEST_CASE("A settings type is visited by member, its defaults the header's")
 {
     Registered package;
     const TypeDescription& options = package.Get("Test::Options");
+    INFO("Options is selected as a settings type");
     REQUIRE(options.role == Fenrir::Role::Settings);
     alignas(Test::Options) std::byte storage[sizeof(Test::Options)];
     options.Construct(storage);
@@ -254,6 +300,7 @@ TEST_CASE("A settings type is visited by member, its defaults the header's")
 
     options.Visit(storage, visitor);
 
+    INFO("root, extensions and threads should read as assets, empty and 4");
     REQUIRE(seen == std::vector<std::string>{"assets", "0", "4"});
     options.Destroy(storage);
 }
@@ -262,59 +309,86 @@ TEST_CASE("@transient and @editor-only are the types' flags")
 {
     Registered package;
 
+    INFO("Weather is marked @transient");
     REQUIRE(package.Get("Test::Weather").transient);
     REQUIRE_FALSE(package.Get("Test::Weather").editorOnly);
+    INFO("Layers is marked @editor-only");
     REQUIRE(package.Get("Test::Layers").editorOnly);
     REQUIRE_FALSE(package.Get("Test::Layers").transient);
+    INFO("Sword is marked neither");
     REQUIRE_FALSE(package.Get("Test::Sword").transient);
+    REQUIRE_FALSE(package.Get("Test::Sword").editorOnly);
 }
 
-TEST_CASE("@version and @formerly are the types' version and former names")
+TEST_CASE("@version is a type's version, 1 when not given")
 {
     Registered package;
 
+    INFO("Marker is @version 3");
     REQUIRE(package.Get("Test::Marker").version == 3);
+    INFO("Sword is @version 2");
     REQUIRE(package.Get("Test::Sword").version == 2);
+    INFO("WeaponData gives no version");
     REQUIRE(package.Get("Test::WeaponData").version == 1);
+}
+
+TEST_CASE("Each @formerly name finds its type, and a field's are on its field")
+{
+    Registered package;
+
     for (std::string_view former : {"Test::Beacon", "Test::Flag"})
     {
-        INFO(former);
+        INFO(former << " is a former name of Marker");
         REQUIRE(package.registry.Find(former) == &package.Get("Test::Marker"));
     }
+    INFO("Test::Blade is a former name of Sword");
     REQUIRE(package.registry.Find("Test::Blade") == &package.Get("Test::Sword"));
-    REQUIRE(FieldNamed(package.Get("Test::Marker"), "target").formerly.size() == 1);
-    REQUIRE(FieldNamed(package.Get("Test::Marker"), "target").formerly[0] == "pointee");
+    const FieldInfo& target = FieldNamed(package.Get("Test::Marker"), "target");
+    INFO("Marker's target was formerly pointee");
+    REQUIRE(target.formerly.size() == 1);
+    REQUIRE(target.formerly[0] == "pointee");
+}
+
+TEST_CASE("The component's fixed-layout kinds are an entity, a fixed string and a reference")
+{
+    Registered package;
+    const TypeDescription& marker = package.Get("Test::Marker");
+
+    INFO("target is a Fenrir::Entity");
+    REQUIRE(FieldNamed(marker, "target").type.kind == Kind::Entity);
+    INFO("label is a char[16]");
+    REQUIRE(FieldNamed(marker, "label").type.kind == Kind::FixedString);
+    REQUIRE(FieldNamed(marker, "label").type.count == 16);
+    INFO("mesh is an AssetHandle<Test::Mesh>");
+    REQUIRE(FieldNamed(marker, "mesh").type.kind == Kind::Reference);
+    REQUIRE(FieldNamed(marker, "mesh").type.target == "Test::Mesh");
+    INFO("offset is the bound type Vec2");
+    REQUIRE(FieldNamed(marker, "offset").type.type == &package.Get("Test::Vec2"));
 }
 
 TEST_CASE("Every field metadata command's value is on its field")
 {
     Registered package;
     const TypeDescription& marker = package.Get("Test::Marker");
-
     const FieldInfo& label = FieldNamed(marker, "label");
-    REQUIRE(label.type.kind == Kind::FixedString);
-    REQUIRE(label.type.count == 16);
+    const FieldInfo& offset = FieldNamed(marker, "offset");
+
+    INFO("label has @display Caption and @multiline");
     REQUIRE(label.metadata.display == "Caption");
     REQUIRE(label.metadata.multiline);
-
-    const FieldInfo& mesh = FieldNamed(marker, "mesh");
-    REQUIRE(mesh.type.kind == Kind::Reference);
-    REQUIRE(mesh.type.target == "Test::Mesh");
-    REQUIRE(mesh.metadata.group == "Look");
-
-    const FieldInfo& offset = FieldNamed(marker, "offset");
-    REQUIRE(offset.type.type == &package.Get("Test::Vec2"));
+    INFO("mesh has @group Look");
+    REQUIRE(FieldNamed(marker, "mesh").metadata.group == "Look");
+    INFO("offset has @range -10 10, @step 0.25 and @units m");
     REQUIRE(offset.metadata.range.has_value());
     REQUIRE(offset.metadata.range->min == -10.0);
     REQUIRE(offset.metadata.range->max == 10.0);
     REQUIRE(offset.metadata.step == 0.25);
     REQUIRE(offset.metadata.units == "m");
-
+    INFO("rarity has @readonly and serial @hidden");
     REQUIRE(FieldNamed(marker, "rarity").metadata.readonly);
     REQUIRE(FieldNamed(marker, "serial").metadata.hidden);
-    REQUIRE(FieldNamed(marker, "target").type.kind == Kind::Entity);
+    INFO("target has its doc text and no metadata command");
     REQUIRE(FieldNamed(marker, "target").doc == "The entity the marker points at.");
-    INFO("a field with no metadata command has none");
     REQUIRE_FALSE(FieldNamed(marker, "target").metadata.readonly);
     REQUIRE(FieldNamed(marker, "target").metadata.display.empty());
 }
