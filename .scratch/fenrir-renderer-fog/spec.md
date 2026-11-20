@@ -49,7 +49,7 @@ A `Fog` scene resource beside `Sky` and `SkyLight` turns on exponential distance
 - **The frame's uniforms** carry the fog values for both; with no `Fog` resource the pass is not added and the helper returns its input.
 - **The sky** is not fogged.
 - **For volumetric fog** later: the `Fog` resource's density values are the ones a volume will read; nothing here is shaped against it beyond that.
-- **Glossary:** *Fog* is added to the rendering section: a scene's distance and height haze toward the sky, applied after opaque and in transparents' shading.
+- **Glossary:** *Fog* is already defined (added with the planning)
 
 ## Testing Decisions
 

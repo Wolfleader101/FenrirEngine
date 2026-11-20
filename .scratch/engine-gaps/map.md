@@ -13,27 +13,33 @@ Every one of the fifteen engine-gap issues in `issues/01` to `issues/15` has a d
 - **The engine/game line** (`GLOSSARY.md`, `docs/adr/`, ADR-0057's spirit): the engine provides building blocks; the game decides what the world is. A design that decides a game's world (which meshes are solid, what an enemy walks on, what a menu stack is) is on the wrong side.
 - **Existing maps first.** Before designing a gap, check the map that might own it: `.scratch/fenrir-renderer/map.md` (fog, particles and per-entity overrides are lines in its Not yet specified), `.scratch/fenrir-physics/map.md` (a collision asset pipeline is out of its scope), and the `fenrir-serialisation` map, `.scratch/fenrir-serialisation/map.md`, merged into `main` in #316 with its specs under `.scratch/fenrir-serialisation-*/` (scene files, data assets, C# data). The levels and scenes design runs in another session on that map: record dependencies on it, never redesign it here.
 - **Inventory:** `.scratch/flightless-frenzy/research/engine-inventory.md` on `research/flightless-frenzy-engine-inventory`.
-- **The renderer features are decided here** (the user, 2026-11-19): fog (volumetric fog included, the user's widening in round 3), particles (everything, on the GPU too, the user's widening in round 3), outlines and game passes, and per-entity material parameters. When each ticket resolves, its line in the renderer map's Not yet specified becomes a pointer to it, and its spec is written as `.scratch/fenrir-renderer-<name>/`, like the renderer map's other specs.
-- **Gap statuses** (the user, 2026-11-19): a gap whose outcome is spec-ready or a pointer becomes `ready-for-agent`; a deferred gap becomes `needs-info`, its comment saying what brings it back; a ruled-out gap becomes `wontfix`. A gap with several decision tickets changes when the last resolves.
+- **The renderer features are decided here** (the user, 2026-11-19): fog (volumetric fog included, the user's widening in round 3), particles (everything, on the GPU too, the user's widening in round 3), outlines and game passes, and per-entity material parameters. When each ticket resolves, its line in the renderer map's Not yet specified becomes a pointer to it, and its spec is written beside the others: `.scratch/fenrir-game-passes/`, `.scratch/fenrir-renderer-fog/`, `.scratch/fenrir-renderer-volumetric-fog/`, `.scratch/fenrir-renderer-entity-values/`, `.scratch/fenrir-renderer-particles/` and `.scratch/fenrir-renderer-decals/`.
+- **Gap statuses** (the user, 2026-11-19): a gap whose outcome is spec-ready or a pointer becomes `ready-for-agent`; a deferred gap becomes `needs-info`, its comment saying what brings it back; a ruled-out gap becomes `wontfix`. A gap with several decision tickets changes when the last resolves. A gap with a spec-ready part and a deferred part (input actions, fullscreen) is `ready-for-agent` for its spec, its comments naming what is deferred; one whose only open part is deferred is `needs-info` (collision from a model).
 - **Each decision ticket names the gap issues it settles** on its `Settles:` line. When a ticket resolves, the gap issue gets a comment pointing at it, and its `Status:` changes as below.
 - **Skills:** grilling tickets call `grilling` and `domain-modeling`; package and seam questions also use `codebase-design`. Research tickets call `research` and put their findings in `.scratch/engine-gaps/research/<name>.md` on a `research/<name>` branch, never merged. The task ticket is done on a throwaway project, never merged.
 - **Plan, don't do:** tickets produce decisions, not code.
 
 ### The efforts
 
-Each effort touches different packages, so the efforts are **independent and can run in parallel**; within one, tickets follow their `Blocked by:` lines. Ordered by what the game needs first:
+Each effort's decisions stand alone, and most of each effort's tickets touch packages the others do not, so the efforts **can run in parallel**; within one, tickets follow their `Blocked by:` lines. The dependencies between them are listed under the table. Ordered by what the game needs first:
 
 | Order | Effort | Packages | Gaps | Tickets | The game needs it |
 | --- | --- | --- | --- | --- | --- |
 | 1 | **Build helpers** | root `CMakeLists.txt`, `cmake/`, `examples/DemoScaffold/cmake/` | 02 | 16 → 17 | before its first ticket |
 | 2 | **C# reach** | FenrirScripting, FenrirScene, FenrirApp, FenrirAssets bindings | 11, 13, 04 (positions) | 18, 19, 20, 33 | parenting early; scenes for restart and title |
 | 3 | **Pause and time scale** | FenrirTime, FenrirApp, FenrirPhysics, FenrirAnimation | 05 | 21 | for the pause menu |
-| 4 | **Renderer features** | FenrirRenderer, FenrirAssets materials | 06, 07, 14, 15 | 22 → 23, 24 → 25, 36, 26, 34 → 35, 27 | before the game is complete |
+| 4 | **Renderer features** | FenrirRenderer, FenrirAssets materials, a new FenrirParticlePhysics glue package | 06, 07, 14, 15 | 22 → 23, 24 → 25, 36, 26, 34 → 35, 27 | before the game is complete |
 | 5 | **Wanted, not blocking** | FenrirInput, FenrirUI, FenrirWindow | 08, 09, 10, 12 | 29, 30, 31, 32 | never blocks |
 | – | **Deferred until the levels design** | FenrirAssets, FenrirPhysics | 04 (the helper) | 28 | once levels are authored |
 | – | **Covered elsewhere or deferred** | | 01, 03 | none | see below |
 
-Within the renderer features, the four tickets are independent of each other as decisions; outlines and particles may both ask the frame for scene depth, which their tickets note.
+**Where the efforts meet** (their tickets say so in their notes):
+
+- Pause and time scale also touches FenrirRenderer (shader time) and FenrirUI (unscaled time), and shares FenrirApp and FenrirScripting's time bindings with C# reach: its C# ticket is built on C# reach's.
+- Decals need game passes' render layers; particles use time scale's game time and, where built first, game passes' depth resolve and the fog helper; volumetric fog extends plain fog.
+- The demo scaffold's keys come from both pause (F5, F6) and fullscreen (F11).
+
+Within the renderer features the decisions stand alone; game passes, plain fog and per-entity values have no tickets that wait on another spec.
 
 ### Outcomes without a ticket
 

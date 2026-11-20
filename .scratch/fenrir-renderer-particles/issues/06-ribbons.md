@@ -1,4 +1,4 @@
-# 04: Ribbons
+# 06: Ribbons
 
 Spec: [Particles](../spec.md). ADR-0089.
 
@@ -9,7 +9,7 @@ Spec: [Particles](../spec.md). ADR-0089.
 
 **Status:** ready-for-agent
 
-Stacked on 03. On the core stack 01, 02, 09, 10, 03, 04, 05, 06, 11, 12: CPU bursts, then GPU simulation, then the rest, as decided.
+Stacked on 05, on the one stack 01 to 12, in build order as decided: CPU bursts and C# bursts, then GPU simulation, then sub-emitters and events, ribbons, mesh particles, lit and light-emitting particles, and collision last.
 
 - [ ] A CPU test of the strip built from particles in spawn order, with its widths and colours.
 - [ ] Null-backend tests: a ribbon emitter produces one strip draw in the transparent pass.

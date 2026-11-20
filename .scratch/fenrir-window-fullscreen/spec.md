@@ -35,7 +35,7 @@ A window has a **window mode**: windowed or borderless fullscreen. `WindowConfig
 - **The renderer** follows the size change through its existing resize path; no renderer change is expected.
 - **C#:** `Window.Fullscreen` (a bool: true is borderless fullscreen) and the mode itself, through FenrirWindow's scripting extension and the generated bindings.
 - **The demo scaffold** gains a shared F11 key that toggles the main window between windowed and borderless fullscreen, listed in its help with the scaffold's others; no smoke run presses it.
-- **Glossary:** Borderless fullscreen is already defined; *Window mode* is added: whether a window is windowed or borderless fullscreen.
+- **Glossary:** Borderless fullscreen is already defined; *Window mode* is already defined (added with the planning)
 - **No ADR:** it adds a mode the windowing library already offers and reverses nothing.
 
 ## Testing Decisions

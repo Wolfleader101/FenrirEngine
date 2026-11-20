@@ -55,7 +55,7 @@ A camera that turns volumetric fog on gets a froxel volume: a camera-aligned 3D 
 - **The volume's textures and history** are the camera's, kept across frames, remade when the quality or view size changes (history reset then).
 - **Shaders** for the new compute passes are written in Slang (ADR-0073), using the shared includes for shadows, clusters and spherical harmonics.
 - **C#:** the camera's volumetric fog settings, `Fog`'s anisotropy and albedo, and the `FogVolume` component, through the generated bindings.
-- **Glossary:** Fog volume is already defined; *Froxel volume* is added: a camera's 3D grid of cells along its view, holding the fog's density and scattered light.
+- **Glossary:** Fog volume is already defined; *Froxel volume* is already defined (added with the planning)
 
 ## Testing Decisions
 

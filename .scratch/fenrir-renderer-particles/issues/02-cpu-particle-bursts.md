@@ -9,7 +9,7 @@ Spec: [Particles](../spec.md). ADR-0089.
 
 **Status:** ready-for-agent
 
-Stacked on 01. On the core stack 01, 02, 09, 10, 03, 04, 05, 06, 11, 12: CPU bursts, then GPU simulation, then the rest, as decided.
+Stacked on 01, on the one stack 01 to 12, in build order as decided: CPU bursts and C# bursts, then GPU simulation, then sub-emitters and events, ribbons, mesh particles, lit and light-emitting particles, and collision last.
 
 - [ ] CPU simulation tests at a fixed seed and step: spawn by rate, distance and bursts; lifetimes; forces and noise; over-life curves and gradients; capacity; world and emitter space.
 - [ ] Pause and the time scale stop and slow the simulation (with the time scale spec built; else at scale 1).

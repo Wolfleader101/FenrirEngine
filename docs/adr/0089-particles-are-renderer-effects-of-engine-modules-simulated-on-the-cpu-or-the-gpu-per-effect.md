@@ -23,6 +23,6 @@ The renderer had no particles: the nearest thing was an instance list a game rew
 
 ## Consequences
 
-- ADR-0057's "GPU-written instance lists" are built here: an instance list's copies and count can be written by a GPU pass, and an indirect draw reads the count.
+- ADR-0057's "GPU-written instance lists" are built here: an instance list's copies and count can be written by a GPU pass, and an indirect draw reads the count. ADR-0057 asked what that does to an asset's revision: a GPU-written list is the emitter's own GPU buffer, not an instance list asset in the store, so it has no revision and asset revisions keep their meaning.
 - GPU particles send no events and are not readable by the game without a readback, which the first version does not offer.
 - A particle that emits light takes a slot in the light buffer, under a cap.

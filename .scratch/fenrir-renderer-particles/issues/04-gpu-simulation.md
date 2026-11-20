@@ -1,4 +1,4 @@
-# 09: GPU simulation
+# 04: GPU simulation
 
 Spec: [Particles](../spec.md). ADR-0089.
 
@@ -9,7 +9,7 @@ Spec: [Particles](../spec.md). ADR-0089.
 
 **Status:** ready-for-agent
 
-Stacked on 02. On the core stack 01, 02, 09, 10, 03, 04, 05, 06, 11, 12: CPU bursts, then GPU simulation, then the rest, as decided.
+Stacked on 03, on the one stack 01 to 12, in build order as decided: CPU bursts and C# bursts, then GPU simulation, then sub-emitters and events, ribbons, mesh particles, lit and light-emitting particles, and collision last.
 
 - [ ] A GL test (label `gl`): the same effect, seed and steps on CPU and GPU, the GPU particles read back and compared with the CPU ones within a tolerance.
 - [ ] Null-backend tests: GPU emitters' compute passes run before the cull; their instance lists draw indirectly with a GPU-written count.

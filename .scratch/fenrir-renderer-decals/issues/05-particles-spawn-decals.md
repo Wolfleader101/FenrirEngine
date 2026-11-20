@@ -9,7 +9,7 @@ Spec: [Decals](../spec.md).
 
 **Status:** ready-for-agent
 
-Stacked on 04. Needs the particles spec's sub-emitters (`.scratch/fenrir-renderer-particles/issues/03`) built first.
+Stacked on 04. Needs the particles spec's sub-emitters (`.scratch/fenrir-renderer-particles/issues/05`) built first.
 
 - [ ] CPU simulation tests: a decal sub-emitter spawns a `Decal` at the death or collision point with the expected orientation.
 - [ ] The Decals scene's burst leaves stains by hand; smoke runs pass.
