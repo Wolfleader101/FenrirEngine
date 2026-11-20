@@ -78,7 +78,7 @@ internal static class Generator
                 continue;
             }
 
-            CheckFixedLayout(name, type, described.Select(d => d.Name).ToHashSet(StringComparer.Ordinal));
+            CheckFields(name, type, described.Select(d => d.Name).ToHashSet(StringComparer.Ordinal));
             described.Add(new Described(name, identifiers.Unique(Identifier(name)), type));
         }
 
@@ -86,36 +86,28 @@ internal static class Generator
     }
 
     // Why the tool cannot generate this type yet, naming it; null when it can.
-    private static string? Unsupported(string name, JsonElement type)
-    {
-        var category = type.GetProperty("category").GetString();
-        if (category == "tagged-union")
-        {
-            return $"{name}: a tagged union, which is not yet described by FenrirTypes";
-        }
+    private static string? Unsupported(string name, JsonElement type) =>
+        type.GetProperty("category").GetString() == "tagged-union"
+            ? $"{name}: a tagged union, which is not yet described by FenrirTypes"
+            : null;
 
-        var role = type.TryGetProperty("role", out var roleValue) ? roleValue.GetString() : null;
-        if (role == "data-asset")
-        {
-            return $"{name}: a data asset is visited by member, by a generated function ticket 06 writes";
-        }
+    // Whether the type is reached by member through a generated visit function rather than by offset: a struct whose
+    // description records no layout (a data asset, a settings type, a struct holding an owning kind).
+    private static bool ByMember(JsonElement type) =>
+        type.GetProperty("category").GetString() == "struct" && !type.TryGetProperty("size", out _);
 
-        if (role == "settings")
-        {
-            return $"{name}: a settings type is visited by member, by a generated function ticket 06 writes";
-        }
+    // The data asset the type extends; null when it extends none.
+    private static string? Base(JsonElement type) =>
+        type.TryGetProperty("base", out var baseName) ? baseName.GetString() : null;
 
-        if (category == "struct" && !type.TryGetProperty("size", out _))
-        {
-            return $"{name}: a struct holding an owning kind is visited by member, by a generated function ticket 06 writes";
-        }
-
-        return null;
-    }
-
-    // Why a type holding a type left out is left out too, naming the field; null when it holds none.
+    // Why a type holding or extending a type left out is left out too; null when it holds and extends none.
     private static string? HeldSkipped(string name, JsonElement type, HashSet<string> skipped)
     {
+        if (Base(type) is { } baseName && skipped.Contains(baseName))
+        {
+            return $"{name}: extends {baseName}, which is left out";
+        }
+
         foreach (var field in Fields(type))
         {
             foreach (var held in HeldTypes(field).Where(skipped.Contains))
@@ -127,7 +119,7 @@ internal static class Generator
         return null;
     }
 
-    // The described types a field's value or its elements are, by name.
+    // The described types a field's value or its elements are, by name, through elements recorded whole too.
     private static IEnumerable<string> HeldTypes(JsonElement field)
     {
         foreach (var key in new[] { "type", "elementType" })
@@ -137,6 +129,49 @@ internal static class Generator
                 yield return held.GetString()!;
             }
         }
+
+        if (field.TryGetProperty("element", out var element))
+        {
+            foreach (var held in HeldTypes(element))
+            {
+                yield return held;
+            }
+        }
+    }
+
+    // The FenrirTypes hook the registration hands a type of this role to once it registers, which hangs the role's
+    // attachments (ADR-0074); null for a role with none.
+    private static string? Hook(JsonElement type) =>
+        Role(type) switch
+        {
+            "component" => "AttachComponent",
+            "scene-resource" => "AttachSceneResource",
+            "app-resource" => "AttachAppResource",
+            _ => null,
+        };
+
+    // The type's role; null for an enum, which has none.
+    private static string? Role(JsonElement type) =>
+        type.TryGetProperty("role", out var role) ? role.GetString() : null;
+
+    // "a string", "an optional": the kind with its article, as a diagnostic names it.
+    private static string WithArticle(string kind) => $"{(kind is "optional" or "array" or "enum" or "entity" ? "an" : "a")} {kind}";
+
+    // A name in macro case: AttachComponent is ATTACH_COMPONENT.
+    private static string MacroCase(string name)
+    {
+        var macro = new StringBuilder();
+        foreach (var c in name)
+        {
+            if (char.IsAsciiLetterUpper(c) && macro.Length > 0)
+            {
+                macro.Append('_');
+            }
+
+            macro.Append(char.ToUpperInvariant(c));
+        }
+
+        return macro.ToString();
     }
 
     private static IEnumerable<JsonElement> Fields(JsonElement type)
@@ -174,7 +209,7 @@ internal static class Generator
             return;
         }
 
-        var role = type.TryGetProperty("role", out var roleValue) ? roleValue.GetString() : null;
+        var role = Role(type);
         if (role is null || RoleName(role) is null)
         {
             throw new GenerateException($"{name}: its role '{role}' is not one generate-type-registry knows");
@@ -194,15 +229,25 @@ internal static class Generator
         }
     }
 
-    // Fails naming the type and field when a type the tool writes as a table of offsets holds what a table cannot
-    // reach, or a type the description has not described before it.
-    private static void CheckFixedLayout(string name, JsonElement type, HashSet<string> earlier)
+    // Fails naming the type, and the field, when a type the tool writes as a table of offsets holds what a table cannot
+    // reach, or the type holds or extends a type the description has not described before it.
+    private static void CheckFields(string name, JsonElement type, HashSet<string> earlier)
     {
+        var byMember = ByMember(type);
+        if (Base(type) is { } baseName && !earlier.Contains(baseName))
+        {
+            throw new GenerateException($"{name}: extends {baseName}, which the description does not describe before it");
+        }
+
         foreach (var field in Fields(type))
         {
             var fieldName = $"{name}::{field.GetProperty("name").GetString()}";
             var kind = field.GetProperty("kind").GetString()!;
-            CheckOwning(fieldName, kind);
+            if (!byMember)
+            {
+                CheckOwning(fieldName, kind);
+            }
+
             if (kind == "array")
             {
                 var element = field.GetProperty("elementKind").GetString()!;
@@ -225,8 +270,8 @@ internal static class Generator
         if (kind is "string" or "list" or "optional" or "path")
         {
             throw new GenerateException(
-                $"{fieldName}: a{(kind == "optional" ? "n" : "")} {kind} in a fixed-layout type, which is visited by " +
-                "offset (ticket 06 generates visitors for the owning kinds)");
+                $"{fieldName}: {WithArticle(kind)} in a type the description lays out, which is " +
+                "visited by offset; only a type visited by member, which records no size, holds the owning kinds");
         }
     }
 
@@ -250,7 +295,13 @@ internal static class Generator
             text.Line();
         }
 
+        var hooks = types.Select(type => Hook(type.Json)).OfType<string>().Distinct().Order(StringComparer.Ordinal).ToList();
         text.Line("#include \"FenrirTypes/Describe.hpp\"");
+        if (hooks.Count > 0)
+        {
+            text.Line("#include \"FenrirTypes/RoleHooks.hpp\"");
+        }
+
         text.Line("#include \"FenrirTypes/TypeDescription.hpp\"");
         text.Line();
         text.Line("namespace Fenrir");
@@ -258,6 +309,22 @@ internal static class Generator
         text.Line("    class TypeRegistry;");
         text.Line("} // namespace Fenrir");
         text.Line();
+        foreach (var hook in hooks)
+        {
+            // Skipped where the package hanging the role's attachments has defined the hook (FenrirTypes/RoleHooks.hpp),
+            // and guarded, so the headers of several registrations compile together.
+            var guard = $"FENRIR_TYPES_{MacroCase(hook)}_DEFINED";
+            text.Line($"// A no-op {hook}, unless a header this registration includes defines it ({guard}).");
+            text.Line($"#ifndef {guard}");
+            text.Line($"#define {guard}");
+            text.Line("template <typename T>");
+            text.Line($"inline bool Fenrir::{hook}(Fenrir::TypeRegistry&, const Fenrir::TypeDescription&)");
+            text.Line("{");
+            text.Line("    return true;");
+            text.Line("}");
+            text.Line("#endif");
+            text.Line();
+        }
 
         var indent = registration.FunctionNamespace.Length > 0 ? "    " : "";
         if (indent.Length > 0)
@@ -304,6 +371,11 @@ internal static class Generator
         text.Line($"#include \"{header}\"");
         text.Line();
         text.Line("#include \"FenrirTypes/FieldInfo.hpp\"");
+        if (types.Any(type => ByMember(type.Json)))
+        {
+            text.Line("#include \"FenrirTypes/FieldVisitor.hpp\"");
+        }
+
         text.Line("#include \"FenrirTypes/Kind.hpp\"");
         text.Line("#include \"FenrirTypes/TypeDescription.hpp\"");
         text.Line("#include \"FenrirTypes/TypeRegistry.hpp\"");
@@ -314,6 +386,7 @@ internal static class Generator
         text.Line("namespace");
         text.Line("{");
         var typeIds = types.ToDictionary(type => type.Name, type => type.Identifier, StringComparer.Ordinal);
+        var visits = new Dictionary<string, string>(StringComparer.Ordinal);
         var first = true;
         foreach (var type in types)
         {
@@ -323,7 +396,7 @@ internal static class Generator
             }
 
             first = false;
-            WriteDescription(text, registration, type, typeIds, identifiers);
+            WriteDescription(text, registration, type, typeIds, visits, identifiers);
         }
 
         text.Line("} // namespace");
@@ -350,17 +423,15 @@ internal static class Generator
         }
         else
         {
-            text.Line("    // As the description lists them: a type after every type its fields name.");
-            text.Line("    constexpr const Fenrir::TypeDescription* descriptions[] = {");
+            text.Line("    // As the description lists them: a type after every type its fields name and the data asset it");
+            text.Line("    // extends. A component or resource that registers goes to its role's hook, which hangs its attachments.");
+            text.Line("    bool registered = true;");
             foreach (var type in types)
             {
-                text.Line($"        &{type.Identifier},");
+                var hook = Hook(type.Json) is { } name ? $"Fenrir::{name}<{type.Name}>(registry, {type.Identifier}) && " : "";
+                text.Line($"    registered = registry.Register({type.Identifier}) && {hook}registered;");
             }
 
-            text.Line("    };");
-            text.Line("    bool registered = true;");
-            text.Line("    for (const Fenrir::TypeDescription* description : descriptions)");
-            text.Line("        registered = registry.Register(*description) && registered;");
             text.Line("    return registered;");
         }
 
@@ -371,18 +442,23 @@ internal static class Generator
     }
 
     private static void WriteDescription(Text text, Registration registration, Described type,
-                                         Dictionary<string, string> typeIds, Identifiers identifiers)
+                                         Dictionary<string, string> typeIds, Dictionary<string, string> visits,
+                                         Identifiers identifiers)
     {
         var json = type.Json;
         var name = type.Name;
         var id = type.Identifier;
         var isEnum = json.GetProperty("category").GetString() == "enum";
-        var size = json.GetProperty("size").GetInt64();
-        var alignment = json.GetProperty("alignment").GetInt64();
+        var byMember = ByMember(json);
 
         text.Line($"    // {name}");
-        text.Line($"    static_assert(sizeof({name}) == {size} && alignof({name}) == {alignment},");
-        text.Line($"                  {Literal($"{name} is not the layout {registration.DescriptionName} describes: regenerate the description, then this registration")});");
+        if (!byMember)
+        {
+            var size = json.GetProperty("size").GetInt64();
+            var alignment = json.GetProperty("alignment").GetInt64();
+            text.Line($"    static_assert(sizeof({name}) == {size} && alignof({name}) == {alignment},");
+            text.Line($"                  {Literal($"{name} is not the layout {registration.DescriptionName} describes: regenerate the description, then this registration")});");
+        }
 
         string? formerly = null;
         if (json.TryGetProperty("formerly", out var formerlyNames))
@@ -414,7 +490,7 @@ internal static class Generator
             var entries = new List<string>();
             foreach (var field in Fields(json))
             {
-                entries.Add(FieldEntry(text, id, field, typeIds, identifiers));
+                entries.Add(FieldEntry(text, name, id, field, byMember, typeIds, identifiers));
             }
 
             fields = identifiers.Unique($"{id}_Fields");
@@ -426,6 +502,8 @@ internal static class Generator
 
             text.Line("    };");
         }
+
+        var visit = byMember ? WriteVisit(text, type, fields, visits, identifiers) : null;
 
         var role = isEnum ? "Enum" : RoleName(json.GetProperty("role").GetString()!)!;
         text.Line($"    constexpr Fenrir::TypeDescription {id}{{");
@@ -456,6 +534,11 @@ internal static class Generator
         text.Line($"        .alignment = alignof({name}),");
         text.Line($"        .construct = &Fenrir::ConstructValue<{name}>,");
         text.Line($"        .destroy = &Fenrir::DestroyValue<{name}>,");
+        if (Base(json) is { } baseName)
+        {
+            text.Line($"        .base = {Literal(baseName)},");
+        }
+
         if (json.TryGetProperty("doc", out var typeDoc))
         {
             text.Line($"        .doc = {Literal(typeDoc.GetString()!)},");
@@ -476,54 +559,69 @@ internal static class Generator
             text.Line($"        .underlying = Fenrir::Kind::{KindName(json.GetProperty("underlying").GetString()!)},");
         }
 
+        if (visit is not null)
+        {
+            text.Line($"        .visit = &{visit},");
+        }
+
         text.Line("    };");
     }
 
-    // One FieldInfo initialiser; writes the arrays it points at (an array's element type, former names) first.
-    private static string FieldEntry(Text text, string id, JsonElement field, Dictionary<string, string> typeIds,
+    // Writes a by-member type's visit function, which pushes its base's fields (through the base's own visit function),
+    // then each of its own, reached by member; returns its name.
+    private static string WriteVisit(Text text, Described type, string? fields, Dictionary<string, string> visits,
                                      Identifiers identifiers)
+    {
+        var visit = identifiers.Unique($"{type.Identifier}_Visit");
+        visits.Add(type.Name, visit);
+        var baseName = Base(type.Json);
+        var own = Fields(type.Json).Select(field => field.GetProperty("name").GetString()!).ToList();
+        text.Line($"    void {visit}(void* instance, Fenrir::FieldVisitor& visitor)");
+        text.Line("    {");
+        if (baseName is null && own.Count == 0)
+        {
+            text.Line("        static_cast<void>(instance);");
+            text.Line("        static_cast<void>(visitor);");
+        }
+        else
+        {
+            text.Line($"        auto& value = *static_cast<{type.Name}*>(instance);");
+        }
+
+        if (baseName is not null)
+        {
+            text.Line("        // Its base's fields first (ADR-0075).");
+            text.Line($"        {visits[baseName]}(static_cast<{baseName}*>(&value), visitor);");
+        }
+
+        for (var i = 0; i < own.Count; ++i)
+        {
+            text.Line($"        visitor.Field({fields}[{i}], Fenrir::ValueRef(&value.{own[i]}, {fields}[{i}].type));");
+        }
+
+        text.Line("    }");
+        return visit;
+    }
+
+    // One FieldInfo initialiser; writes the data it points at (element types, former names) first. A by-member type's
+    // field has no offset, and its lists and optionals reach their elements through operations on the member's own
+    // C++ type, so the generator never spells a standard library type.
+    private static string FieldEntry(Text text, string typeName, string id, JsonElement field, bool byMember,
+                                     Dictionary<string, string> typeIds, Identifiers identifiers)
     {
         var name = field.GetProperty("name").GetString()!;
         var fieldId = $"{id}_{Identifier(name)}";
-        var kind = field.GetProperty("kind").GetString()!;
-
-        var valueType = new List<string> { $".kind = Fenrir::Kind::{KindName(kind)}" };
-        switch (kind)
-        {
-            case "enum" or "struct":
-                valueType.Add($".type = &{typeIds[field.GetProperty("type").GetString()!]}");
-                break;
-            case "array":
-                var element = new List<string> { $".kind = Fenrir::Kind::{KindName(field.GetProperty("elementKind").GetString()!)}" };
-                if (field.TryGetProperty("elementType", out var elementType))
-                {
-                    element.Add($".type = &{typeIds[elementType.GetString()!]}");
-                }
-
-                if (field.TryGetProperty("elementTarget", out var elementTarget))
-                {
-                    element.Add($".target = {Literal(elementTarget.GetString()!)}");
-                }
-
-                var elementId = identifiers.Unique($"{fieldId}_Element");
-                text.Line($"    constexpr Fenrir::ValueType {elementId}{{{string.Join(", ", element)}}};");
-                valueType.Add($".element = &{elementId}");
-                valueType.Add($".count = {field.GetProperty("length").GetInt64()}");
-                break;
-            case "fixed-string":
-                valueType.Add($".count = {field.GetProperty("length").GetInt64()}");
-                break;
-            case "reference":
-                valueType.Add($".target = {Literal(field.GetProperty("target").GetString()!)}");
-                break;
-        }
+        var member = byMember ? $"decltype({typeName}::{name})" : null;
 
         var entry = new List<string>
         {
             $".name = {Literal(name)}",
-            $".type = {{{string.Join(", ", valueType)}}}",
-            $".offset = {field.GetProperty("offset").GetInt64()}",
+            $".type = {{{ValueTypeOf(text, $"{typeName}::{name}", field, member, fieldId, typeIds, identifiers)}}}",
         };
+        if (!byMember)
+        {
+            entry.Add($".offset = {field.GetProperty("offset").GetInt64()}");
+        }
 
         if (field.TryGetProperty("formerly", out var formerly))
         {
@@ -543,6 +641,74 @@ internal static class Generator
         }
 
         return "{" + string.Join(", ", entry) + "}";
+    }
+
+    // A ValueType's designated initialisers for the value `value` describes (a field, or an element recorded whole);
+    // writes its element's ValueType, named `<id>_Element`, first. `memberType` is the value's C++ type, which a list's
+    // or optional's operations are instantiated over; null where the value is not reached by member.
+    private static string ValueTypeOf(Text text, string fieldName, JsonElement value, string? memberType, string id,
+                                      Dictionary<string, string> typeIds, Identifiers identifiers)
+    {
+        var kind = value.GetProperty("kind").GetString()!;
+        var valueType = new List<string> { $".kind = Fenrir::Kind::{KindName(kind)}" };
+        switch (kind)
+        {
+            case "enum" or "struct":
+                valueType.Add($".type = &{typeIds[value.GetProperty("type").GetString()!]}");
+                break;
+            case "array" or "list" or "optional":
+                var elementType = kind == "array" || memberType is null ? null : $"{memberType}::value_type";
+                var elementId = identifiers.Unique($"{id}_Element");
+                var element = ValueTypeOf(text, fieldName, ElementOf(value), elementType, elementId, typeIds, identifiers);
+                text.Line($"    constexpr Fenrir::ValueType {elementId}{{{element}}};");
+                valueType.Add($".element = &{elementId}");
+                if (kind == "array")
+                {
+                    valueType.Add($".count = {value.GetProperty("length").GetInt64()}");
+                }
+                else if (elementType is null)
+                {
+                    throw new GenerateException(
+                        $"{fieldName}: {WithArticle(kind)} in an array, which the description never records");
+                }
+                else
+                {
+                    valueType.Add(kind == "list"
+                                      ? $".list = &Fenrir::ListOperationsOf<{elementType}>"
+                                      : $".optional = &Fenrir::OptionalOperationsOf<{elementType}>");
+                }
+
+                break;
+            case "fixed-string":
+                valueType.Add($".count = {value.GetProperty("length").GetInt64()}");
+                break;
+            case "reference":
+                valueType.Add($".target = {Literal(value.GetProperty("target").GetString()!)}");
+                break;
+        }
+
+        return string.Join(", ", valueType);
+    }
+
+    // The description of an array's, list's or optional's element: recorded whole in `element` when it has keys of its
+    // own, else as `elementKind` with `elementType` or `elementTarget`, which this gathers as an element's keys.
+    private static JsonElement ElementOf(JsonElement value)
+    {
+        if (value.TryGetProperty("element", out var element))
+        {
+            return element;
+        }
+
+        var flat = new Dictionary<string, string> { ["kind"] = value.GetProperty("elementKind").GetString()! };
+        foreach (var (from, to) in new[] { ("elementType", "type"), ("elementTarget", "target") })
+        {
+            if (value.TryGetProperty(from, out var key))
+            {
+                flat[to] = key.GetString()!;
+            }
+        }
+
+        return JsonSerializer.SerializeToElement(flat);
     }
 
     // A FieldMetadata's designated initialisers, in its members' order.

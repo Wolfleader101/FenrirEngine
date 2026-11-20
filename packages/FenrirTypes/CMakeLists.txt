@@ -9,12 +9,16 @@ add_library(FenrirTypes STATIC
     include/FenrirTypes/FieldInfo.hpp
     include/FenrirTypes/FieldVisitor.hpp
     include/FenrirTypes/Kind.hpp
+    include/FenrirTypes/RoleHooks.hpp
     include/FenrirTypes/TypeDescription.hpp
     include/FenrirTypes/TypeRegistry.hpp
     include/FenrirTypes/ValueRef.hpp
 )
 
 target_include_directories(FenrirTypes PUBLIC include)
+
+# The test package both description tools run on, which the describe step reaches with the tests off.
+add_subdirectory(Tests/Package)
 
 # Tests that use Catch2: only with -DFENRIR_BUILD_TESTS=ON (see the root CMakeLists.txt).
 if(FENRIR_BUILD_TESTS)

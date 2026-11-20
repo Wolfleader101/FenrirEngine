@@ -53,8 +53,8 @@ internal static class Program
     }
 
     /// <summary>
-    /// Leaves out the types ticket 06 generates for (data assets, settings types and other types visited by member) and
-    /// the tagged unions FenrirTypes does not describe yet, with the types that hold them, instead of failing on them.
+    /// Leaves out the tagged unions FenrirTypes does not describe yet, with the types that hold or extend them, instead
+    /// of failing on them.
     /// </summary>
     public const string SkipUnsupported = "--skip-unsupported";
 
