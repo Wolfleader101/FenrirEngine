@@ -528,6 +528,10 @@ A material projected into a box onto the surfaces inside it, on the render layer
 The window FenrirWindow creates first and the foundation renderer draws to; closing it stops the app by default.
 *Avoid:* primary window, root window.
 
+**Window mode**
+Whether a window is windowed or borderless fullscreen, set when it is made and changeable while it runs.
+*Avoid:* display mode (a display's resolution and refresh rate), fullscreen (alone).
+
 **Borderless fullscreen**
 A window mode in which the window covers its whole display at the display's own desktop mode, with no border, as opposed to windowed; no display mode is changed.
 *Avoid:* fullscreen windowed, exclusive fullscreen (which changes the display's mode).
