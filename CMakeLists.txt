@@ -86,6 +86,8 @@ if(FENRIR_ENABLE_SCRIPTING)
     add_subdirectory(packages/Iris)
 endif()
 
+# Always built: the type registry sits below every other package and links nothing but the standard library (ADR-0074).
+add_subdirectory(packages/FenrirTypes)
 add_subdirectory(packages/FenrirMath)
 add_subdirectory(packages/FenrirECS)
 add_subdirectory(packages/FenrirTime)
