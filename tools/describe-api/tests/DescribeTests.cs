@@ -62,6 +62,22 @@ public sealed class DescribeTests
     [InlineData("UnnamedArguments",
                 "Failing::UnnamedArguments::pair: cannot tell which component of Failing::Pair each argument sets: " +
                 "the constructor's parameters (a, b) are not named after its components (first, second)")]
+    [InlineData("MalformedRange",
+                "Failing::MalformedRange::speed: @range takes two numbers, a minimum and a maximum not below it: '@range 10'")]
+    [InlineData("VersionZero", "Failing::VersionZero: @version takes a whole number from 1: '@version 0'")]
+    [InlineData("FieldVersion", "Failing::FieldVersion::value: @version is a type's doc command, not a field's")]
+    [InlineData("TypeRange", "Failing::TypeRange: @range is a field's doc command, not a type's")]
+    [InlineData("FormerlyWithoutName",
+                "Failing::FormerlyWithoutName::value: @formerly takes the field's former name: '@formerly'")]
+    [InlineData("UnknownCommand",
+                "Failing::UnknownCommand::value: @colour is not a doc command (a type takes @version, @formerly, " +
+                "@transient and @editor-only; a field @formerly, @range, @step, @display, @group, @readonly, @hidden, " +
+                "@multiline and @units)")]
+    [InlineData("EnumeratorCommand",
+                "Failing::Tinted::Red: @hidden: an enumerator takes no doc command " +
+                "(reached through Failing::EnumeratorCommand::tint)")]
+    [InlineData("UnevaluatedDefault",
+                "Failing::UnevaluatedDefault::count: the default 'Count() * 2' is not one the description records")]
     public void EachUndescribableTypeFailsNamingTheTypeAndMember(string type, string diagnostic)
     {
         using var directory = new TemporaryDirectory();
@@ -171,6 +187,112 @@ public sealed class DescribeTests
         Assert.True(nested.Role == Role.Nested && nested.Fields.Select(field => field.Name).SequenceEqual(["visible", "m_hidden"]),
                     "With private-members naming it, the nested type should be described with its private member, but is " +
                     $"{nested.Role} with fields {string.Join(", ", nested.Fields.Select(field => field.Name))}");
+    }
+
+    [Fact]
+    public void TypeDocCommandsAreRecordedAsKeysAndLeaveTheDocText()
+    {
+        var types = Describer.Describe(Selection.Read(FixtureSelection), []).Types;
+        var dial = (StructDescription)types.Single(type => type.Name == "Fixture::Dial");
+        var contacts = types.Single(type => type.Name == "Fixture::Contacts");
+        var folder = types.Single(type => type.Name == "Fixture::Folder");
+        var body = types.Single(type => type.Name == "Fixture::Body");
+
+        Assert.Equal((2, false, false), (dial.Commands.Version, dial.Commands.Transient, dial.Commands.EditorOnly));
+        Assert.Equal(["Fixture::Gauge", "Legacy::Meter"], dial.Commands.Formerly);
+        Assert.Equal("A component a file reads under its former names, at version 2.\n\nThe doc commands below are " +
+                     "recorded as keys, not as text.", dial.Doc);
+        Assert.Equal((1, true, false), (contacts.Commands.Version, contacts.Commands.Transient, contacts.Commands.EditorOnly));
+        Assert.Equal((1, false, true), (folder.Commands.Version, folder.Commands.Transient, folder.Commands.EditorOnly));
+        Assert.Same(TypeCommands.None, body.Commands);
+    }
+
+    [Fact]
+    public void FieldDocCommandsAreRecordedAsFormerNamesAndMetadata()
+    {
+        var types = Describer.Describe(Selection.Read(FixtureSelection), []).Types;
+        var dial = (StructDescription)types.Single(type => type.Name == "Fixture::Dial");
+        var fill = dial.Fields.Single(field => field.Name == "fill");
+        var ticks = dial.Fields.Single(field => field.Name == "ticks");
+
+        Assert.Equal(["level", "amount"], fill.Formerly);
+        Assert.Equal(new FieldMetadata((0, 100), 0.5, "Fill level", "Readout", true, true, true, "percent"), fill.Metadata);
+        Assert.Equal("Every metadata command on one field, and two former names.", fill.Doc);
+        Assert.Equal(FieldMetadata.None with { Range = (-10, 10.5) }, ticks.Metadata);
+        Assert.Empty(ticks.Formerly);
+    }
+
+    [Fact]
+    public void NoRecordedDocTextHoldsADocCommand()
+    {
+        var described = DescriptionWriter.Write(Describer.Describe(Selection.Read(FixtureSelection), []));
+
+        var command = new System.Text.RegularExpressions.Regex(
+            "@(version|formerly|transient|editor-only|range|step|display|group|readonly|hidden|multiline|units)\\b");
+        foreach (var line in described.Split('\n').Where(line => line.TrimStart().StartsWith("\"doc\":", StringComparison.Ordinal)))
+        {
+            Assert.DoesNotMatch(command, line);
+        }
+    }
+
+    [Fact]
+    public void AScalarDefaultMayBeAnyConstantExpression()
+    {
+        var types = Describer.Describe(Selection.Read(FixtureSelection), []).Types;
+        var dial = (StructDescription)types.Single(type => type.Name == "Fixture::Dial");
+        DefaultValue Of(string name) => dial.Fields.Single(field => field.Name == name).Default;
+
+        Assert.Equal(new DefaultValue.Number("12"), Of("ticks"));
+        Assert.Equal(new DefaultValue.Number("8"), Of("span"));
+        Assert.Equal(new DefaultValue.Bool(true), Of("enabled"));
+        Assert.Equal(new DefaultValue.Number("6"), Of("scaled"));
+    }
+
+    [Fact]
+    public void ABoundTypeRecordsItsScalarComponentsWithOffsets()
+    {
+        var types = Describer.Describe(Selection.Read(FixtureSelection), []).Types;
+        IReadOnlyList<BoundComponent>? Of(string name) => ((BoundTypeDescription)types.Single(type => type.Name == name)).Components;
+
+        Assert.Equal([new("x", 0, "f32"), new("y", 4, "f32"), new("z", 8, "f32")], Of("Fixture::Vec3"));
+        Assert.Equal([new("x", 0, "f32"), new("y", 4, "f32"), new("z", 8, "f32"), new("w", 12, "f32")], Of("Fixture::Quat"));
+        Assert.Equal([new("first", 0, "f64"), new("second", 8, "f64")], Of("Fixture::Pair<double>"));
+        Assert.Equal([new("m_number", 0, "u32")], Of("Fixture::Ticket"));
+        Assert.Equal([new("m_value[0].x", 0, "f32"), new("m_value[0].y", 4, "f32"), new("m_value[0].z", 8, "f32"),
+                      new("m_value[1].x", 12, "f32"), new("m_value[1].y", 16, "f32"), new("m_value[1].z", 20, "f32")],
+                     Of("Fixture::Columns"));
+        // A pointer is not a value a visitor presents, so a bound type holding one records no components.
+        Assert.Null(Of("Fixture::Handle"));
+    }
+
+    [Fact]
+    public void ARegistrationTableIsAcceptedAndAnUnknownTableStillFails()
+    {
+        using var directory = new TemporaryDirectory();
+        var header = Path.Combine(FixtureDirectory(), "Failing.hpp").Replace('\\', '/');
+        var selection = Path.Combine(directory.Path, "Registered.api.toml");
+        const string types = "[types]\n\"Failing::NoInitialiser\" = \"component\"\n";
+        File.WriteAllText(selection, $"headers = [\"{header}\"]\n\n{types}\n[registration]\nheader = \"x.hpp\"\n" +
+                                     "source = \"x.cpp\"\nfunction = \"Register\"\nincludes = [\"a.hpp\"]\n");
+
+        Assert.Equal("Registered", Selection.Read(selection).Package);
+
+        File.WriteAllText(selection, $"headers = [\"{header}\"]\n\n{types}\n[other]\nkey = 1\n");
+        var exception = Assert.Throws<DescribeException>(() => Selection.Read(selection));
+        Assert.Contains("unknown key 'other'", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ARegistrationThatIsNotATableFails()
+    {
+        using var directory = new TemporaryDirectory();
+        var header = Path.Combine(FixtureDirectory(), "Failing.hpp").Replace('\\', '/');
+        var selection = Path.Combine(directory.Path, "Registered.api.toml");
+        File.WriteAllText(selection, $"registration = 1\nheaders = [\"{header}\"]\n\n[types]\n\"Failing::NoInitialiser\" = \"component\"\n");
+
+        var exception = Assert.Throws<DescribeException>(() => Selection.Read(selection));
+
+        Assert.Contains("'registration' is a table", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -29,7 +29,7 @@ The roles:
 | `scene-resource` | A resource of a scene a binding mirrors, plain data as a component is. |
 | `app-resource` | A resource of the app a binding mirrors, plain data as a component is. |
 | `shared-struct` | Plain data native functions take or return by pointer. |
-| `bound-type` | A type every binding has its own of (a vector, a quaternion, an entity handle): recorded by layout only. |
+| `bound-type` | A type every binding has its own of (a vector, a quaternion, an entity handle): recorded by layout, with its scalar components when it is made of them. |
 | `enum` | An enum no field holds that is shared all the same (a native function takes it). An enum a field holds is described without being named. |
 
 A component, event, resource or shared struct with private data members is refused unless the selection names it in `private-members`, before `[types]`: its members stay private in C++, but their layout is shared all the same (an entity's value and list, a name's buffer). The name is a selected type's, or a nested type's that a selected type holds (another package's entity, held by a component here); one that is neither selected nor held by a selected type is refused.
@@ -40,11 +40,13 @@ private-members = ["MyPackage::Hit", "Other::Entity"]
 
 A bound type may be a class template's specialisation, named by an alias (`"Math::Quat"`) or with its arguments (`"MyPackage::Handle<MyPackage::Mesh>"`); the tool instantiates one the headers never do to read its layout.
 
+A `[registration]` table is accepted and left alone: it configures `tools/generate-type-registry`, which reads it. Any other key fails the tool.
+
 Types a selected type's fields use (nested structs, tagged unions, enums) are described too, without being listed. A type the fields use that is neither plain data nor a selected bound type fails the tool. The selection says nothing binding-specific: names, namespaces and type mappings for a language belong to its binding.
 
 ## The description
 
-`<Package>.api.json` beside the selection, in the schema `SCHEMA.md` documents. It is written only when its content changes. The fixture's `tests/Fixture/Fixture.api.json` is an example of every part.
+`<Package>.api.json` beside the selection, in the schema `SCHEMA.md` documents. It is written only when its content changes. What a file or an inspector needs beyond a type's layout is written in its header as doc commands, each on a line of its own in the doc comment: `@version N`, `@formerly Old::Name`, `@transient` and `@editor-only` on a type, and `@formerly oldName`, `@range min max`, `@step s`, `@display text`, `@group text`, `@readonly`, `@hidden`, `@multiline` and `@units text` on a field (`SCHEMA.md`, "Type and field doc commands"). The fixture's `tests/Fixture/Fixture.api.json` is an example of every part.
 
 ## Running
 
@@ -68,7 +70,10 @@ Everything the tool cannot describe fails it, naming the type and member, and ev
 
 | Reason | Cause |
 | --- | --- |
-| `the default '...' is not one the description records: ...` | A default member initialiser of a form `SCHEMA.md` ("Defaults") does not list. |
+| `the default '...' is not one the description records: ...` | A default member initialiser of a form `SCHEMA.md` ("Defaults") does not list, such as a number's that libclang cannot evaluate as a constant. |
+| `@<word> is not a doc command (...)` | A doc comment line starting with an `@` word the description does not know. |
+| `@<command> is a type's doc command, not a field's`, `... a field's doc command, not a type's`, `@<command>: an enumerator takes no doc command` | A doc command on the wrong subject. |
+| `@version takes a whole number from 1: ...`, `@range takes two numbers, ...`, `@<command> is written twice; ...` | A malformed doc command, or a second of one given once. |
 | `has no default member initialiser` | A number, enum, pointer or array of them with no initialiser. |
 | `cannot tell which component of <T> each argument sets: ...` | A bound type's constructor whose parameters are not named after its components. |
 | `a private data member outside the tagged-union shape (one enum tag followed by one anonymous union); ...` | A private (or protected) member of a class that is not a tagged union, unless `private-members` names it. |

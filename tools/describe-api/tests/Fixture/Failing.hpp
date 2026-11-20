@@ -90,4 +90,59 @@ namespace Failing
     {
         PrivateMember member;
     };
+
+    struct MalformedRange
+    {
+        /** @range 10 */
+        float speed = 0.0f;
+    };
+
+    /** @version 0 */
+    struct VersionZero
+    {
+        float value = 0.0f;
+    };
+
+    struct FieldVersion
+    {
+        /** @version 2 */
+        float value = 0.0f;
+    };
+
+    /** @range 0 1 */
+    struct TypeRange
+    {
+        float value = 0.0f;
+    };
+
+    struct FormerlyWithoutName
+    {
+        /** @formerly */
+        float value = 0.0f;
+    };
+
+    struct UnknownCommand
+    {
+        /** @colour red */
+        float value = 0.0f;
+    };
+
+    /** @brief A doc command on an enumerator, which takes none. */
+    enum class Tinted
+    {
+        /** @hidden */
+        Red
+    };
+
+    struct EnumeratorCommand
+    {
+        Tinted tint = Tinted::Red;
+    };
+
+    int Count();
+
+    struct UnevaluatedDefault
+    {
+        int count = Count() * 2;
+    };
 } // namespace Failing

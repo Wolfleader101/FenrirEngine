@@ -321,16 +321,26 @@ internal sealed class Describer
             throw Error(pending.Decl, name, "an incomplete type: only declared in the selected headers");
         }
 
-        var doc = Doc(m_aliasDocs.GetValueOrDefault(name) ?? pending.Decl);
+        var docDecl = m_aliasDocs.GetValueOrDefault(name) ?? pending.Decl;
+        if (pending.Role == Role.BoundType && RawDoc(docDecl) is null && type.AsTagDecl is { } tagDecl)
+        {
+            // A bound type named through an alias with no comment of its own is documented by the type it names.
+            docDecl = tagDecl;
+        }
+
+        var typeDoc = TypeDoc(docDecl, name);
         if (pending.Role == Role.BoundType)
         {
-            return new BoundTypeDescription(name, size, alignment, doc ?? Doc(type.AsTagDecl));
+            var components = type.AsCXXRecordDecl?.Definition is CXXRecordDecl boundRecord ? BoundComponents(boundRecord) : null;
+            return new BoundTypeDescription(name, size, alignment, typeDoc.Text, components) { Commands = typeDoc.Commands };
         }
 
         if (type.AsTagDecl?.Definition is EnumDecl enumDecl)
         {
-            return DescribeEnum(enumDecl, name, size, alignment);
+            return DescribeEnum(enumDecl, name, size, alignment, typeDoc);
         }
+
+        var doc = typeDoc.Text;
 
         if (type.AsCXXRecordDecl?.Definition is not CXXRecordDecl record)
         {
@@ -346,7 +356,7 @@ internal sealed class Describer
         var fields = record.Fields;
         if (IsTaggedUnionShape(fields))
         {
-            return DescribeTaggedUnion(record, name, pending.Role, size, alignment, doc);
+            return DescribeTaggedUnion(record, name, pending.Role, size, alignment, doc) with { Commands = typeDoc.Commands };
         }
 
         var described = new List<FieldDescription>();
@@ -368,10 +378,11 @@ internal sealed class Describer
             throw new DescribeException(string.Join("\n", failures));
         }
 
-        return new StructDescription(name, size, alignment, doc, pending.Role, described);
+        return new StructDescription(name, size, alignment, doc, pending.Role, described) { Commands = typeDoc.Commands };
     }
 
-    private EnumDescription DescribeEnum(EnumDecl enumDecl, string name, long size, long alignment)
+    private EnumDescription DescribeEnum(EnumDecl enumDecl, string name, long size, long alignment,
+                                         DocComment.TypeDoc doc)
     {
         var underlying = IntegerKind(enumDecl.IntegerType.CanonicalType) ??
                          throw Error(enumDecl, name, $"an underlying type '{enumDecl.IntegerType.AsString}' that is not an integer kind");
@@ -381,9 +392,10 @@ internal sealed class Describer
                                      enumerator.Name,
                                      unsigned ? enumerator.UnsignedInitVal.ToString(CultureInfo.InvariantCulture)
                                               : enumerator.InitVal.ToString(CultureInfo.InvariantCulture),
-                                     Doc(enumerator, enumDecl.Enumerators.TakeWhile(e => e != enumerator).LastOrDefault())))
+                                     PlainDoc(enumerator, $"{name}::{enumerator.Name}", "an enumerator",
+                                              enumDecl.Enumerators.TakeWhile(e => e != enumerator).LastOrDefault())))
                          .ToList();
-        return new EnumDescription(name, size, alignment, Doc(enumDecl), underlying, values);
+        return new EnumDescription(name, size, alignment, doc.Text, underlying, values) { Commands = doc.Commands };
     }
 
     private void CheckPlainData(CXXRecordDecl record, string name)
@@ -449,7 +461,18 @@ internal sealed class Describer
         var type = Classify(field.Type, field, subject);
         var value = IsHandle(field.Type) ? HandleDefault(type, field.InClassInitializer, field, subject)
                                          : Default(type, field.InClassInitializer, field, subject);
-        return new FieldDescription(field.Name, Offset(field), type, value, Doc(field));
+        return Field(field, subject, type, value);
+    }
+
+    /// <summary>A field's description, with what its doc commands give.</summary>
+    private FieldDescription Field(FieldDecl field, string subject, FieldType type, DefaultValue value)
+    {
+        var doc = WithDocCommandDiagnostics(field, subject, () => DocComment.Field(RawDoc(field)));
+        return new FieldDescription(field.Name, Offset(field), type, value, doc.Text)
+        {
+            Formerly = doc.Formerly,
+            Metadata = doc.Metadata,
+        };
     }
 
     /// <summary>
@@ -493,7 +516,7 @@ internal sealed class Describer
 
         var kinds = members.Select((member, i) => new UnionKind(member.Name, enumerators[i].Name,
                                                                 Classify(member.Type, member, $"{name}::{member.Name}"),
-                                                                Doc(member)))
+                                                                PlainDoc(member, $"{name}::{member.Name}", "a tagged union's kind")))
                         .ToList();
         var kindNames = kinds.Select(kind => kind.Name).ToHashSet(StringComparer.Ordinal);
 
@@ -519,7 +542,7 @@ internal sealed class Describer
 
         var defaultKind = DefaultKind(record, name, kindNames);
         var tagDefault = new DefaultValue.Text(kinds.First(kind => kind.Name == defaultKind).Tag);
-        var tag = new FieldDescription(tagField.Name, Offset(tagField), tagType, tagDefault, Doc(tagField));
+        var tag = Field(tagField, $"{name}::{tagField.Name}", tagType, tagDefault);
         return new TaggedUnionDescription(name, size, alignment, doc, role, tag, Offset(unionField), kinds, defaultKind);
     }
 
@@ -732,9 +755,11 @@ internal sealed class Describer
 
                 break;
             default:
-                if (IsLiteral(expression) || IsNumericLimits(expression))
+                // A number's or bool's default is any constant libclang evaluates: a literal, a named constant, an
+                // arithmetic expression over them.
+                if (TryEvaluate(init, type.Kind, at, subject) is { } evaluated)
                 {
-                    return Evaluate(init, type.Kind, at, subject);
+                    return evaluated;
                 }
 
                 break;
@@ -880,6 +905,63 @@ internal sealed class Describer
         })];
     }
 
+    /// <summary>
+    /// A bound type's components as its description records them: every scalar it holds, in storage order, with its
+    /// offset; of an anonymous union, its first member's; a nested struct's members and an array's elements by path
+    /// (<c>m_value[0].x</c>). Null when it holds anything else (a pointer, an enum), which a visitor cannot present.
+    /// </summary>
+    private static List<BoundComponent>? BoundComponents(RecordDecl record)
+    {
+        var components = new List<BoundComponent>();
+        return Collect(record, "", 0) ? components : null;
+
+        // A record's members, from `offset`, each named `prefix` and its own name (an anonymous one adds no name).
+        bool Collect(RecordDecl inner, string prefix, long offset)
+        {
+            foreach (var field in inner.IsUnion ? inner.Fields.Take(1) : inner.Fields)
+            {
+                var anonymous = field.IsAnonymousStructOrUnion;
+                if (!CollectType(field.Type.CanonicalType, anonymous ? prefix : prefix + field.Name, offset + Offset(field),
+                                 anonymous))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        bool CollectType(Type type, string name, long offset, bool anonymous)
+        {
+            if (ScalarKind(type) is { } kind)
+            {
+                components.Add(new BoundComponent(name, offset, kind));
+                return true;
+            }
+
+            // A std::array is the C array it holds, as a field's kind records it: its member's name is the library's.
+            (Type Element, long Length)? array = type.Handle.kind == CXTypeKind.CXType_ConstantArray
+                            ? (((ArrayType)type).ElementType, type.Handle.ArraySize)
+                            : StdArray(type);
+            if (array is var (elementType, length))
+            {
+                var element = elementType.CanonicalType;
+                for (long i = 0; i < length; ++i)
+                {
+                    if (!CollectType(element, $"{name}[{i}]", offset + (i * element.Handle.SizeOf), false))
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+
+            return type.Handle.kind == CXTypeKind.CXType_Record && type.AsCXXRecordDecl?.Definition is RecordDecl nested &&
+                   Collect(nested, anonymous ? name : name + ".", offset);
+        }
+    }
+
     private DefaultValue ArrayDefault(FieldType type, Expr? init, Decl at, string subject)
     {
         var element = type.Element!;
@@ -941,7 +1023,15 @@ internal sealed class Describer
         _ => new DefaultValue.Number("0"),
     };
 
-    private DefaultValue Evaluate(Expr expression, string kind, Decl at, string subject)
+    private DefaultValue Evaluate(Expr expression, string kind, Decl at, string subject) =>
+        TryEvaluate(expression, kind, at, subject) ??
+        throw Error(at, subject, $"a default libclang could not evaluate as {kind}");
+
+    /// <summary>
+    /// The constant <paramref name="expression"/> evaluates to, as <paramref name="kind"/>; null when libclang cannot
+    /// evaluate it as that kind.
+    /// </summary>
+    private DefaultValue? TryEvaluate(Expr expression, string kind, Decl at, string subject)
     {
         using var result = expression.Handle.Evaluate;
         switch (result.Kind)
@@ -976,7 +1066,7 @@ internal sealed class Describer
                 };
         }
 
-        throw Error(at, subject, $"a default libclang could not evaluate as {kind}");
+        return null;
     }
 
     /// <summary>The value an integer of these bits has as this kind, as C++'s conversion gives it.</summary>
@@ -1071,10 +1161,10 @@ internal sealed class Describer
     private static long Offset(FieldDecl field) => field.Handle.OffsetOfField / 8;
 
     /// <summary>
-    /// The decl's doc comment. Clang attaches a comment to the next enumerator when only a comma lies between, so a
-    /// comment that ends before the previous sibling does is that sibling's, not this one's.
+    /// The decl's raw doc comment, or null when it has none. Clang attaches a comment to the next enumerator when only a
+    /// comma lies between, so a comment that ends before the previous sibling does is that sibling's, not this one's.
     /// </summary>
-    private static string? Doc(Decl? decl, Decl? previous = null)
+    private static string? RawDoc(Decl? decl, Decl? previous = null)
     {
         if (decl is null)
         {
@@ -1091,7 +1181,29 @@ internal sealed class Describer
             }
         }
 
-        return DocComment.Text(decl.Handle.RawCommentText.ToString());
+        var raw = decl.Handle.RawCommentText.ToString();
+        return string.IsNullOrWhiteSpace(raw) ? null : raw;
+    }
+
+    /// <summary>A type's doc comment, split into its text and what its doc commands give.</summary>
+    private DocComment.TypeDoc TypeDoc(Decl decl, string subject) =>
+        WithDocCommandDiagnostics(decl, subject, () => DocComment.Type(RawDoc(decl)));
+
+    /// <summary>The doc comment of <paramref name="what"/>, which takes no doc command.</summary>
+    private string? PlainDoc(Decl decl, string subject, string what, Decl? previous = null) =>
+        WithDocCommandDiagnostics(decl, subject, () => DocComment.Plain(RawDoc(decl, previous), what));
+
+    // Splits a doc comment, turning a doc command's failure into a diagnostic naming the subject.
+    private T WithDocCommandDiagnostics<T>(Decl at, string subject, Func<T> split)
+    {
+        try
+        {
+            return split();
+        }
+        catch (DocCommandException exception)
+        {
+            throw Error(at, subject, exception.Message);
+        }
     }
 
     private DescribeException Error(Cursor at, string subject, string message) =>
@@ -1099,8 +1211,8 @@ internal sealed class Describer
 
     private DescribeException UnknownDefault(Expr init, Cursor at, string subject) =>
         Error(at, subject,
-              $"the default '{SourceText(init)}' is not one the description records: a literal, an enum value, " +
-              "std::numeric_limits<T>::infinity(), max() or lowest(), a bound type's constructor with literal " +
+              $"the default '{SourceText(init)}' is not one the description records: for a number or bool, a " +
+              "constant expression libclang evaluates; an enum value, a bound type's constructor with literal " +
               "arguments, a nested type's own defaults (T{}), or a constant of its type");
 
     private static string Where(Cursor at)

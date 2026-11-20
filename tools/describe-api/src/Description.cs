@@ -93,14 +93,41 @@ internal abstract record DefaultValue
     public static readonly Object TypeDefaults = new(System.Array.Empty<KeyValuePair<string, DefaultValue>>());
 }
 
-internal sealed record FieldDescription(string Name, long Offset, FieldType Type, DefaultValue Default, string? Doc);
+/// <summary>
+/// The editor metadata a field's doc commands give (SCHEMA.md, "Type and field doc commands"): each null or false when its command is
+/// absent.
+/// </summary>
+internal sealed record FieldMetadata((double Min, double Max)? Range, double? Step, string? Display, string? Group,
+                                     bool Readonly, bool Hidden, bool Multiline, string? Units)
+{
+    public static readonly FieldMetadata None = new(null, null, null, null, false, false, false, null);
+}
+
+internal sealed record FieldDescription(string Name, long Offset, FieldType Type, DefaultValue Default, string? Doc)
+{
+    /// <summary>The names the field had before, from its <c>@formerly</c> commands, in the order written.</summary>
+    public IReadOnlyList<string> Formerly { get; init; } = [];
+
+    public FieldMetadata Metadata { get; init; } = FieldMetadata.None;
+}
 
 internal sealed record EnumValue(string Name, string Value, string? Doc);
 
 internal sealed record UnionKind(string Name, string Tag, FieldType Type, string? Doc);
 
+/// <summary>
+/// What a type's doc commands give (SCHEMA.md, "Type and field doc commands"): its <c>@version</c> (1 when absent), its former names
+/// from <c>@formerly</c> in the order written, and whether it is <c>@transient</c> or <c>@editor-only</c>.
+/// </summary>
+internal sealed record TypeCommands(int Version, IReadOnlyList<string> Formerly, bool Transient, bool EditorOnly)
+{
+    public static readonly TypeCommands None = new(1, [], false, false);
+}
+
 internal abstract record TypeDescription(string Name, long Size, long Alignment, string? Doc)
 {
+    public TypeCommands Commands { get; init; } = TypeCommands.None;
+
     public abstract IEnumerable<string> References();
 }
 
@@ -125,7 +152,14 @@ internal sealed record TaggedUnionDescription(string Name, long Size, long Align
         Tag.Type.References().Concat(Kinds.SelectMany(kind => kind.Type.References()));
 }
 
-internal sealed record BoundTypeDescription(string Name, long Size, long Alignment, string? Doc)
+/// <summary>One scalar a bound type is made of: its member's name (a path for a nested one), offset and kind.</summary>
+internal sealed record BoundComponent(string Name, long Offset, string Kind);
+
+/// <summary>
+/// A bound type: its layout and, when every value it holds is a scalar, those scalars in storage order (null otherwise).
+/// </summary>
+internal sealed record BoundTypeDescription(string Name, long Size, long Alignment, string? Doc,
+                                            IReadOnlyList<BoundComponent>? Components)
     : TypeDescription(Name, Size, Alignment, Doc)
 {
     public override IEnumerable<string> References() => [];
