@@ -1,0 +1,100 @@
+using System.Text.RegularExpressions;
+using Tomlyn;
+using Tomlyn.Model;
+
+namespace GenerateTypeRegistry;
+
+/// <summary>
+/// A package's <c>[registration]</c> table, read from its selection (<c>&lt;Package&gt;.api.toml</c>): where the generated
+/// header and source go, the registration function's qualified name, and the headers declaring the described types. The
+/// paths are relative to the selection's own directory; the description read is <c>&lt;Package&gt;.api.json</c> beside it.
+/// </summary>
+internal sealed partial record Registration(string SelectionPath, string Package, string HeaderPath, string SourcePath,
+                                            string FunctionNamespace, string FunctionName, IReadOnlyList<string> Includes)
+{
+    public const string Extension = ".api.toml";
+
+    /// <summary>The package's description, <c>&lt;Package&gt;.api.json</c> beside the selection.</summary>
+    public string DescriptionPath => Path.Combine(Path.GetDirectoryName(SelectionPath)!, Package + ".api.json");
+
+    /// <summary>
+    /// Reads the <c>[registration]</c> table of a selection: null when it has none, so the package registers nothing.
+    /// Throws <see cref="GenerateException" /> saying what is wrong with a malformed one.
+    /// </summary>
+    public static Registration? Read(string selectionPath)
+    {
+        selectionPath = Path.GetFullPath(selectionPath);
+        var fileName = Path.GetFileName(selectionPath);
+        if (!fileName.EndsWith(Extension, StringComparison.Ordinal) || fileName.Length == Extension.Length)
+        {
+            throw new GenerateException($"{selectionPath}: a selection is named <Package>{Extension}");
+        }
+
+        TomlTable selection;
+        try
+        {
+            selection = Toml.ToModel(File.ReadAllText(selectionPath), selectionPath);
+        }
+        catch (TomlException exception)
+        {
+            throw new GenerateException($"{selectionPath}: {exception.Message}");
+        }
+
+        if (!selection.TryGetValue("registration", out var value))
+        {
+            return null;
+        }
+
+        if (value is not TomlTable table)
+        {
+            throw new GenerateException($"{selectionPath}: 'registration' is a table");
+        }
+
+        foreach (var key in table.Keys.Where(key => key is not ("header" or "source" or "function" or "includes")))
+        {
+            throw new GenerateException(
+                $"{selectionPath}: [registration] has an unknown key '{key}' (it has 'header', 'source', 'function' and 'includes')");
+        }
+
+        var directory = Path.GetDirectoryName(selectionPath)!;
+        var header = PathOf(table, "header", ".hpp", "the path of the generated header", selectionPath, directory);
+        var source = PathOf(table, "source", ".cpp", "the path of the generated source", selectionPath, directory);
+
+        if (!table.TryGetValue("function", out var functionValue) || functionValue is not string function ||
+            !QualifiedName().IsMatch(function))
+        {
+            throw new GenerateException(
+                $"{selectionPath}: [registration] 'function' is the qualified name of the registration function " +
+                "(Fenrir::Generated::Register<Package>Types)");
+        }
+
+        if (!table.TryGetValue("includes", out var includesValue) || includesValue is not TomlArray includeArray ||
+            includeArray.Any(include => include is not string))
+        {
+            throw new GenerateException(
+                $"{selectionPath}: [registration] 'includes' is a list of the headers declaring the described types, " +
+                "spelled as a source includes them");
+        }
+
+        var separator = function.LastIndexOf("::", StringComparison.Ordinal);
+        return new Registration(selectionPath, fileName[..^Extension.Length], header, source,
+                                separator < 0 ? "" : function[..separator], function[(separator < 0 ? 0 : separator + 2)..],
+                                includeArray.Cast<string>().ToList());
+    }
+
+    private static string PathOf(TomlTable table, string key, string extension, string what, string selectionPath,
+                                 string directory)
+    {
+        if (!table.TryGetValue(key, out var value) || value is not string path ||
+            !path.EndsWith(extension, StringComparison.Ordinal))
+        {
+            throw new GenerateException(
+                $"{selectionPath}: [registration] '{key}' is {what} ({extension}), relative to the selection");
+        }
+
+        return Path.GetFullPath(Path.Combine(directory, path));
+    }
+
+    [GeneratedRegex(@"^[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)*$")]
+    private static partial Regex QualifiedName();
+}

@@ -44,6 +44,10 @@ A bound type may be a class template's specialisation, named by an alias (`"Math
 
 A `[registration]` table is accepted and left alone: it configures `tools/generate-type-registry`, which reads it. Any other key fails the tool.
 
+### Type registrations
+
+A package whose types files read and write (ADR-0074) also gives its selection a `[registration]` table, and `tools/generate-type-registry` writes from the package's description a committed header and source that register those types with FenrirTypes' type registry and specialise `Describe<T>` for each: `header`, `source`, `function` and `includes` say where they go, what the registration function is called and which headers declare the types. The fixture's `tests/Fixture/Fixture.api.toml` has one. `tools/generate-type-registry/README.md` says what the tool writes and how a package joins its `fenrir-generate-type-registry` target.
+
 Types a selected type's fields use (nested structs, tagged unions, enums) are described too, without being listed. A type the fields use that is neither plain data nor a selected bound type fails the tool. A nested struct may hold strings, lists, optionals and paths only when nothing but data assets and settings types reach it (`SCHEMA.md`, "Owning kinds"). The selection says nothing binding-specific: names, namespaces and type mappings for a language belong to its binding.
 
 ## The description

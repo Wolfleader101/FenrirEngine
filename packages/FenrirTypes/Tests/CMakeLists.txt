@@ -1,4 +1,5 @@
-# FenrirTypes's own tests, on hand-written descriptions, through its public interface only. No other engine package.
+# FenrirTypes's own tests, on hand-written descriptions and on the registration tools/generate-type-registry writes from
+# describe-api's fixture (Generated/), through its public interface only. No other engine package.
 include("${CMAKE_CURRENT_LIST_DIR}/../../../cmake/FenrirCatch2.cmake")
 fenrir_add_catch2()
 
@@ -14,6 +15,8 @@ foreach(header IN LISTS fenrir_types_headers)
 endforeach()
 
 add_executable(FenrirTypesTests PublicHeaders.cpp TestTypes.hpp Registry.cpp Attachments.cpp Visiting.cpp Values.cpp
-                                Describe.cpp ${fenrir_types_header_checks})
-target_link_libraries(FenrirTypesTests PRIVATE FenrirTypes Catch2::Catch2WithMain)
+                                Describe.cpp GeneratedFixture.cpp Generated/FixtureTypes.hpp Generated/FixtureTypes.cpp
+                                ${fenrir_types_header_checks})
+# The fixture header the generated registration is compiled against: describe-api's, from its include directory.
+target_link_libraries(FenrirTypesTests PRIVATE FenrirTypes DescribeApiFixture Catch2::Catch2WithMain)
 add_test(NAME FenrirTypes COMMAND FenrirTypesTests)
