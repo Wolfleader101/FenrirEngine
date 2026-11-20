@@ -1,6 +1,7 @@
 // The test package's registration (Package/Generated/TestPackageTypes.*), which fenrir-describe-api and
 // fenrir-generate-type-registry wrote from Package/TestPackage.hpp: data assets and a settings type visited by member,
-// a base chain, and every doc command, compiled against the header. The expected values are the header's.
+// a base chain, a tagged union and every doc command, compiled against the header. The expected values are the
+// header's.
 
 #include "Generated/TestPackageTypes.hpp"
 
@@ -88,7 +89,8 @@ TEST_CASE("The test package registers every type it describes")
     REQUIRE(package.added);
     REQUIRE(package.diagnostics.empty());
     for (std::string_view name : {"Test::Layers", "Test::Rarity", "Test::Vec2", "Test::Marker", "Test::Options",
-                                  "Test::Stat", "Test::WeaponData", "Test::Sword", "Test::Weather"})
+                                  "Test::Stat", "Test::WeaponData", "Test::Sword", "Test::Weather", "Test::Box",
+                                  "Test::VolumeKind", "Test::Volume", "Test::Trigger"})
     {
         INFO(name << " should be registered under the test package");
         REQUIRE(package.Get(name).package == "TestPackage");
@@ -391,4 +393,60 @@ TEST_CASE("Every field metadata command's value is on its field")
     REQUIRE(FieldNamed(marker, "target").doc == "The entity the marker points at.");
     REQUIRE_FALSE(FieldNamed(marker, "target").metadata.readonly);
     REQUIRE(FieldNamed(marker, "target").metadata.display.empty());
+}
+
+TEST_CASE("A component holding the test package's tagged union visits its tag, then its live box")
+{
+    Registered package;
+    Test::Trigger trigger;
+    std::vector<std::string> volume;
+    FieldsVisitor visitor([&](const FieldInfo& field, ValueRef value) {
+        if (field.name != "volume")
+            return;
+        FieldsVisitor inner;
+        value.Visit(inner);
+        volume = inner.names;
+    });
+
+    package.Get("Test::Trigger").Visit(&trigger, visitor);
+
+    INFO("Trigger's volume is a struct of the tagged union Volume, whose default is a box");
+    REQUIRE(visitor.names == std::vector<std::string>{"volume", "once"});
+    REQUIRE(package.Get("Test::Volume").IsTaggedUnion());
+    REQUIRE(volume == std::vector<std::string>{"m_kind", "m_box"});
+}
+
+TEST_CASE("Selecting the test package's scalar alternative writes its tag value and a zero radius")
+{
+    Registered package;
+    const TypeDescription& description = package.Get("Test::Volume");
+    Test::Volume volume(Test::Box{Test::Vec2(3.0f, 4.0f)});
+
+    INFO("Circle is tag value 2, the second alternative, and selecting it value-initialises the float");
+    REQUIRE(description.SelectAlternative(&volume, 2));
+    REQUIRE(volume.Kind() == Test::VolumeKind::Circle);
+    REQUIRE(volume.Radius() == 0.0f);
+
+    FieldsVisitor visitor;
+    description.Visit(&volume, visitor);
+    INFO("the visit gives the tag, then the radius alone");
+    REQUIRE(visitor.names == std::vector<std::string>{"m_kind", "m_radius"});
+}
+
+TEST_CASE("The test package's tagged union refuses a write of its tag through the visitor")
+{
+    Registered package;
+    Test::Volume volume(1.5f);
+    bool written = true;
+    FieldsVisitor visitor([&](const FieldInfo& field, ValueRef value) {
+        if (field.name == "m_kind")
+            written = value.SetEnumValue(0);
+    });
+
+    package.Get("Test::Volume").Visit(&volume, visitor);
+
+    INFO("the tag's write is refused, so the volume is still the circle it was");
+    REQUIRE_FALSE(written);
+    REQUIRE(volume.Kind() == Test::VolumeKind::Circle);
+    REQUIRE(volume.Radius() == 1.5f);
 }

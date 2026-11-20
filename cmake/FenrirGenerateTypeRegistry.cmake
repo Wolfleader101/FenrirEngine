@@ -5,10 +5,8 @@
 # the committed descriptions (run fenrir-describe-api first when a header changed), and the package compiles the
 # generated source and links FenrirTypes.
 #
-# fenrir_generate_type_registry(<target> <selection> [SKIP_UNSUPPORTED]) adds a package's registration to
-# fenrir-generate-type-registry. The selection path is relative to the calling CMakeLists.txt; one without a
-# [registration] table writes nothing. SKIP_UNSUPPORTED leaves out the types the tool cannot write yet (tagged unions,
-# which FenrirTypes does not describe yet), with the types holding or extending them, instead of failing on them.
+# fenrir_generate_type_registry(<target> <selection>) adds a package's registration to fenrir-generate-type-registry.
+# The selection path is relative to the calling CMakeLists.txt; one without a [registration] table writes nothing.
 
 # The same cached dotnet FenrirDescribeApi.cmake finds, when it is included first.
 find_program(FENRIR_DOTNET_EXECUTABLE NAMES dotnet HINTS "$ENV{DOTNET_ROOT}"
@@ -36,7 +34,7 @@ else()
 endif()
 
 function(fenrir_generate_type_registry target selection)
-    cmake_parse_arguments(PARSE_ARGV 2 arg "SKIP_UNSUPPORTED" "" "")
+    cmake_parse_arguments(PARSE_ARGV 2 arg "" "" "")
     if(arg_UNPARSED_ARGUMENTS)
         message(FATAL_ERROR "fenrir_generate_type_registry(${target}): unknown arguments ${arg_UNPARSED_ARGUMENTS}")
     endif()
@@ -45,13 +43,9 @@ function(fenrir_generate_type_registry target selection)
         message(FATAL_ERROR
             "fenrir_generate_type_registry(${target}): a selection is named <Package>.api.toml, not ${selection}")
     endif()
-    set(skip "")
-    if(arg_SKIP_UNSUPPORTED)
-        set(skip --skip-unsupported)
-    endif()
 
     add_custom_target(fenrir-generate-type-registry-${target}
-        COMMAND "${FENRIR_DOTNET_EXECUTABLE}" "${fenrir_generate_type_registry_tool}" "${selection}" ${skip}
+        COMMAND "${FENRIR_DOTNET_EXECUTABLE}" "${fenrir_generate_type_registry_tool}" "${selection}"
         COMMENT "Generating ${target}'s type registration"
         VERBATIM
     )

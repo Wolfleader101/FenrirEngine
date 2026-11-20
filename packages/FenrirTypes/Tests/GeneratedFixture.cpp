@@ -27,8 +27,7 @@ using Fenrir::TypeRegistry;
 
 namespace
 {
-    // Every fixture type the registration describes: all but the tagged unions Shape and Sky, and Collider, which
-    // holds a Shape.
+    // Every fixture type the registration describes.
     const std::vector<std::string_view> RegisteredNames = {
         "Fixture::Handle",   "Fixture::Limits",       "Fixture::Marker",      "Fixture::Motion",
         "Fixture::Offset",   "Fixture::Numbers",      "Fixture::Quat",        "Fixture::Spring",
@@ -38,6 +37,7 @@ namespace
         "Fixture::Hit",      "Fixture::Pair<double>", "Fixture::Size",        "Fixture::Socket",
         "Fixture::Tag",      "Fixture::Ticket",       "Fixture::Touched",     "Fixture::Weather",
         "Fixture::Paths",    "Fixture::Stat",         "Fixture::WeaponData",  "Fixture::Sword",
+        "Fixture::Shape",    "Fixture::Collider",     "Fixture::Sky",
     };
 
     // A registry holding the fixture's registration, and every diagnostic it reported.
@@ -96,17 +96,6 @@ TEST_CASE("The generated registration adds every fixture type, each found by its
         REQUIRE(description != nullptr);
         REQUIRE(description->name == name);
         REQUIRE(description->package == "Fixture");
-    }
-}
-
-TEST_CASE("The generated registration leaves out the types generate-type-registry cannot write yet")
-{
-    Registered fixture;
-
-    for (std::string_view name : {"Fixture::Shape", "Fixture::Sky", "Fixture::Collider"})
-    {
-        INFO(name << " is a tagged union or holds one, which FenrirTypes does not describe yet, so is skipped");
-        REQUIRE(fixture.registry.Find(name) == nullptr);
     }
 }
 
@@ -387,4 +376,195 @@ TEST_CASE("Registering the fixture twice refuses every type the second time, nam
     INFO("each type is refused as a duplicate, and the diagnostic names the fixture package");
     REQUIRE(fixture.diagnostics.size() == RegisteredNames.size());
     REQUIRE(fixture.diagnostics.front().find("Fixture") != std::string::npos);
+}
+
+TEST_CASE("A tagged union's description holds its tag, union offset, alternatives and default alternative")
+{
+    Registered fixture;
+    const TypeDescription& shape = fixture.Get("Fixture::Shape");
+
+    INFO("Shape is a tagged union: an m_type tag of ShapeType at 0, its union at 4");
+    REQUIRE(shape.IsTaggedUnion());
+    REQUIRE(shape.role == Role::Nested);
+    REQUIRE(shape.tag.name == "m_type");
+    REQUIRE(shape.tag.offset == 0);
+    REQUIRE(shape.tag.type.kind == Kind::Enum);
+    REQUIRE(shape.tag.type.type == fixture.registry.Find("Fixture::ShapeType"));
+    REQUIRE(shape.unionOffset == 4);
+
+    INFO("its alternatives are m_box for Box (0) and m_sphere for Sphere (1), each a struct at the union's offset");
+    REQUIRE(shape.alternatives.size() == 2);
+    REQUIRE(shape.alternatives[0].field.name == "m_box");
+    REQUIRE(shape.alternatives[0].tag == 0);
+    REQUIRE(shape.alternatives[0].field.type.kind == Kind::Struct);
+    REQUIRE(shape.alternatives[0].field.type.type == fixture.registry.Find("Fixture::BoxShape"));
+    REQUIRE(shape.alternatives[0].field.offset == 4);
+    REQUIRE(shape.alternatives[0].field.doc == "Held when the tag is Box.");
+    REQUIRE(shape.alternatives[1].field.name == "m_sphere");
+    REQUIRE(shape.alternatives[1].tag == 1);
+    REQUIRE(shape.alternatives[1].field.type.type == fixture.registry.Find("Fixture::SphereShape"));
+
+    INFO("its default alternative is m_box, which the default constructor holds");
+    REQUIRE(shape.defaultAlternative == 0);
+
+    INFO("a struct is no tagged union");
+    REQUIRE_FALSE(fixture.Get("Fixture::Collider").IsTaggedUnion());
+}
+
+TEST_CASE("A tagged union in an app resource registers in its role")
+{
+    Registered fixture;
+
+    INFO("Sky is an app resource and a tagged union");
+    const TypeDescription& sky = fixture.Get("Fixture::Sky");
+    REQUIRE(sky.role == Role::AppResource);
+    REQUIRE(sky.IsTaggedUnion());
+    REQUIRE(sky.alternatives.size() == 2);
+}
+
+TEST_CASE("Visiting a box shape gives the tag, then the box alone")
+{
+    Registered fixture;
+    const Fixture::Shape box(Fixture::BoxShape{Fixture::Vec3(2.0f)});
+
+    RecordingVisitor visitor;
+    fixture.Get("Fixture::Shape").Visit(static_cast<const void*>(&box), visitor);
+
+    INFO("the tag first, then m_box at the union's offset; m_sphere is never pushed");
+    REQUIRE(visitor.seen == std::vector<Seen>{{"m_type", Kind::Enum, 0}, {"m_box", Kind::Struct, 4}});
+    REQUIRE(visitor.values[0].EnumValue() == 0);
+
+    INFO("the box's half extents are the instance's");
+    RecordingVisitor inner;
+    visitor.values[1].Visit(inner);
+    RecordingVisitor extents;
+    inner.values[0].Visit(extents);
+    REQUIRE(*extents.values[0].Get<float>() == 2.0f);
+}
+
+TEST_CASE("Visiting a sphere shape gives the tag, then the sphere alone")
+{
+    Registered fixture;
+    const Fixture::Shape sphere(Fixture::SphereShape{3.0f});
+
+    RecordingVisitor visitor;
+    fixture.Get("Fixture::Shape").Visit(static_cast<const void*>(&sphere), visitor);
+
+    INFO("the tag first, then m_sphere at the union's offset; m_box is never pushed");
+    REQUIRE(visitor.seen == std::vector<Seen>{{"m_type", Kind::Enum, 0}, {"m_sphere", Kind::Struct, 4}});
+    REQUIRE(visitor.values[0].EnumValue() == 1);
+
+    INFO("the sphere's radius is the instance's");
+    RecordingVisitor inner;
+    visitor.values[1].Visit(inner);
+    REQUIRE(inner.seen == std::vector<Seen>{{"radius", Kind::F32, 0}});
+    REQUIRE(*inner.values[0].Get<float>() == 3.0f);
+}
+
+TEST_CASE("A component holding a tagged union reaches its live alternative through the nested visit")
+{
+    Registered fixture;
+    Fixture::Collider collider;
+    collider.shape = Fixture::Shape(Fixture::SphereShape{4.0f});
+
+    RecordingVisitor visitor;
+    fixture.Get("Fixture::Collider").Visit(static_cast<const void*>(&collider), visitor);
+    REQUIRE(visitor.seen == std::vector<Seen>{{"shape", Kind::Struct, 0}, {"solid", Kind::Bool, 16}});
+    RecordingVisitor shape;
+    visitor.values[0].Visit(shape);
+
+    INFO("Collider::shape, a struct, is visited as its tag and its sphere");
+    REQUIRE(shape.seen == std::vector<Seen>{{"m_type", Kind::Enum, 0}, {"m_sphere", Kind::Struct, 4}});
+}
+
+TEST_CASE("Construct gives a tagged union its default alternative")
+{
+    Registered fixture;
+    const TypeDescription& shape = fixture.Get("Fixture::Shape");
+    alignas(Fixture::Shape) std::byte storage[sizeof(Fixture::Shape)];
+
+    shape.Construct(storage);
+
+    INFO("the default constructor holds a box, the default alternative");
+    REQUIRE(shape.LiveAlternative(storage) == &shape.alternatives[shape.defaultAlternative]);
+    REQUIRE(reinterpret_cast<const Fixture::Shape*>(storage)->Type() == Fixture::ShapeType::Box);
+    shape.Destroy(storage);
+}
+
+TEST_CASE("Selecting Sphere on a box writes the tag and a sphere with its default radius")
+{
+    Registered fixture;
+    const TypeDescription& description = fixture.Get("Fixture::Shape");
+    Fixture::Shape shape(Fixture::BoxShape{Fixture::Vec3(7.0f)});
+
+    REQUIRE(description.SelectAlternative(&shape, 1));
+
+    INFO("the tag says Sphere, and the sphere is the only alternative visited");
+    REQUIRE(shape.Type() == Fixture::ShapeType::Sphere);
+    RecordingVisitor visitor;
+    description.Visit(static_cast<const void*>(&shape), visitor);
+    REQUIRE(visitor.seen == std::vector<Seen>{{"m_type", Kind::Enum, 0}, {"m_sphere", Kind::Struct, 4}});
+
+    INFO("the sphere's radius is SphereShape's own default, 0.5, not the box's bytes");
+    RecordingVisitor sphere;
+    visitor.values[1].Visit(sphere);
+    REQUIRE(*sphere.values[0].Get<float>() == 0.5f);
+}
+
+TEST_CASE("Selecting a tag value no alternative has changes nothing")
+{
+    Registered fixture;
+    const TypeDescription& description = fixture.Get("Fixture::Shape");
+    Fixture::Shape shape(Fixture::SphereShape{3.0f});
+
+    INFO("ShapeType has no value 9, so nothing is selected and the sphere stays");
+    REQUIRE_FALSE(description.SelectAlternative(&shape, 9));
+    REQUIRE(shape.Type() == Fixture::ShapeType::Sphere);
+
+    INFO("a struct has no alternatives to select");
+    Fixture::Collider collider;
+    REQUIRE_FALSE(fixture.Get("Fixture::Collider").SelectAlternative(&collider, 0));
+}
+
+namespace
+{
+    // Tries to write each enum field it is given to `value`, recording whether each write was taken.
+    class EnumWriter final : public Fenrir::FieldVisitor
+    {
+      public:
+        explicit EnumWriter(std::int64_t value) : m_value(value)
+        {
+        }
+
+        std::vector<bool> written;
+
+        void Field(const FieldInfo&, Fenrir::ValueRef value) override
+        {
+            if (value.GetKind() == Kind::Enum)
+                written.push_back(value.SetEnumValue(m_value));
+        }
+
+      private:
+        std::int64_t m_value;
+    };
+} // namespace
+
+TEST_CASE("Writing a tagged union's tag through a value reference is refused")
+{
+    Registered fixture;
+    Fixture::Shape shape(Fixture::BoxShape{Fixture::Vec3(2.0f)});
+
+    EnumWriter writer(1);
+    fixture.Get("Fixture::Shape").Visit(static_cast<void*>(&shape), writer);
+
+    INFO("the tag's write is refused, so the shape is still a box");
+    REQUIRE(writer.written == std::vector<bool>{false});
+    REQUIRE(shape.Type() == Fixture::ShapeType::Box);
+
+    INFO("an enum field that is no tag is written");
+    Fixture::Body body;
+    EnumWriter bodyWriter(0);
+    fixture.Get("Fixture::Body").Visit(static_cast<void*>(&body), bodyWriter);
+    REQUIRE(bodyWriter.written.front());
+    REQUIRE(body.motion == Fixture::Motion::Still);
 }

@@ -4,6 +4,46 @@
   "alignment": "natural",
   "types": [
     {
+      "name": "Test::Vec2",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 8,
+      "alignment": 4,
+      "doc": "A bound type: a maths library's two-component vector, visited as its components.",
+      "components": [
+        {
+          "name": "x",
+          "offset": 0,
+          "kind": "f32"
+        },
+        {
+          "name": "y",
+          "offset": 4,
+          "kind": "f32"
+        }
+      ]
+    },
+    {
+      "name": "Test::Box",
+      "category": "struct",
+      "role": "nested",
+      "size": 8,
+      "alignment": 4,
+      "doc": "A box's half extents, as a Volume's alternative.",
+      "fields": [
+        {
+          "name": "halfExtents",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Test::Vec2",
+          "default": {
+            "x": 0.5,
+            "y": 0.5
+          }
+        }
+      ]
+    },
+    {
       "name": "Test::Layers",
       "category": "struct",
       "role": "app-resource",
@@ -36,26 +76,6 @@
           "name": "Rare",
           "value": 3,
           "doc": "Found once a level."
-        }
-      ]
-    },
-    {
-      "name": "Test::Vec2",
-      "category": "bound-type",
-      "role": "bound-type",
-      "size": 8,
-      "alignment": 4,
-      "doc": "A bound type: a maths library's two-component vector, visited as its components.",
-      "components": [
-        {
-          "name": "x",
-          "offset": 0,
-          "kind": "f32"
-        },
-        {
-          "name": "y",
-          "offset": 4,
-          "kind": "f32"
         }
       ]
     },
@@ -243,6 +263,78 @@
           "kind": "list",
           "elementKind": "string",
           "default": []
+        }
+      ]
+    },
+    {
+      "name": "Test::VolumeKind",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "Which alternative a Volume holds.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Box",
+          "value": 0
+        },
+        {
+          "name": "Circle",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "name": "Test::Volume",
+      "category": "tagged-union",
+      "role": "nested",
+      "size": 12,
+      "alignment": 4,
+      "doc": "A tagged union: a struct alternative, the default, and a scalar one, its tag value not its index.",
+      "tag": {
+        "name": "m_kind",
+        "offset": 0,
+        "kind": "enum",
+        "type": "Test::VolumeKind",
+        "default": "Box"
+      },
+      "unionOffset": 4,
+      "kinds": [
+        {
+          "name": "m_box",
+          "tag": "Box",
+          "kind": "struct",
+          "type": "Test::Box"
+        },
+        {
+          "name": "m_radius",
+          "tag": "Circle",
+          "kind": "f32",
+          "doc": "A circle's radius."
+        }
+      ],
+      "defaultKind": "m_box"
+    },
+    {
+      "name": "Test::Trigger",
+      "category": "struct",
+      "role": "component",
+      "size": 16,
+      "alignment": 4,
+      "doc": "A component holding a tagged union.",
+      "fields": [
+        {
+          "name": "volume",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Test::Volume",
+          "default": {}
+        },
+        {
+          "name": "once",
+          "offset": 12,
+          "kind": "bool",
+          "default": false
         }
       ]
     },

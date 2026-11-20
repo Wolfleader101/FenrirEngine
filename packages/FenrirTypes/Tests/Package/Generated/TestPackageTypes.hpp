@@ -56,6 +56,20 @@ namespace Fenrir::Generated
     bool RegisterTestPackageTypes(Fenrir::TypeRegistry& registry);
 } // namespace Fenrir::Generated
 
+/** @brief The description of Test::Vec2 that RegisterTestPackageTypes adds. */
+template <>
+struct Fenrir::Describe<Test::Vec2>
+{
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of Test::Box that RegisterTestPackageTypes adds. */
+template <>
+struct Fenrir::Describe<Test::Box>
+{
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
 /** @brief The description of Test::Layers that RegisterTestPackageTypes adds. */
 template <>
 struct Fenrir::Describe<Test::Layers>
@@ -66,13 +80,6 @@ struct Fenrir::Describe<Test::Layers>
 /** @brief The description of Test::Rarity that RegisterTestPackageTypes adds. */
 template <>
 struct Fenrir::Describe<Test::Rarity>
-{
-    static const Fenrir::TypeDescription& Description() noexcept;
-};
-
-/** @brief The description of Test::Vec2 that RegisterTestPackageTypes adds. */
-template <>
-struct Fenrir::Describe<Test::Vec2>
 {
     static const Fenrir::TypeDescription& Description() noexcept;
 };
@@ -108,6 +115,27 @@ struct Fenrir::Describe<Test::WeaponData>
 /** @brief The description of Test::Sword that RegisterTestPackageTypes adds. */
 template <>
 struct Fenrir::Describe<Test::Sword>
+{
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of Test::VolumeKind that RegisterTestPackageTypes adds. */
+template <>
+struct Fenrir::Describe<Test::VolumeKind>
+{
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of Test::Volume that RegisterTestPackageTypes adds. */
+template <>
+struct Fenrir::Describe<Test::Volume>
+{
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of Test::Trigger that RegisterTestPackageTypes adds. */
+template <>
+struct Fenrir::Describe<Test::Trigger>
 {
     static const Fenrir::TypeDescription& Description() noexcept;
 };

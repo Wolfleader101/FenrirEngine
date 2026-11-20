@@ -340,6 +340,47 @@ namespace
         .fields = Fixture_SphereShape_Fields,
     };
 
+    // Fixture::Shape
+    static_assert(sizeof(Fixture::Shape) == 16 && alignof(Fixture::Shape) == 4,
+                  "Fixture::Shape is not the layout Fixture.api.json describes: regenerate the description, then this registration");
+    constexpr Fenrir::Alternative Fixture_Shape_Alternatives[] = {
+        {.tag = 0, .field = {.name = "m_box", .type = {.kind = Fenrir::Kind::Struct, .type = &Fixture_BoxShape}, .offset = 4, .doc = "Held when the tag is Box."}},
+        {.tag = 1, .field = {.name = "m_sphere", .type = {.kind = Fenrir::Kind::Struct, .type = &Fixture_SphereShape}, .offset = 4}},
+    };
+    constexpr Fenrir::TypeDescription Fixture_Shape{
+        .name = "Fixture::Shape",
+        .package = "Fixture",
+        .role = Fenrir::Role::Nested,
+        .size = sizeof(Fixture::Shape),
+        .alignment = alignof(Fixture::Shape),
+        .construct = &Fenrir::ConstructValue<Fixture::Shape>,
+        .destroy = &Fenrir::DestroyValue<Fixture::Shape>,
+        .doc = "A tagged union: one enum tag followed by one anonymous union.",
+        .tag = {.name = "m_type", .type = {.kind = Fenrir::Kind::Enum, .type = &Fixture_ShapeType, .unionTag = true}, .offset = 0},
+        .unionOffset = 4,
+        .alternatives = Fixture_Shape_Alternatives,
+        .defaultAlternative = 0,
+    };
+
+    // Fixture::Collider
+    static_assert(sizeof(Fixture::Collider) == 20 && alignof(Fixture::Collider) == 4,
+                  "Fixture::Collider is not the layout Fixture.api.json describes: regenerate the description, then this registration");
+    constexpr Fenrir::FieldInfo Fixture_Collider_Fields[] = {
+        {.name = "shape", .type = {.kind = Fenrir::Kind::Struct, .type = &Fixture_Shape}, .offset = 0},
+        {.name = "solid", .type = {.kind = Fenrir::Kind::Bool}, .offset = 16},
+    };
+    constexpr Fenrir::TypeDescription Fixture_Collider{
+        .name = "Fixture::Collider",
+        .package = "Fixture",
+        .role = Fenrir::Role::Component,
+        .size = sizeof(Fixture::Collider),
+        .alignment = alignof(Fixture::Collider),
+        .construct = &Fenrir::ConstructValue<Fixture::Collider>,
+        .destroy = &Fenrir::DestroyValue<Fixture::Collider>,
+        .doc = "A component holding a tagged union.",
+        .fields = Fixture_Collider_Fields,
+    };
+
     // Fixture::Columns
     static_assert(sizeof(Fixture::Columns) == 24 && alignof(Fixture::Columns) == 4,
                   "Fixture::Columns is not the layout Fixture.api.json describes: regenerate the description, then this registration");
@@ -534,6 +575,28 @@ namespace
         .destroy = &Fenrir::DestroyValue<Fixture::Size>,
         .doc = "A bound type that is a template's specialisation nothing here instantiates: the tool instantiates it.",
         .fields = Fixture_Size_Fields,
+    };
+
+    // Fixture::Sky
+    static_assert(sizeof(Fixture::Sky) == 16 && alignof(Fixture::Sky) == 4,
+                  "Fixture::Sky is not the layout Fixture.api.json describes: regenerate the description, then this registration");
+    constexpr Fenrir::Alternative Fixture_Sky_Alternatives[] = {
+        {.tag = 0, .field = {.name = "m_box", .type = {.kind = Fenrir::Kind::Struct, .type = &Fixture_BoxShape}, .offset = 4}},
+        {.tag = 1, .field = {.name = "m_sphere", .type = {.kind = Fenrir::Kind::Struct, .type = &Fixture_SphereShape}, .offset = 4}},
+    };
+    constexpr Fenrir::TypeDescription Fixture_Sky{
+        .name = "Fixture::Sky",
+        .package = "Fixture",
+        .role = Fenrir::Role::AppResource,
+        .size = sizeof(Fixture::Sky),
+        .alignment = alignof(Fixture::Sky),
+        .construct = &Fenrir::ConstructValue<Fixture::Sky>,
+        .destroy = &Fenrir::DestroyValue<Fixture::Sky>,
+        .doc = "An app resource that is a tagged union.",
+        .tag = {.name = "m_type", .type = {.kind = Fenrir::Kind::Enum, .type = &Fixture_ShapeType, .unionTag = true}, .offset = 0},
+        .unionOffset = 4,
+        .alternatives = Fixture_Sky_Alternatives,
+        .defaultAlternative = 0,
     };
 
     // Fixture::Socket
@@ -802,6 +865,16 @@ const Fenrir::TypeDescription& Fenrir::Describe<Fixture::SphereShape>::Descripti
     return Fixture_SphereShape;
 }
 
+const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Shape>::Description() noexcept
+{
+    return Fixture_Shape;
+}
+
+const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Collider>::Description() noexcept
+{
+    return Fixture_Collider;
+}
+
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Columns>::Description() noexcept
 {
     return Fixture_Columns;
@@ -845,6 +918,11 @@ const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Paths>::Description() n
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Size>::Description() noexcept
 {
     return Fixture_Size;
+}
+
+const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Sky>::Description() noexcept
+{
+    return Fixture_Sky;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Socket>::Description() noexcept
@@ -907,6 +985,8 @@ bool Fenrir::Generated::RegisterFixtureTypes(Fenrir::TypeRegistry& registry)
     registered = registry.Register(Fixture_Clock) && Fenrir::AttachAppResource<Fixture::Clock>(registry, Fixture_Clock) && registered;
     registered = registry.Register(Fixture_ShapeType) && registered;
     registered = registry.Register(Fixture_SphereShape) && registered;
+    registered = registry.Register(Fixture_Shape) && registered;
+    registered = registry.Register(Fixture_Collider) && Fenrir::AttachComponent<Fixture::Collider>(registry, Fixture_Collider) && registered;
     registered = registry.Register(Fixture_Columns) && registered;
     registered = registry.Register(Fixture_Contacts) && Fenrir::AttachComponent<Fixture::Contacts>(registry, Fixture_Contacts) && registered;
     registered = registry.Register(Fixture_Dial) && Fenrir::AttachComponent<Fixture::Dial>(registry, Fixture_Dial) && registered;
@@ -916,6 +996,7 @@ bool Fenrir::Generated::RegisterFixtureTypes(Fenrir::TypeRegistry& registry)
     registered = registry.Register(Fixture_Pair_double) && registered;
     registered = registry.Register(Fixture_Paths) && registered;
     registered = registry.Register(Fixture_Size) && registered;
+    registered = registry.Register(Fixture_Sky) && Fenrir::AttachAppResource<Fixture::Sky>(registry, Fixture_Sky) && registered;
     registered = registry.Register(Fixture_Socket) && Fenrir::AttachComponent<Fixture::Socket>(registry, Fixture_Socket) && registered;
     registered = registry.Register(Fixture_Stat) && registered;
     registered = registry.Register(Fixture_WeaponData) && registered;

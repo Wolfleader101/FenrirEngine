@@ -3,17 +3,17 @@ using System.Text;
 namespace GenerateTypeRegistry;
 
 /// <summary>
-/// <c>generate-type-registry &lt;Package&gt;.api.toml [--skip-unsupported]</c>: reads the selection's
+/// <c>generate-type-registry &lt;Package&gt;.api.toml</c>: reads the selection's
 /// <c>[registration]</c> table and the package's <c>&lt;Package&gt;.api.json</c> beside it, and writes the header and
 /// source the table names, each only when its content changes. A selection without the table writes nothing.
 /// </summary>
 internal static class Program
 {
-    private const string Usage = "usage: generate-type-registry <Package>.api.toml [--skip-unsupported]";
+    private const string Usage = "usage: generate-type-registry <Package>.api.toml";
 
     public static int Main(string[] args)
     {
-        if (args.Length is 0 or > 2 || args[0] is "-h" or "--help" || (args.Length == 2 && args[1] != SkipUnsupported))
+        if (args.Length != 1 || args[0] is "-h" or "--help")
         {
             Console.Error.WriteLine(Usage);
             return 2;
@@ -34,8 +34,7 @@ internal static class Program
                     $"{registration.DescriptionPath}: no description: run fenrir-describe-api first");
             }
 
-            var generated = Generator.Generate(registration, File.ReadAllText(registration.DescriptionPath),
-                                               skipUnsupported: args.Length == 2);
+            var generated = Generator.Generate(registration, File.ReadAllText(registration.DescriptionPath));
             foreach (var (path, text) in new[] { (registration.HeaderPath, generated.Header),
                                                  (registration.SourcePath, generated.Source) })
             {
@@ -51,12 +50,6 @@ internal static class Program
             return 1;
         }
     }
-
-    /// <summary>
-    /// Leaves out the tagged unions FenrirTypes does not describe yet, with the types that hold or extend them, instead
-    /// of failing on them.
-    /// </summary>
-    public const string SkipUnsupported = "--skip-unsupported";
 
     /// <summary>Writes the text unless the file already holds it, so an unchanged registration keeps its timestamp.</summary>
     private static bool WriteIfChanged(string path, string text)
