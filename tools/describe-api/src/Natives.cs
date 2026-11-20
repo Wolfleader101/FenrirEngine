@@ -470,9 +470,6 @@ internal sealed class NativesDescriber
             {
                 case PointerType pointer:
                     return pointer.PointeeType;
-                case ElaboratedType elaborated:
-                    type = elaborated.NamedType;
-                    break;
                 case TypedefType typedef:
                     type = typedef.Decl.UnderlyingType;
                     break;
@@ -536,9 +533,6 @@ internal sealed class NativesDescriber
         {
             switch (type)
             {
-                case ElaboratedType elaborated:
-                    type = elaborated.NamedType;
-                    break;
                 case TypedefType typedef:
                     var name = Qualified(typedef.Decl.Handle);
                     if (name.Contains("::", StringComparison.Ordinal) && !name.StartsWith("std::", StringComparison.Ordinal))
