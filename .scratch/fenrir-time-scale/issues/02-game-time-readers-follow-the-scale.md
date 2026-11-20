@@ -1,6 +1,6 @@
 # 02: Game-time readers follow the scale
 
-Spec: [Pause and time scale](../spec.md). ADR-0074.
+Spec: [Pause and time scale](../spec.md). ADR-0086.
 
 **What to build:** Everything that is game time follows the scale and pause: physics and character bodies through the fixed tick (their interpolation holding while paused), skeletons' tick and frame posing, animation playback, `Animator` crossfades (which ignore the animator's own speed but follow the scale, freezing while paused), and debug-draw durations in seconds. Most already read `deltaTime` and the accumulator; this ticket proves each with tests and fixes any that read real time.
 

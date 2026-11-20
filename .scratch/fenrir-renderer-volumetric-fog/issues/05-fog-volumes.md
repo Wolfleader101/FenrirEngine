@@ -1,6 +1,6 @@
 # 05: Fog volumes
 
-Spec: [Volumetric fog](../spec.md). ADR-0076.
+Spec: [Volumetric fog](../spec.md). ADR-0088.
 
 **What to build:** A `FogVolume` component, a box or a sphere on its entity's transform with a density added to the scene's, an albedo and an edge falloff, makes fog thicker where it is. Fog volumes are gathered each frame like lights and added into each froxel they touch; they move with their entities.
 

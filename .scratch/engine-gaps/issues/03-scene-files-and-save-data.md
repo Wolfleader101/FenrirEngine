@@ -23,3 +23,4 @@ No. A format that describes this game's own things is the game's to define, and 
 
 - 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): a pointer to the `fenrir-serialisation` map (`claude/wayfinder-serializable-resources-246b15`); no decision ticket here.
 - 2026-11-19, round 1 of charting [Engine gaps for Flightless Frenzy](../map.md): **a pointer** to the `fenrir-serialisation` map, with nothing added there. The one open fact, that the glTF importer drops node `extras`, went to the levels and scenes design through the sessions' shared notes.
+- 2026-11-20: the `fenrir-serialisation` map is now on `main` (#316, `.scratch/fenrir-serialisation/map.md`), with ADR-0074 to ADR-0085 and its specs under `.scratch/fenrir-serialisation-*/`; the scene file is ADR-0078.

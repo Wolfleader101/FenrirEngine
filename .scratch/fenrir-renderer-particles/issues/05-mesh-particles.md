@@ -1,6 +1,6 @@
 # 05: Mesh particles
 
-Spec: [Particles](../spec.md). ADR-0077.
+Spec: [Particles](../spec.md). ADR-0089.
 
 **What to build:** CPU effects can render as meshes: each particle draws the effect's mesh with its material through instanced drawing, opaque or transparent as the material says. ParticleDemo gains a Meshes scene of splinters bursting from a box.
 

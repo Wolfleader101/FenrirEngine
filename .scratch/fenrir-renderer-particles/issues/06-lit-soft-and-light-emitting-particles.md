@@ -1,6 +1,6 @@
 # 06: Lit, soft and light-emitting particles
 
-Spec: [Particles](../spec.md). ADR-0077.
+Spec: [Particles](../spec.md). ADR-0089.
 
 **What to build:** Effects choose unlit or lit: lit particles shade through the shared lighting include (sun, its shadows, clustered lights) with a camera-facing normal for billboards and ribbons. Soft particles fade where they meet geometry, reading scene depth resolved under MSAA (reusing the game passes spec's resolve where it is built). Plain and volumetric fog reach particles through the fog helper where those specs are built. An effect's light-emission module gives a share of its particles a point light, written into the light buffer before clustering under a cap in the renderer config. ParticleDemo gains a Lights scene of embers lighting the ground.
 

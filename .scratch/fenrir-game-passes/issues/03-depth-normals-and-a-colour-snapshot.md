@@ -1,6 +1,6 @@
 # 03: Scene depth, normals and a colour snapshot for a pass
 
-Spec: [Game passes](../spec.md). ADR-0075.
+Spec: [Game passes](../spec.md). ADR-0087.
 
 **What to build:** A game pass asks for inputs and gets them bound: scene depth and scene normals from the depth prepass, resolved to single-sample targets once per point under MSAA when any pass there asks, and a snapshot of scene colour at the pass's point, copied (and resolved under MSAA) only when asked. Nothing is copied or resolved that no pass asks for. A pass asking for an input the frame cannot give logs an error and is skipped.
 

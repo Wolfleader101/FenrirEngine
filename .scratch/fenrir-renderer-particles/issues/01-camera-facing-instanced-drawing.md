@@ -1,6 +1,6 @@
 # 01: Camera-facing billboards in instanced drawing
 
-Spec: [Particles](../spec.md). ADR-0077.
+Spec: [Particles](../spec.md). ADR-0089.
 
 **What to build:** Instanced drawing gains a facing mode, a public primitive any game may use: each copy faces the camera, stretches along a velocity it carries, or faces a fixed axis, instead of keeping its own rotation. Shadows and the depth prepass draw faced copies the way the colour pass does.
 

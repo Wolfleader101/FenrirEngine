@@ -2,7 +2,7 @@
 
 Status: ready-for-agent
 
-Charted by [Engine gaps for Flightless Frenzy](../engine-gaps/map.md): [What are pause and time scale?](../engine-gaps/issues/21-what-pause-and-time-scale-are.md). Settles [No pause and no time scale](../engine-gaps/issues/05-pause-and-time-scale.md). ADR-0074.
+Charted by [Engine gaps for Flightless Frenzy](../engine-gaps/map.md): [What are pause and time scale?](../engine-gaps/issues/21-what-pause-and-time-scale-are.md). Settles [No pause and no time scale](../engine-gaps/issues/05-pause-and-time-scale.md). ADR-0086.
 
 ## Problem Statement
 
@@ -49,7 +49,7 @@ The app gains one global **time scale** and a separate **pause** flag. The scale
 - **C#:** `Time.Scale` and `Time.Paused`, readable and writable, and `Time.UnscaledDeltaTime`, read-only, beside `Time.DeltaTime` (now scaled) and `Time.TickRate`, through FenrirScripting's own bindings and the generated pipeline.
 - **The demo scaffold** gains two shared keys, listed in its help with the scaffold's others: F5 pauses and resumes, F6 cycles the scale through 1, 0.5 and 0.25. They are on no smoke run's keys. If a scene already uses one, the ticket picks the next free function key and says so.
 - **Glossary:** Time scale, Pause and Unscaled time are already defined.
-- **ADR-0074** records the decision; ADR-0034's and ADR-0025's "not yet" notes on a time scale point to it.
+- **ADR-0086** records the decision; ADR-0034's and ADR-0025's "not yet" notes on a time scale point to it.
 
 ## Testing Decisions
 
@@ -77,5 +77,4 @@ The app gains one global **time scale** and a separate **pause** flag. The scale
 ## Further Notes
 
 - The facts behind it, with file and line, are in [What are pause and time scale?](../engine-gaps/issues/21-what-pause-and-time-scale-are.md).
-- ADR-0074 follows `origin/main`'s ADR-0073; if another branch takes that number first, renumber at merge.
 - Build and test only `msvc-x64-debug` locally, through the MSVC script and, in a worktree, the short-path junction (`README.md`, "Building and testing").

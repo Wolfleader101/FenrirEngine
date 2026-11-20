@@ -1,6 +1,6 @@
 # 10: GPU sorting and collision
 
-Spec: [Particles](../spec.md). ADR-0077.
+Spec: [Particles](../spec.md). ADR-0089.
 
 **What to build:** GPU alpha particles are sorted back to front per emitter per view by a bitonic sort in compute, and GPU effects collide with the view's scene depth and with planes, boxes and spheres placed in the scene, per the collision module.
 

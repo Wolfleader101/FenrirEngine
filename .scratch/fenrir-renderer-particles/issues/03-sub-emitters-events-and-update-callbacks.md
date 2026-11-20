@@ -1,6 +1,6 @@
 # 03: Sub-emitters, events and update callbacks
 
-Spec: [Particles](../spec.md). ADR-0077.
+Spec: [Particles](../spec.md). ADR-0089.
 
 **What to build:** A particle's birth, death or collision can fire another effect as a sub-emitter. CPU effects send `ParticleBirth`, `ParticleDeath` and `ParticleCollision` events (emitter, position, velocity) through engine event queues to C++ readers, and may take a C++ update callback that sees the effect's particles after the modules run. ParticleDemo gains a Fireworks scene.
 

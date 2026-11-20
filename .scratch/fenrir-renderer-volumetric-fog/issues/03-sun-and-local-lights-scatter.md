@@ -1,6 +1,6 @@
 # 03: Sun and local lights scatter
 
-Spec: [Volumetric fog](../spec.md). ADR-0076.
+Spec: [Volumetric fog](../spec.md). ADR-0088.
 
 **What to build:** The sun scatters in the volume through its cascaded shadow maps, and the clustered point and spot lights through their shadows, with a Henyey-Greenstein phase. `Fog` gains an anisotropy (the phase's `g`, default 0) and an albedo for scattering. Shafts appear where light gets through gaps and shade stays dark.
 

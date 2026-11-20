@@ -1,6 +1,6 @@
 # 04: Ribbons
 
-Spec: [Particles](../spec.md). ADR-0077.
+Spec: [Particles](../spec.md). ADR-0089.
 
 **What to build:** CPU effects can render as ribbons: an emitter's particles joined in spawn order into a camera-facing strip, with width over life, colour along the strip and a texture along or tiled. ParticleDemo gains a Ribbons scene of trails behind moving emitters.
 

@@ -1,6 +1,6 @@
 # 01: Render layers on renderers
 
-Spec: [Game passes](../spec.md). ADR-0075.
+Spec: [Game passes](../spec.md). ADR-0087.
 
 **What to build:** `MeshRenderer` and `InstancedMeshRenderer` carry `layers`, a 32-bit bitmask whose default is layer 0's bit, carried into the draw list for later features to read. The API description is regenerated and committed. Nothing reads it yet, so a scene renders exactly as before.
 

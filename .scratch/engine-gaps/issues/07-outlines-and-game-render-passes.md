@@ -26,5 +26,5 @@ Checked 2026-11-19: an inverted-hull outline drawn as a second material is not p
 - 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [How do engines let a game add a render pass and draw outlines?](22-how-engines-add-render-passes-and-outlines.md), [How does a game draw outlines and add its own render pass?](23-how-a-game-draws-outlines-and-adds-a-pass.md).
 
 - 2026-11-19, round 3 of [Engine gaps for Flightless Frenzy](../map.md): spec-ready, with an ADR, in [How does a game draw outlines and add its own render pass?](23-how-a-game-draws-outlines-and-adds-a-pass.md).
-- 2026-11-19: the spec is written, [Game passes](../../fenrir-game-passes/spec.md), with ADR-0075, `ready-for-agent` for `/to-tickets`.
+- 2026-11-19: the spec is written, [Game passes](../../fenrir-game-passes/spec.md), with ADR-0087, `ready-for-agent` for `/to-tickets`.
 - 2026-11-19: tickets cut, `.scratch/fenrir-game-passes/issues/01` to `06` (stack 01, 02, 03, 04, 06; 05 beside from 02).

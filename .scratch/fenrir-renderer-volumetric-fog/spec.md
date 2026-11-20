@@ -2,7 +2,7 @@
 
 Status: ready-for-agent
 
-Charted by [Engine gaps for Flightless Frenzy](../engine-gaps/map.md): [How do engines do volumetric fog?](../engine-gaps/issues/34-how-engines-do-volumetric-fog.md) and [What volumetric fog does the renderer offer?](../engine-gaps/issues/35-what-volumetric-fog-the-renderer-offers.md). Settles the volumetric half of [No fog](../engine-gaps/issues/14-fog.md). ADR-0076. Builds on [Plain fog](../fenrir-renderer-fog/spec.md), whose `Fog` resource, fog pass and fog helper it extends.
+Charted by [Engine gaps for Flightless Frenzy](../engine-gaps/map.md): [How do engines do volumetric fog?](../engine-gaps/issues/34-how-engines-do-volumetric-fog.md) and [What volumetric fog does the renderer offer?](../engine-gaps/issues/35-what-volumetric-fog-the-renderer-offers.md). Settles the volumetric half of [No fog](../engine-gaps/issues/14-fog.md). ADR-0088. Builds on [Plain fog](../fenrir-renderer-fog/spec.md), whose `Fog` resource, fog pass and fog helper it extends.
 
 ## Problem Statement
 
@@ -79,5 +79,4 @@ A camera that turns volumetric fog on gets a froxel volume: a camera-aligned 3D 
 
 - Plain fog's spec must be built first: this spec extends its `Fog` resource, fog pass and fog helper.
 - The facts behind the decisions, with costs from other engines, are in [How do engines do volumetric fog?](../engine-gaps/issues/34-how-engines-do-volumetric-fog.md) and its findings on the local `research/volumetric-fog` branch.
-- ADR-0076 follows ADR-0075 on this branch; renumber at merge if another branch takes it.
 - Build and test only `msvc-x64-debug` locally, run the GL tests on your own GPU before a PR that touches the OpenGL backend, and use the short-path junction in a worktree (`README.md`, "Building and testing").

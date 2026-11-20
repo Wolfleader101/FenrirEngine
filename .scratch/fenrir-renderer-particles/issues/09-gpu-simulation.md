@@ -1,6 +1,6 @@
 # 09: GPU simulation
 
-Spec: [Particles](../spec.md). ADR-0077.
+Spec: [Particles](../spec.md). ADR-0089.
 
 **What to build:** An effect can simulate on the GPU. Instance lists can be GPU-written (their copies and count written by a compute pass and drawn indirectly), the user pass in `Cull` ADR-0057 left for later, taken by the renderer's particle feature. Per GPU emitter, compute passes before the cull emit, simulate (spawn, initial values, forces and noise, over-life) and compact into a storage buffer and write a GPU-written instance list of billboards. Its shaders are written in Slang (ADR-0073). ParticleDemo gains a Fountain scene with a CPU or GPU switch.
 

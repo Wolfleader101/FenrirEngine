@@ -2,7 +2,7 @@
 
 Status: ready-for-agent
 
-Charted by [Engine gaps for Flightless Frenzy](../engine-gaps/map.md): [How do engines let a game add a render pass and draw outlines?](../engine-gaps/issues/22-how-engines-add-render-passes-and-outlines.md) and [How does a game draw outlines and add its own render pass?](../engine-gaps/issues/23-how-a-game-draws-outlines-and-adds-a-pass.md). Settles [A game cannot draw outlines or add a render pass](../engine-gaps/issues/07-outlines-and-game-render-passes.md). ADR-0075.
+Charted by [Engine gaps for Flightless Frenzy](../engine-gaps/map.md): [How do engines let a game add a render pass and draw outlines?](../engine-gaps/issues/22-how-engines-add-render-passes-and-outlines.md) and [How does a game draw outlines and add its own render pass?](../engine-gaps/issues/23-how-a-game-draws-outlines-and-adds-a-pass.md). Settles [A game cannot draw outlines or add a render pass](../engine-gaps/issues/07-outlines-and-game-render-passes.md). ADR-0087.
 
 ## Problem Statement
 
@@ -82,5 +82,4 @@ A game adds **game passes**: full-screen fragment passes, declared from C++ or C
 
 - The facts behind the decisions, with file and line, are in [How do engines let a game add a render pass and draw outlines?](../engine-gaps/issues/22-how-engines-add-render-passes-and-outlines.md) (its findings on the local `research/game-render-passes` branch) and [How does a game draw outlines and add its own render pass?](../engine-gaps/issues/23-how-a-game-draws-outlines-and-adds-a-pass.md).
 - The depth prepass uses the built-in fragment stage, so a game material shader's `discard` does not reach scene depth or the layer masks; masked materials use the prepass's own alpha test as today.
-- ADR-0075 follows ADR-0074 on this branch; renumber at merge if another branch takes it.
 - Build and test only `msvc-x64-debug` locally, run the GL tests on your own GPU before a PR that touches the OpenGL backend, and use the short-path junction in a worktree (`README.md`, "Building and testing").

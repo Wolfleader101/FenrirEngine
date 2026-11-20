@@ -1,6 +1,6 @@
 # 01: Time scale and pause in the app
 
-Spec: [Pause and time scale](../spec.md). ADR-0074.
+Spec: [Pause and time scale](../spec.md). ADR-0086.
 
 **What to build:** The app has one global time scale and a pause flag. `Time` gains the scale (default 1, not negative), the paused flag (default false) and the frame's unscaled delta, set by the app each frame before any phase; the effective scale is 0 while paused, else the scale. `deltaTime` becomes the unscaled delta times the effective scale. The fixed-tick accumulator advances by the scaled delta at an unchanged `tickRate`, the cap on ticks per frame still drops the remainder, the frame count always advances and the tick count only when a tick runs. Public app calls set the scale and pause, and resuming restores the scale that was set.
 

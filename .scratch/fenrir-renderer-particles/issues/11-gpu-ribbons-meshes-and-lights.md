@@ -1,6 +1,6 @@
 # 11: GPU ribbons, meshes and lights
 
-Spec: [Particles](../spec.md). ADR-0077.
+Spec: [Particles](../spec.md). ADR-0089.
 
 **What to build:** GPU effects render as ribbons (strips built in compute), as meshes (a GPU-written instance list of the effect's mesh) and emit lights (appended to the light buffer from compute before clustering, under the same cap).
 

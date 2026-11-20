@@ -1,6 +1,6 @@
 # 07: Sun shafts: a golden image and the Forest clearing
 
-Spec: [Volumetric fog](../spec.md). ADR-0076.
+Spec: [Volumetric fog](../spec.md). ADR-0088.
 
 **What to build:** A GL golden-image test shows sun shafts through gaps in a row of pillars in fog, compared after a fixed number of frames with the fixed jitter, so the history settles the same every run. LightingDemo's Forest clearing turns volumetric fog on, with shafts between the trees, and keys and demo panel rows for on or off, quality, anisotropy and history weight, listed in the scene's help.
 

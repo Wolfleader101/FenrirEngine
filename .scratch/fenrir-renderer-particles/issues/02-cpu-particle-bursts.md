@@ -1,6 +1,6 @@
 # 02: CPU particle bursts
 
-Spec: [Particles](../spec.md). ADR-0077.
+Spec: [Particles](../spec.md). ADR-0089.
 
 **What to build:** A game defines a `ParticleEffect` asset in C++ code (CPU simulation, a capacity, world or emitter space, and the spawn, initial values, forces and noise, and over-life modules, curves and gradients as small fixed tables), plays it from a `ParticleEmitter` component (playing or not, once or looping, a seed; a stopped emitter lets its particles finish) or once at a position with `Particles::Burst`. The CPU simulation runs once a frame on game time before `Render` and writes a camera-facing instance list per emitter; billboards draw with a texture or flipbook, additive or alpha, alpha particles sorted back to front within their emitter and emitters sorted among transparents. Emitters have bounds and are culled per view. A new ParticleDemo app on the demo scaffold opens with a Bursts scene, keys for the burst's main parameters.
 

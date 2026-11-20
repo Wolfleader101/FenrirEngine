@@ -1,6 +1,6 @@
 # 08: Particles from C#
 
-Spec: [Particles](../spec.md). ADR-0077.
+Spec: [Particles](../spec.md). ADR-0089.
 
 **What to build:** A C# script defines particle effects with every CPU-side module, plays bursts with `Particles.Burst`, adds and controls `ParticleEmitter` components, sets an update callback on a CPU effect, and reads the three particle events, through the renderer's scripting extension and the generated bindings.
 

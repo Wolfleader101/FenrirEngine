@@ -2,7 +2,7 @@
 
 Status: ready-for-agent
 
-Charted by [Engine gaps for Flightless Frenzy](../engine-gaps/map.md): [How do engines split particles between the engine and the game?](../engine-gaps/issues/24-how-engines-split-particles.md) and [What is the engine's particle system?](../engine-gaps/issues/25-what-the-particle-system-is.md). Settles the particle half of [No particles or billboards](../engine-gaps/issues/06-particles-and-billboards.md); decals are [What is a decal?](../engine-gaps/issues/36-what-is-a-decal.md), a spec of their own. ADR-0077.
+Charted by [Engine gaps for Flightless Frenzy](../engine-gaps/map.md): [How do engines split particles between the engine and the game?](../engine-gaps/issues/24-how-engines-split-particles.md) and [What is the engine's particle system?](../engine-gaps/issues/25-what-the-particle-system-is.md). Settles the particle half of [No particles or billboards](../engine-gaps/issues/06-particles-and-billboards.md); decals are [What is a decal?](../engine-gaps/issues/36-what-is-a-decal.md), a spec of their own. ADR-0089.
 
 ## Problem Statement
 
@@ -66,7 +66,7 @@ A **particle effect** is a stack of engine modules with parameters (spawn, initi
   - **light emission:** a share of particles carrying a point light with a colour, radius and intensity.
   Curves and gradients are small fixed-size tables, so CPU and GPU evaluate them alike.
 - **Playing:** a `ParticleEmitter` component (an effect, playing or not, once or looping, a seed, a simulation-space choice inherited from the effect) on an entity; `Particles::Burst(effect, position, rotation)` from C++ and `Particles.Burst` from C#, which plays an effect once from a pooled transient emitter. A stopped emitter lets its living particles finish.
-- **Time:** CPU simulation runs once a frame on game time (ADR-0074), in the frame phases before `Render`, so events reach readers that frame; GPU simulation runs in the frame's compute before the cull on the same game time. While paused neither advances.
+- **Time:** CPU simulation runs once a frame on game time (ADR-0086), in the frame phases before `Render`, so events reach readers that frame; GPU simulation runs in the frame's compute before the cull on the same game time. While paused neither advances.
 - **CPU simulation** keeps each emitter's particles in plain arrays, applies the modules in order, and writes what the renderer draws: an instance list for billboards and meshes, a strip for ribbons, and the lights it emits. Events (`ParticleBirth`, `ParticleDeath`, `ParticleCollision`, each with emitter, position and velocity) go through engine event queues to C++ and C#. A CPU effect may take an update callback from C++ or C# that sees its particles' span after the modules run.
 - **CPU collision with physics** lives in a glue package between FenrirRenderer and FenrirPhysics: ray casts against the active scene's physics world per moving particle, applying the collision module.
 - **GPU simulation** is the renderer's particle feature: per GPU emitter, compute passes before the cull emit, simulate and compact into a storage buffer of particles, sort alpha particles per emitter per view (a bitonic sort), collide with the view's scene depth and the scene's collision shapes, and write a **GPU-written instance list** (copies and count) that the draw reads indirectly. GPU effects send no events and offer no readback.
@@ -103,5 +103,4 @@ A **particle effect** is a stack of engine modules with parameters (spawn, initi
 - The facts behind the decisions are in [How do engines split particles between the engine and the game?](../engine-gaps/issues/24-how-engines-split-particles.md) (findings on the local `research/engine-particles` branch) and [What is the engine's particle system?](../engine-gaps/issues/25-what-the-particle-system-is.md).
 - It uses the time scale spec's game time, and, where they are built first, the game passes spec's depth resolve, the plain and volumetric fog helper, and the per-entity spec's per-draw colour. The device's storage images from the volumetric fog spec are not needed here (particles use storage buffers).
 - The spec's tickets should put CPU billboards and bursts first, as decided: that is what Flightless Frenzy needs. Then GPU simulation, then ribbons, mesh particles, lit and light-emitting particles, and collision.
-- ADR-0077 follows ADR-0076 on this branch; renumber at merge if another branch takes it.
 - Build and test only `msvc-x64-debug` locally, run the GL tests on your own GPU before a PR that touches the OpenGL backend, and use the short-path junction in a worktree (`README.md`, "Building and testing").

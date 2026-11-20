@@ -1,6 +1,6 @@
 # 06: Volumetric fog from C#
 
-Spec: [Volumetric fog](../spec.md). ADR-0076.
+Spec: [Volumetric fog](../spec.md). ADR-0088.
 
 **What to build:** A C# script turns a camera's volumetric fog on and sets its quality, range and history weight, sets `Fog`'s anisotropy and albedo, and creates and edits `FogVolume` components, through the renderer's scripting extension and the generated bindings.
 

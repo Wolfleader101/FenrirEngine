@@ -8,11 +8,11 @@ The renderer had no particles: the nearest thing was an instance list a game rew
 
 ## The decision
 
-- **In FenrirRenderer,** as lighting is. GPU simulation, per-particle sorting, soft particles, lit particles and particles that emit light all need the renderer's internals (compute in the frame, scene depth, the light clusters), and the renderer admits no pass from another package (ADR-0019, ADR-0075). CPU collision with physics colliders comes through a small glue package between FenrirRenderer and FenrirPhysics, as ragdolls glue animation to physics.
+- **In FenrirRenderer,** as lighting is. GPU simulation, per-particle sorting, soft particles, lit particles and particles that emit light all need the renderer's internals (compute in the frame, scene depth, the light clusters), and the renderer admits no pass from another package (ADR-0019, ADR-0087). CPU collision with physics colliders comes through a small glue package between FenrirRenderer and FenrirPhysics, as ragdolls glue animation to physics.
 - **CPU or GPU, per effect.** CPU suits a few particles that collide with physics, send events or are read back by the game; GPU suits many. Both run the same modules with the same meaning, and a test holds them to agreeing.
 - **A module stack, not a graph.** Spawn, initial values, forces and noise, change over life, collision, sub-emitters, rendering, lighting and light emission are fixed engine modules with parameters (Shuriken's model). No game-written GPU module in the first version; a CPU effect may take an update callback from C++ or C#.
 - **GPU simulation in compute before the cull,** writing its particles into **GPU-written instance lists** whose copies and count the renderer draws indirectly. This is the user pass in `Cull` that ADR-0057 left for later, taken by the renderer's own particle feature.
-- **Game time:** particles follow the time scale and pause (ADR-0074).
+- **Game time:** particles follow the time scale and pause (ADR-0086).
 - **Decals are not particles;** they are their own block, which a particle may spawn.
 
 ## Considered options

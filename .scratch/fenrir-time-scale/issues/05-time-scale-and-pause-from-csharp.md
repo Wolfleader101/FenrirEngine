@@ -1,6 +1,6 @@
 # 05: Time scale and pause from C#
 
-Spec: [Pause and time scale](../spec.md). ADR-0074.
+Spec: [Pause and time scale](../spec.md). ADR-0086.
 
 **What to build:** A C# script reads and writes `Time.Scale` and `Time.Paused` and reads `Time.UnscaledDeltaTime`, beside `Time.DeltaTime` (now scaled) and `Time.TickRate`, through FenrirScripting's own bindings, the API description and the generated pipeline.
 

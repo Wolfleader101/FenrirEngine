@@ -1,6 +1,6 @@
 # 04: Shader time and the renderer's temporal effects
 
-Spec: [Pause and time scale](../spec.md). ADR-0074.
+Spec: [Pause and time scale](../spec.md). ADR-0086.
 
 **What to build:** Material shaders' running time follows game time, so animated materials freeze while paused and slow in slow motion, and an unscaled time joins it in the frame's shader inputs through the shared shader includes, for anything that must keep moving. The renderer's temporal effects (scene history, reflections' history) run on real frames, so pausing neither smears nor freezes them, and post-processing behind a menu keeps working.
 

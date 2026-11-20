@@ -1,6 +1,6 @@
 # 07: CPU particles collide with physics
 
-Spec: [Particles](../spec.md). ADR-0077.
+Spec: [Particles](../spec.md). ADR-0089.
 
 **What to build:** A glue package between FenrirRenderer and FenrirPhysics (named in this ticket) gives CPU effects physics collision: ray casts against the active scene's physics world per moving particle, bouncing, sliding, losing life or dying as the collision module says, and sending `ParticleCollision` events and collision sub-emitters. ParticleDemo installs physics and gains a Collision scene of debris landing on a floor and steps.
 

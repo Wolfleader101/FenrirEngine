@@ -1,6 +1,6 @@
 # 05: Game passes and layers from C#
 
-Spec: [Game passes](../spec.md). ADR-0075.
+Spec: [Game passes](../spec.md). ADR-0087.
 
 **What to build:** A C# script adds a game pass with `Renderer.AddPass(name, shader, point, inputs)`, enables, disables and removes it and sets its parameters by name through the handle, and reads and writes `layers` on `MeshRenderer` and `InstancedMeshRenderer`, through the renderer's scripting extension and the generated bindings.
 

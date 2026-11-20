@@ -13,7 +13,7 @@ A scene resource or app resource is one-per-type package state (`GLOSSARY.md`). 
 - Where its memory lives (managed, or native pages like C# components) and whether it must be blittable.
 - Its lifetime: created on admission, on first use, or explicitly; what happens on script reload when its shape changes; whether a scene resource dies with its scene (a restart resets the run's state for free).
 - `Res<T>` system parameters over `Resources.Get`, which the renderer map names beside it.
-- How it meets the `fenrir-serialisation` map: ADR-0064 writes described scene-resource types into scene files, and that map's ticket 16 decides how C# types are described. Say what this design leaves to it.
+- How it meets the `fenrir-serialisation` map: ADR-0078 writes described scene-resource types into scene files, and that map's ticket 16 decides how C# types are described. Say what this design leaves to it.
 
 Outcome: a spec-ready design, or a pointer to the `fenrir-serialisation` map's ticket 16 with this question added there.
 
@@ -30,4 +30,4 @@ Grilled 2026-11-19 in round 2 of [Engine gaps for Flightless Frenzy](../map.md);
 - **On reload,** a resource whose shape changed resets to its defaults, with a warning.
 - **Reading and writing** go through the existing `Resources.Get<T>` and its family.
 - **Deferred:** `Res<T>` system parameters.
-- **Left to the `fenrir-serialisation` map** (its ticket 16): how a C# scene resource is described and written into scene files (ADR-0064).
+- **Left to the `fenrir-serialisation` map** (its ticket 16): how a C# scene resource is described and written into scene files (ADR-0078).
