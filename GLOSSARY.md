@@ -275,6 +275,18 @@ A file the running app loaded changing on disk and the app taking the change bet
 State a package keeps for the whole app rather than one scene, one value per type, ended with the App (the input devices and the asset store are ones).
 *Avoid:* singleton, global, app-wide state (informal).
 
+**Time scale**
+How fast game time runs against real time: one value for the whole app, slowing or speeding everything that runs on game time together.
+*Avoid:* game speed, slow motion (an effect a game makes with it), per-scene time scale.
+
+**Pause**
+The app's game time stopped, apart from the time scale, so resuming restores the scale that was set: no fixed ticks run and frame time reads zero, while unscaled time runs on.
+*Avoid:* freeze, a time scale of 0 (pause is its own flag).
+
+**Unscaled time**
+Real frame time, ignoring the time scale and pause: what the UI, the renderer's temporal effects and any system that must keep running read.
+*Avoid:* real time (alone), wall-clock time.
+
 **FenrirTypes**
 The package that holds the engine's type registry and the kinds a described type's fields may have. It knows no file format and no language (ADR-0074).
 *Avoid:* reflection package, FenrirReflection, FenrirSerialisation (the tree and format are that package's).
@@ -548,9 +560,57 @@ One camera's drawing of the scene in a frame: its chain of render passes, from i
 What a window offers a graphics backend to draw into and present: the OpenGL context today, later a Vulkan surface, an `HWND` or a Metal layer. FenrirWindow creates it on the renderer's request; the backend owns what is built on it, such as a swapchain (ADR-0022).
 *Avoid:* swapchain (the backend's, built on a surface), context (alone), canvas.
 
+**Game pass**
+A full-screen pass a game adds to the frame at one of the renderer's named points before the tonemap, reading the frame's colour, depth, normals and layer masks it asks for; the renderer runs it, the game writes it.
+*Avoid:* render feature (Unity's, and the renderer's internal word), custom pass, post-process (the renderer's own effects after transparents).
+
+**Render layer**
+A numbered group of renderers that a game gives a meaning to (outlined, receives decals), so a game pass or a decal can choose the entities it affects.
+*Avoid:* layer (alone, beside a UI root's layering), tag, culling layer (a camera's, not yet built).
+
+**Layer mask**
+The entities on a render layer drawn by the renderer into a target of a game pass's own, for the pass to read: how a pass chooses which objects it affects.
+*Avoid:* stencil (there is none), selection mask, custom depth (Unreal's).
+
+**Particle effect**
+What a burst or an emitter plays: the game's description of how its particles are born, move, change and are drawn, run by the renderer on the CPU or the GPU.
+*Avoid:* particle system (the whole feature), VFX, effect (alone, beside a game pass or a lens effect).
+
+**Ribbon**
+A particle effect's render mode joining one emitter's particles, in the order they spawned, into a camera-facing strip: a trail.
+*Avoid:* trail renderer (Unity's), beam.
+
+**Particle emitter**
+The component that plays a particle effect from its entity, continuously or once, following the entity as it moves.
+*Avoid:* spawner, emitter (alone, beside a light).
+
+**Fog**
+A scene's distance and height haze toward the sky, from its `Fog` scene resource: applied to opaque surfaces after the background and to transparents in their own shading, never to the sky.
+*Avoid:* mist, haze (informal), atmosphere (the sky's scattering).
+
+**Froxel volume**
+A camera's 3D grid of cells along its view, finer near the camera, holding its fog's density and the light scattered in it, built each frame for volumetric fog and read with one lookup per pixel.
+*Avoid:* froxel grid (alone, beside the light clusters), fog texture, volume (alone).
+
+**Fog volume**
+An entity's box or sphere of extra fog density, with its own albedo and falloff, that volumetric fog adds to the scene's own fog.
+*Avoid:* density volume (HDRP's), local fog (alone).
+
+**Decal**
+A material projected into a box onto the surfaces inside it, on the render layers it names, during their shading.
+*Avoid:* projector (Unity's old word), sticker.
+
 **Main window**
 The window FenrirWindow creates first and the foundation renderer draws to; closing it stops the app by default.
 *Avoid:* primary window, root window.
+
+**Window mode**
+Whether a window is windowed or borderless fullscreen, set when it is made and changeable while it runs.
+*Avoid:* display mode (a display's resolution and refresh rate), fullscreen (alone).
+
+**Borderless fullscreen**
+A window mode in which the window covers its whole display at the display's own desktop mode, with no border, as opposed to windowed; no display mode is changed.
+*Avoid:* fullscreen windowed, exclusive fullscreen (which changes the display's mode).
 
 **MeshRenderer**
 The component that makes an entity drawn: one mesh, one material and whether it is visible, one draw. A mesh with several materials is several entities (ADR-0023).
