@@ -820,6 +820,16 @@ namespace Fenrir::Backend
                 return handle;
             }
 
+            // A batch of like jobs, each created (and, with no dependencies, queued) as CreateJob does one.
+            void CreateJobs(const char* name, JPH::ColorArg color, const JobFunction& function, JPH::JobHandle* jobs,
+                            JPH::uint32 count, JPH::uint32 dependencies) override
+            {
+                for (JPH::uint32 i = 0; i < count; ++i)
+                {
+                    jobs[i] = CreateJob(name, color, function, dependencies);
+                }
+            }
+
           protected:
             void QueueJob(Job* job) override
             {
