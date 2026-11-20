@@ -500,6 +500,10 @@ The entities on a render layer drawn by the renderer into a target of a game pas
 What a burst or an emitter plays: a stack of the engine's particle modules (spawn, motion, forces, collision, change over life, sub-emitters, render mode) and whether it simulates on the CPU or the GPU. The game defines it; the renderer runs it.
 *Avoid:* particle system (the whole feature), VFX, effect (alone, beside a game pass or a lens effect).
 
+**Ribbon**
+A particle effect's render mode joining one emitter's particles, in the order they spawned, into a camera-facing strip: a trail.
+*Avoid:* trail renderer (Unity's), beam.
+
 **Particle emitter**
 The component that plays a particle effect from its entity, continuously or once, following the entity as it moves.
 *Avoid:* spawner, emitter (alone, beside a light).
