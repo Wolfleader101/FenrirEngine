@@ -1,6 +1,6 @@
 # C# cannot define resources
 
-Status: needs-triage
+Status: ready-for-agent
 Blocked by: none
 
 ## What is missing
@@ -20,3 +20,8 @@ Only the "left for later" line in ADR-0029.
 No. The game keeps this state as components on one "run" entity until C# can define resources, then moves it. The user wants the engine to gain this.
 
 ## Comments
+
+- 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [How does C# define its own resources?](20-how-csharp-defines-resources.md).
+- 2026-11-19, round 2 of [Engine gaps for Flightless Frenzy](../map.md): spec-ready in [How does C# define its own resources?](20-how-csharp-defines-resources.md).
+- 2026-11-19: the spec is written, [C# reach: parenting, scenes, the app, C# resources and mesh positions](../../fenrir-scripting-reach/spec.md), `ready-for-agent` for `/to-tickets`.
+- 2026-11-19: tickets cut, the tickets of [C# reach: parenting, scenes, the app, C# resources and mesh positions](../../fenrir-scripting-reach/spec.md), `01` to `06` (stack 02, 03, 05, 06; 01 and 04 beside).

@@ -1,6 +1,6 @@
 # No pause and no time scale
 
-Status: needs-triage
+Status: ready-for-agent
 Blocked by: none
 
 ## What is missing
@@ -20,3 +20,8 @@ No.
 It blocks the pause menu done properly. The game could stub it by having every one of its systems check a paused flag, but physics and animation would keep running, so a stub pauses only what the game wrote.
 
 ## Comments
+
+- 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [What are pause and time scale?](21-what-pause-and-time-scale-are.md).
+- 2026-11-19, round 2 of [Engine gaps for Flightless Frenzy](../map.md): spec-ready, with an ADR, in [What are pause and time scale?](21-what-pause-and-time-scale-are.md).
+- 2026-11-19: the spec is written, [Pause and time scale](../../fenrir-time-scale/spec.md), with ADR-0086, `ready-for-agent` for `/to-tickets`.
+- 2026-11-19: tickets cut, the tickets of [Pause and time scale](../../fenrir-time-scale/spec.md), `01` to `06` (01 first, then 02 to 05 side by side, 06 last).

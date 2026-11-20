@@ -1,6 +1,6 @@
 # One entity cannot have its own colour without its own material
 
-Status: needs-triage
+Status: ready-for-agent
 Blocked by: none
 
 ## What is missing
@@ -20,3 +20,9 @@ Only as a line: per-entity material overrides are planned on the renderer map (`
 Yes: it must be resolved before the game is complete (the user, 2026-11-19). It does not block the first playable slice; cloned materials work until then.
 
 ## Comments
+
+- 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [How does one entity get its own material parameters?](27-how-one-entity-gets-its-own-material-parameters.md).
+
+- 2026-11-19, round 3 of [Engine gaps for Flightless Frenzy](../map.md): spec-ready in [How does one entity get its own material parameters?](27-how-one-entity-gets-its-own-material-parameters.md).
+- 2026-11-20: the spec is written, [Per-entity material values](../../fenrir-renderer-entity-values/spec.md), `ready-for-agent` for `/to-tickets`.
+- 2026-11-20: tickets cut, the tickets of [Per-entity material values](../../fenrir-renderer-entity-values/spec.md), `01` to `03` (01 first, then 02 and 03 side by side).

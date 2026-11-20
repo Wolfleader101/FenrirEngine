@@ -1,6 +1,6 @@
 # A game cannot build its scripts or copy its assets without demo code
 
-Status: needs-triage
+Status: ready-for-agent
 Blocked by: none
 
 ## What is missing
@@ -26,3 +26,8 @@ No. ADR-0071 leaves lifting scaffold pieces into the engine as "a later decision
 Yes, its first ticket: the game cannot configure against the engine until item 3 holds, and cannot build scripts (if it has C#) or find its assets without items 1 and 2. It was agreed these are engine work done ahead of the game's first ticket, not copies written inside the game.
 
 ## Comments
+
+- 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [What breaks when the engine is built as a subdirectory?](16-build-the-engine-as-a-subdirectory.md), [What CMake functions does the engine give a game?](17-what-cmake-functions-a-game-gets.md).
+- 2026-11-19, round 2 of [Engine gaps for Flightless Frenzy](../map.md): spec-ready in [What CMake functions does the engine give a game?](17-what-cmake-functions-a-game-gets.md), from what [What breaks when the engine is built as a subdirectory?](16-build-the-engine-as-a-subdirectory.md) found.
+- 2026-11-19: the spec is written, [Building a game against the engine](../../fenrir-game-build/spec.md), `ready-for-agent` for `/to-tickets`.
+- 2026-11-19: tickets cut, the tickets of [Building a game against the engine](../../fenrir-game-build/spec.md), `01` to `05` (stack 01, 02, 03, 05; 04 beside).

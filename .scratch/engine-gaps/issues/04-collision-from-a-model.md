@@ -1,6 +1,6 @@
 # A level model does not give the level its collision
 
-Status: needs-triage
+Status: needs-info
 Blocked by: none
 
 ## What is missing
@@ -20,3 +20,9 @@ No, and it was ruled out once: a collision asset pipeline is out of scope on the
 Yes, if the level is an authored model, and the game is C#. Checked 2026-11-19: C# can call `PhysicsWorld.CreateCollisionMesh` with vertices it is given, but no asset binding returns a loaded mesh's positions (only `GetMeshLodIndices`), so a C# game cannot make a loaded model solid. The game's rule is that such a reach gap is fixed in the engine, not in its C++ host. How levels are authored is not yet decided ([How are levels authored and loaded?](../../flightless-frenzy/issues/10-how-levels-are-authored-and-loaded.md) waits on the engine's levels and scenes design), and that design may answer this.
 
 ## Comments
+
+- 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [Does a loaded model give C# its collision?](28-does-a-loaded-model-give-csharp-its-collision.md).
+- 2026-11-19, round 1 of charting [Engine gaps for Flightless Frenzy](../map.md): the C# reach half is spec-ready in [Does C# get a loaded mesh's positions?](33-does-csharp-get-a-loaded-meshs-positions.md); the model-to-collider helper waits in [Does a loaded model give C# its collision?](28-does-a-loaded-model-give-csharp-its-collision.md).
+- 2026-11-19: the spec is written, [C# reach: parenting, scenes, the app, C# resources and mesh positions](../../fenrir-scripting-reach/spec.md) (the mesh positions half), `ready-for-agent` for `/to-tickets`.
+- 2026-11-19: tickets cut, the tickets of [C# reach: parenting, scenes, the app, C# resources and mesh positions](../../fenrir-scripting-reach/spec.md), `01` to `06` (stack 02, 03, 05, 06; 01 and 04 beside).
+- 2026-11-20: the model-to-collider helper is **deferred** in [Does a loaded model give C# its collision?](28-does-a-loaded-model-give-csharp-its-collision.md) until the levels and scenes design says how a level's collision is authored; the reach half is in the C# reach spec.
