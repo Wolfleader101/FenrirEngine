@@ -12,9 +12,9 @@
 #include "FenrirAssets/SkinningSource.hpp"
 #include "FenrirAssetsScripting/AssetMappings.hpp"
 #include "FenrirScripting/BoundMappings.hpp"
-#include "../../../../../FenrirScripting/include/FenrirScripting/Generated/FenrirScriptingMappings.hpp"
-#include "../../../../../FenrirScripting/include/FenrirScripting/Generated/FenrirMathMappings.hpp"
-#include "../../../../../FenrirAssets/Scripting/include/FenrirAssetsScripting/Generated/FenrirAssetsMappings.hpp"
+#include "FenrirScripting/Generated/FenrirScriptingMappings.hpp"
+#include "FenrirScripting/Generated/FenrirMathMappings.hpp"
+#include "FenrirAssetsScripting/Generated/FenrirAssetsMappings.hpp"
 
 #include <cstdint>
 #include <string_view>

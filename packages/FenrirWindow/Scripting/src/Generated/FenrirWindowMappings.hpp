@@ -8,8 +8,8 @@
 #include "Iris/Iris.hpp"
 #include "FenrirWindow/WindowEvents.hpp"
 #include "FenrirWindow/WindowTypes.hpp"
-#include "../../../../FenrirInput/Scripting/include/FenrirInputScripting/Generated/FenrirInputMappings.hpp"
-#include "../../../../FenrirScripting/include/FenrirScripting/Generated/FenrirMathMappings.hpp"
+#include "FenrirInputScripting/Generated/FenrirInputMappings.hpp"
+#include "FenrirScripting/Generated/FenrirMathMappings.hpp"
 
 #include <cstdint>
 #include <string_view>

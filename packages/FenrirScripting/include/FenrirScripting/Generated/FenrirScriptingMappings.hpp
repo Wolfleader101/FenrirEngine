@@ -11,7 +11,7 @@
 #include "FenrirECS/Entity.hpp"
 #include "FenrirScripting/Errors.hpp"
 #include "FenrirScripting/BoundMappings.hpp"
-#include "FenrirMathMappings.hpp"
+#include "FenrirScripting/Generated/FenrirMathMappings.hpp"
 
 #include <cstdint>
 #include <string_view>

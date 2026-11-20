@@ -14,8 +14,8 @@
 #include "FenrirPhysics/Queries.hpp"
 #include "FenrirPhysics/Vehicles.hpp"
 #include "FenrirScripting/BoundMappings.hpp"
-#include "../../../../FenrirScripting/include/FenrirScripting/Generated/FenrirMathMappings.hpp"
-#include "../../../../FenrirScripting/include/FenrirScripting/Generated/FenrirScriptingMappings.hpp"
+#include "FenrirScripting/Generated/FenrirMathMappings.hpp"
+#include "FenrirScripting/Generated/FenrirScriptingMappings.hpp"
 
 #include <cstdint>
 #include <string_view>

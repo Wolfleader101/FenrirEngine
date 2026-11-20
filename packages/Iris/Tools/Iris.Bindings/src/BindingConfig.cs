@@ -43,8 +43,11 @@ internal sealed record CSharpConfig(
     IReadOnlySet<string> FixedBuffers,
     IReadOnlySet<string> InternalStructs);
 
-/// <summary>Where the Iris mappings go, and the headers they include.</summary>
-internal sealed record CppConfig(string Mappings, IReadOnlyList<string> Includes);
+/// <summary>
+/// Where the Iris mappings go, the headers they include, and the mappings header's include-directory spelling
+/// (<c>include</c>, optional) that a binding using this one includes it by, rather than by a path relative to its own.
+/// </summary>
+internal sealed record CppConfig(string Mappings, IReadOnlyList<string> Includes, string? Include);
 
 /// <summary>
 /// The registration lists: the source, its function, the extension's type, the maker (<c>maker</c>, optional: the
@@ -181,7 +184,7 @@ internal sealed record BindingConfig(
                     "readonly-events", "readonly-structs", "immutable-structs", "private-fields", "fixed-buffers",
                     "internal-structs");
         var cpp = reader.Table(table, "cpp");
-        reader.Keys(cpp, "cpp", "mappings", "includes");
+        reader.Keys(cpp, "cpp", "mappings", "includes", "include");
 
         RegistrationConfig? registration = null;
         if (table.ContainsKey("registration"))
@@ -301,7 +304,9 @@ internal sealed record BindingConfig(
                              reader.Strings(csharp, "private-fields").ToHashSet(StringComparer.Ordinal),
                              reader.Strings(csharp, "fixed-buffers").ToHashSet(StringComparer.Ordinal),
                              reader.Strings(csharp, "internal-structs").ToHashSet(StringComparer.Ordinal)),
-            new CppConfig(reader.PathOf(cpp, "mappings"), reader.Strings(cpp, "includes")), registration, tests,
+            new CppConfig(reader.PathOf(cpp, "mappings"), reader.Strings(cpp, "includes"),
+                          reader.OptionalString(cpp, "include")),
+            registration, tests,
             nativesConfig, stages, boundTypes, reader.StringTable(table, "names"), reader.StringTable(table, "nouns"),
             reader.Strings(table, "exclude").ToHashSet(StringComparer.Ordinal));
     }
