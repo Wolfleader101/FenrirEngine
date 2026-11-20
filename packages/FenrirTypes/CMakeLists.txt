@@ -9,6 +9,7 @@ add_library(FenrirTypes STATIC
     include/FenrirTypes/FieldInfo.hpp
     include/FenrirTypes/FieldVisitor.hpp
     include/FenrirTypes/Kind.hpp
+    include/FenrirTypes/RoleHooks.hpp
     include/FenrirTypes/TypeDescription.hpp
     include/FenrirTypes/TypeRegistry.hpp
     include/FenrirTypes/ValueRef.hpp

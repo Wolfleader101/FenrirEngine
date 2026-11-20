@@ -8,12 +8,43 @@
 #include "Fixture.hpp"
 
 #include "FenrirTypes/Describe.hpp"
+#include "FenrirTypes/RoleHooks.hpp"
 #include "FenrirTypes/TypeDescription.hpp"
 
 namespace Fenrir
 {
     class TypeRegistry;
 } // namespace Fenrir
+
+// The no-op AttachAppResource, until the package that hangs the role's attachments defines it.
+#ifndef FENRIR_TYPES_NO_OP_ATTACH_APP_RESOURCE
+#define FENRIR_TYPES_NO_OP_ATTACH_APP_RESOURCE
+template <typename T>
+inline bool Fenrir::AttachAppResource(Fenrir::TypeRegistry&, const Fenrir::TypeDescription&)
+{
+    return true;
+}
+#endif
+
+// The no-op AttachComponent, until the package that hangs the role's attachments defines it.
+#ifndef FENRIR_TYPES_NO_OP_ATTACH_COMPONENT
+#define FENRIR_TYPES_NO_OP_ATTACH_COMPONENT
+template <typename T>
+inline bool Fenrir::AttachComponent(Fenrir::TypeRegistry&, const Fenrir::TypeDescription&)
+{
+    return true;
+}
+#endif
+
+// The no-op AttachSceneResource, until the package that hangs the role's attachments defines it.
+#ifndef FENRIR_TYPES_NO_OP_ATTACH_SCENE_RESOURCE
+#define FENRIR_TYPES_NO_OP_ATTACH_SCENE_RESOURCE
+template <typename T>
+inline bool Fenrir::AttachSceneResource(Fenrir::TypeRegistry&, const Fenrir::TypeDescription&)
+{
+    return true;
+}
+#endif
 
 namespace Fenrir::Generated
 {
@@ -179,6 +210,13 @@ struct Fenrir::Describe<Fixture::Pair<double>>
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
+/** @brief The description of Fixture::Paths that RegisterFixtureTypes adds. */
+template <>
+struct Fenrir::Describe<Fixture::Paths>
+{
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
 /** @brief The description of Fixture::Size that RegisterFixtureTypes adds. */
 template <>
 struct Fenrir::Describe<Fixture::Size>
@@ -189,6 +227,27 @@ struct Fenrir::Describe<Fixture::Size>
 /** @brief The description of Fixture::Socket that RegisterFixtureTypes adds. */
 template <>
 struct Fenrir::Describe<Fixture::Socket>
+{
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of Fixture::Stat that RegisterFixtureTypes adds. */
+template <>
+struct Fenrir::Describe<Fixture::Stat>
+{
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of Fixture::WeaponData that RegisterFixtureTypes adds. */
+template <>
+struct Fenrir::Describe<Fixture::WeaponData>
+{
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of Fixture::Sword that RegisterFixtureTypes adds. */
+template <>
+struct Fenrir::Describe<Fixture::Sword>
 {
     static const Fenrir::TypeDescription& Description() noexcept;
 };

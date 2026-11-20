@@ -27,15 +27,17 @@ using Fenrir::TypeRegistry;
 
 namespace
 {
-    // Every fixture type the registration describes: all but the data assets, the settings type, the
-    // by-member Stat, the tagged unions Shape and Sky, and Collider, which holds a Shape.
+    // Every fixture type the registration describes: all but the tagged unions Shape and Sky, and Collider, which
+    // holds a Shape.
     const std::vector<std::string_view> RegisteredNames = {
-        "Fixture::Handle",  "Fixture::Limits",       "Fixture::Marker",  "Fixture::Motion",    "Fixture::Offset",
-        "Fixture::Numbers", "Fixture::Quat",         "Fixture::Spring",  "Fixture::Vec3",      "Fixture::Body",
-        "Fixture::BodyId",  "Fixture::BoxShape",     "Fixture::Clock",   "Fixture::ShapeType", "Fixture::SphereShape",
-        "Fixture::Columns", "Fixture::Contacts",     "Fixture::Dial",    "Fixture::Folder",    "Fixture::Heading",
-        "Fixture::Hit",     "Fixture::Pair<double>", "Fixture::Size",    "Fixture::Socket",    "Fixture::Tag",
-        "Fixture::Ticket",  "Fixture::Touched",      "Fixture::Weather",
+        "Fixture::Handle",   "Fixture::Limits",       "Fixture::Marker",      "Fixture::Motion",
+        "Fixture::Offset",   "Fixture::Numbers",      "Fixture::Quat",        "Fixture::Spring",
+        "Fixture::Vec3",     "Fixture::Body",         "Fixture::BodyId",      "Fixture::BoxShape",
+        "Fixture::Clock",    "Fixture::ShapeType",    "Fixture::SphereShape", "Fixture::Columns",
+        "Fixture::Contacts", "Fixture::Dial",         "Fixture::Folder",      "Fixture::Heading",
+        "Fixture::Hit",      "Fixture::Pair<double>", "Fixture::Size",        "Fixture::Socket",
+        "Fixture::Tag",      "Fixture::Ticket",       "Fixture::Touched",     "Fixture::Weather",
+        "Fixture::Paths",    "Fixture::Stat",         "Fixture::WeaponData",  "Fixture::Sword",
     };
 
     // A registry holding the fixture's registration, and every diagnostic it reported.
@@ -101,12 +103,30 @@ TEST_CASE("The generated registration leaves out the types generate-type-registr
 {
     Registered fixture;
 
-    for (std::string_view name : {"Fixture::WeaponData", "Fixture::Sword", "Fixture::Paths", "Fixture::Stat",
-                                  "Fixture::Shape", "Fixture::Sky", "Fixture::Collider"})
+    for (std::string_view name : {"Fixture::Shape", "Fixture::Sky", "Fixture::Collider"})
     {
-        INFO(name << " is a data asset, settings type, by-member struct or tagged union, or holds one, so is skipped");
+        INFO(name << " is a tagged union or holds one, which FenrirTypes does not describe yet, so is skipped");
         REQUIRE(fixture.registry.Find(name) == nullptr);
     }
+}
+
+TEST_CASE("A data asset extending another is visited base first, and is one over the chain")
+{
+    Registered fixture;
+    Fixture::Sword sword;
+    RecordingVisitor visitor;
+
+    fixture.Get("Fixture::Sword").Visit(static_cast<const void*>(&sword), visitor);
+
+    std::vector<std::string> names;
+    for (const Seen& seen : visitor.seen)
+        names.push_back(seen.name);
+    REQUIRE(names == std::vector<std::string>{"displayName", "stats", "cooldown", "mesh", "damage", "reach", "combos",
+                                              "titles"});
+    REQUIRE(visitor.values.front().Text() == "Weapon");
+    REQUIRE(fixture.Get("Fixture::Sword").base == "Fixture::WeaponData");
+    REQUIRE(fixture.registry.IsA("Fixture::Sword", "Fixture::WeaponData"));
+    REQUIRE_FALSE(fixture.registry.IsA("Fixture::WeaponData", "Fixture::Sword"));
 }
 
 TEST_CASE("Each type's role is the one its selection gives, and an enum's is the enum role")

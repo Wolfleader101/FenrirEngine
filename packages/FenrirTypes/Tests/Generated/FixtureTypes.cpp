@@ -4,6 +4,7 @@
 #include "FixtureTypes.hpp"
 
 #include "FenrirTypes/FieldInfo.hpp"
+#include "FenrirTypes/FieldVisitor.hpp"
 #include "FenrirTypes/Kind.hpp"
 #include "FenrirTypes/TypeDescription.hpp"
 #include "FenrirTypes/TypeRegistry.hpp"
@@ -487,6 +488,35 @@ namespace
         .fields = Fixture_Pair_double_Fields,
     };
 
+    // Fixture::Paths
+    constexpr Fenrir::ValueType Fixture_Paths_extensions_Element{.kind = Fenrir::Kind::String};
+    constexpr Fenrir::FieldInfo Fixture_Paths_Fields[] = {
+        {.name = "root", .type = {.kind = Fenrir::Kind::Path}, .doc = "A path, its default the literal."},
+        {.name = "extensions", .type = {.kind = Fenrir::Kind::List, .element = &Fixture_Paths_extensions_Element, .list = &Fenrir::ListOperationsOf<decltype(Fixture::Paths::extensions)::value_type>}, .doc = "A list of strings, empty by default."},
+        {.name = "label", .type = {.kind = Fenrir::Kind::String}, .doc = "A string given its own defaults."},
+        {.name = "threads", .type = {.kind = Fenrir::Kind::U32}, .doc = "A number beside them."},
+    };
+    void Fixture_Paths_Visit(void* instance, Fenrir::FieldVisitor& visitor)
+    {
+        auto& value = *static_cast<Fixture::Paths*>(instance);
+        visitor.Field(Fixture_Paths_Fields[0], Fenrir::ValueRef(&value.root, Fixture_Paths_Fields[0].type));
+        visitor.Field(Fixture_Paths_Fields[1], Fenrir::ValueRef(&value.extensions, Fixture_Paths_Fields[1].type));
+        visitor.Field(Fixture_Paths_Fields[2], Fenrir::ValueRef(&value.label, Fixture_Paths_Fields[2].type));
+        visitor.Field(Fixture_Paths_Fields[3], Fenrir::ValueRef(&value.threads, Fixture_Paths_Fields[3].type));
+    }
+    constexpr Fenrir::TypeDescription Fixture_Paths{
+        .name = "Fixture::Paths",
+        .package = "Fixture",
+        .role = Fenrir::Role::Settings,
+        .size = sizeof(Fixture::Paths),
+        .alignment = alignof(Fixture::Paths),
+        .construct = &Fenrir::ConstructValue<Fixture::Paths>,
+        .destroy = &Fenrir::DestroyValue<Fixture::Paths>,
+        .doc = "A settings type: an Install config a project file fills, holding a path and a list.",
+        .fields = Fixture_Paths_Fields,
+        .visit = &Fixture_Paths_Visit,
+    };
+
     // Fixture::Size
     static_assert(sizeof(Fixture::Size) == 8 && alignof(Fixture::Size) == 4,
                   "Fixture::Size is not the layout Fixture.api.json describes: regenerate the description, then this registration");
@@ -529,6 +559,95 @@ namespace
         .destroy = &Fenrir::DestroyValue<Fixture::Socket>,
         .doc = "A component holding the three fixed-layout kinds a file writes as values of their own: an entity, a fixed string and an asset reference.",
         .fields = Fixture_Socket_Fields,
+    };
+
+    // Fixture::Stat
+    constexpr Fenrir::FieldInfo Fixture_Stat_Fields[] = {
+        {.name = "name", .type = {.kind = Fenrir::Kind::String}, .doc = "Owned text, empty by default."},
+        {.name = "value", .type = {.kind = Fenrir::Kind::F32}},
+    };
+    void Fixture_Stat_Visit(void* instance, Fenrir::FieldVisitor& visitor)
+    {
+        auto& value = *static_cast<Fixture::Stat*>(instance);
+        visitor.Field(Fixture_Stat_Fields[0], Fenrir::ValueRef(&value.name, Fixture_Stat_Fields[0].type));
+        visitor.Field(Fixture_Stat_Fields[1], Fenrir::ValueRef(&value.value, Fixture_Stat_Fields[1].type));
+    }
+    constexpr Fenrir::TypeDescription Fixture_Stat{
+        .name = "Fixture::Stat",
+        .package = "Fixture",
+        .role = Fenrir::Role::Nested,
+        .size = sizeof(Fixture::Stat),
+        .alignment = alignof(Fixture::Stat),
+        .construct = &Fenrir::ConstructValue<Fixture::Stat>,
+        .destroy = &Fenrir::DestroyValue<Fixture::Stat>,
+        .doc = "A row of a data asset's table: a nested struct holding a string, reached only from data assets.",
+        .fields = Fixture_Stat_Fields,
+        .visit = &Fixture_Stat_Visit,
+    };
+
+    // Fixture::WeaponData
+    constexpr Fenrir::ValueType Fixture_WeaponData_stats_Element{.kind = Fenrir::Kind::Struct, .type = &Fixture_Stat};
+    constexpr Fenrir::ValueType Fixture_WeaponData_cooldown_Element{.kind = Fenrir::Kind::F32};
+    constexpr Fenrir::FieldInfo Fixture_WeaponData_Fields[] = {
+        {.name = "displayName", .type = {.kind = Fenrir::Kind::String}, .doc = "A string, its default the literal."},
+        {.name = "stats", .type = {.kind = Fenrir::Kind::List, .element = &Fixture_WeaponData_stats_Element, .list = &Fenrir::ListOperationsOf<decltype(Fixture::WeaponData::stats)::value_type>}, .doc = "A list of nested structs, empty by default."},
+        {.name = "cooldown", .type = {.kind = Fenrir::Kind::Optional, .element = &Fixture_WeaponData_cooldown_Element, .optional = &Fenrir::OptionalOperationsOf<decltype(Fixture::WeaponData::cooldown)::value_type>}, .doc = "An optional number, empty by default."},
+        {.name = "mesh", .type = {.kind = Fenrir::Kind::Reference, .target = "Fenrir::Mesh"}, .doc = "A reference to another asset, a fixed-layout kind a data asset holds too."},
+        {.name = "damage", .type = {.kind = Fenrir::Kind::F32}, .doc = "A number beside them, which records no offset either: the layout is the library's."},
+    };
+    void Fixture_WeaponData_Visit(void* instance, Fenrir::FieldVisitor& visitor)
+    {
+        auto& value = *static_cast<Fixture::WeaponData*>(instance);
+        visitor.Field(Fixture_WeaponData_Fields[0], Fenrir::ValueRef(&value.displayName, Fixture_WeaponData_Fields[0].type));
+        visitor.Field(Fixture_WeaponData_Fields[1], Fenrir::ValueRef(&value.stats, Fixture_WeaponData_Fields[1].type));
+        visitor.Field(Fixture_WeaponData_Fields[2], Fenrir::ValueRef(&value.cooldown, Fixture_WeaponData_Fields[2].type));
+        visitor.Field(Fixture_WeaponData_Fields[3], Fenrir::ValueRef(&value.mesh, Fixture_WeaponData_Fields[3].type));
+        visitor.Field(Fixture_WeaponData_Fields[4], Fenrir::ValueRef(&value.damage, Fixture_WeaponData_Fields[4].type));
+    }
+    constexpr Fenrir::TypeDescription Fixture_WeaponData{
+        .name = "Fixture::WeaponData",
+        .package = "Fixture",
+        .role = Fenrir::Role::DataAsset,
+        .size = sizeof(Fixture::WeaponData),
+        .alignment = alignof(Fixture::WeaponData),
+        .construct = &Fenrir::ConstructValue<Fixture::WeaponData>,
+        .destroy = &Fenrir::DestroyValue<Fixture::WeaponData>,
+        .doc = "A data asset: plain data in the asset store, owning its strings and lists, which a generated visitor reaches by member rather than by offset.",
+        .fields = Fixture_WeaponData_Fields,
+        .visit = &Fixture_WeaponData_Visit,
+    };
+
+    // Fixture::Sword
+    constexpr Fenrir::ValueType Fixture_Sword_combos_Element_Element{.kind = Fenrir::Kind::I32};
+    constexpr Fenrir::ValueType Fixture_Sword_combos_Element{.kind = Fenrir::Kind::List, .element = &Fixture_Sword_combos_Element_Element, .list = &Fenrir::ListOperationsOf<decltype(Fixture::Sword::combos)::value_type::value_type>};
+    constexpr Fenrir::ValueType Fixture_Sword_titles_Element_Element{.kind = Fenrir::Kind::String};
+    constexpr Fenrir::ValueType Fixture_Sword_titles_Element{.kind = Fenrir::Kind::List, .element = &Fixture_Sword_titles_Element_Element, .list = &Fenrir::ListOperationsOf<decltype(Fixture::Sword::titles)::value_type::value_type>};
+    constexpr Fenrir::FieldInfo Fixture_Sword_Fields[] = {
+        {.name = "reach", .type = {.kind = Fenrir::Kind::F32}, .doc = "A number of its own."},
+        {.name = "combos", .type = {.kind = Fenrir::Kind::List, .element = &Fixture_Sword_combos_Element, .list = &Fenrir::ListOperationsOf<decltype(Fixture::Sword::combos)::value_type>}, .doc = "A list of lists."},
+        {.name = "titles", .type = {.kind = Fenrir::Kind::Optional, .element = &Fixture_Sword_titles_Element, .optional = &Fenrir::OptionalOperationsOf<decltype(Fixture::Sword::titles)::value_type>}, .doc = "An optional list of strings."},
+    };
+    void Fixture_Sword_Visit(void* instance, Fenrir::FieldVisitor& visitor)
+    {
+        auto& value = *static_cast<Fixture::Sword*>(instance);
+        // Its base's fields first (ADR-0075).
+        Fixture_WeaponData_Visit(static_cast<Fixture::WeaponData*>(&value), visitor);
+        visitor.Field(Fixture_Sword_Fields[0], Fenrir::ValueRef(&value.reach, Fixture_Sword_Fields[0].type));
+        visitor.Field(Fixture_Sword_Fields[1], Fenrir::ValueRef(&value.combos, Fixture_Sword_Fields[1].type));
+        visitor.Field(Fixture_Sword_Fields[2], Fenrir::ValueRef(&value.titles, Fixture_Sword_Fields[2].type));
+    }
+    constexpr Fenrir::TypeDescription Fixture_Sword{
+        .name = "Fixture::Sword",
+        .package = "Fixture",
+        .role = Fenrir::Role::DataAsset,
+        .size = sizeof(Fixture::Sword),
+        .alignment = alignof(Fixture::Sword),
+        .construct = &Fenrir::ConstructValue<Fixture::Sword>,
+        .destroy = &Fenrir::DestroyValue<Fixture::Sword>,
+        .base = "Fixture::WeaponData",
+        .doc = "A data asset extending another: its base's fields are the base's, its own follow.",
+        .fields = Fixture_Sword_Fields,
+        .visit = &Fixture_Sword_Visit,
     };
 
     // Fixture::Tag
@@ -718,6 +837,11 @@ const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Pair<double>>::Descript
     return Fixture_Pair_double;
 }
 
+const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Paths>::Description() noexcept
+{
+    return Fixture_Paths;
+}
+
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Size>::Description() noexcept
 {
     return Fixture_Size;
@@ -726,6 +850,21 @@ const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Size>::Description() no
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Socket>::Description() noexcept
 {
     return Fixture_Socket;
+}
+
+const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Stat>::Description() noexcept
+{
+    return Fixture_Stat;
+}
+
+const Fenrir::TypeDescription& Fenrir::Describe<Fixture::WeaponData>::Description() noexcept
+{
+    return Fixture_WeaponData;
+}
+
+const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Sword>::Description() noexcept
+{
+    return Fixture_Sword;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Tag>::Description() noexcept
@@ -750,40 +889,41 @@ const Fenrir::TypeDescription& Fenrir::Describe<Fixture::Weather>::Description()
 
 bool Fenrir::Generated::RegisterFixtureTypes(Fenrir::TypeRegistry& registry)
 {
-    // As the description lists them: a type after every type its fields name.
-    constexpr const Fenrir::TypeDescription* descriptions[] = {
-        &Fixture_Handle,
-        &Fixture_Limits,
-        &Fixture_Marker,
-        &Fixture_Motion,
-        &Fixture_Offset,
-        &Fixture_Numbers,
-        &Fixture_Quat,
-        &Fixture_Spring,
-        &Fixture_Vec3,
-        &Fixture_Body,
-        &Fixture_BodyId,
-        &Fixture_BoxShape,
-        &Fixture_Clock,
-        &Fixture_ShapeType,
-        &Fixture_SphereShape,
-        &Fixture_Columns,
-        &Fixture_Contacts,
-        &Fixture_Dial,
-        &Fixture_Folder,
-        &Fixture_Heading,
-        &Fixture_Hit,
-        &Fixture_Pair_double,
-        &Fixture_Size,
-        &Fixture_Socket,
-        &Fixture_Tag,
-        &Fixture_Ticket,
-        &Fixture_Touched,
-        &Fixture_Weather,
-    };
+    // As the description lists them: a type after every type its fields name and the data asset it
+    // extends. A component or resource that registers goes to its role's hook, which hangs its attachments.
     bool registered = true;
-    for (const Fenrir::TypeDescription* description : descriptions)
-        registered = registry.Register(*description) && registered;
+    registered = registry.Register(Fixture_Handle) && registered;
+    registered = registry.Register(Fixture_Limits) && registered;
+    registered = registry.Register(Fixture_Marker) && registered;
+    registered = registry.Register(Fixture_Motion) && registered;
+    registered = registry.Register(Fixture_Offset) && registered;
+    registered = registry.Register(Fixture_Numbers) && registered;
+    registered = registry.Register(Fixture_Quat) && registered;
+    registered = registry.Register(Fixture_Spring) && registered;
+    registered = registry.Register(Fixture_Vec3) && registered;
+    registered = registry.Register(Fixture_Body) && Fenrir::AttachComponent<Fixture::Body>(registry, Fixture_Body) && registered;
+    registered = registry.Register(Fixture_BodyId) && registered;
+    registered = registry.Register(Fixture_BoxShape) && registered;
+    registered = registry.Register(Fixture_Clock) && Fenrir::AttachAppResource<Fixture::Clock>(registry, Fixture_Clock) && registered;
+    registered = registry.Register(Fixture_ShapeType) && registered;
+    registered = registry.Register(Fixture_SphereShape) && registered;
+    registered = registry.Register(Fixture_Columns) && registered;
+    registered = registry.Register(Fixture_Contacts) && Fenrir::AttachComponent<Fixture::Contacts>(registry, Fixture_Contacts) && registered;
+    registered = registry.Register(Fixture_Dial) && Fenrir::AttachComponent<Fixture::Dial>(registry, Fixture_Dial) && registered;
+    registered = registry.Register(Fixture_Folder) && Fenrir::AttachComponent<Fixture::Folder>(registry, Fixture_Folder) && registered;
+    registered = registry.Register(Fixture_Heading) && registered;
+    registered = registry.Register(Fixture_Hit) && registered;
+    registered = registry.Register(Fixture_Pair_double) && registered;
+    registered = registry.Register(Fixture_Paths) && registered;
+    registered = registry.Register(Fixture_Size) && registered;
+    registered = registry.Register(Fixture_Socket) && Fenrir::AttachComponent<Fixture::Socket>(registry, Fixture_Socket) && registered;
+    registered = registry.Register(Fixture_Stat) && registered;
+    registered = registry.Register(Fixture_WeaponData) && registered;
+    registered = registry.Register(Fixture_Sword) && registered;
+    registered = registry.Register(Fixture_Tag) && registered;
+    registered = registry.Register(Fixture_Ticket) && registered;
+    registered = registry.Register(Fixture_Touched) && registered;
+    registered = registry.Register(Fixture_Weather) && Fenrir::AttachSceneResource<Fixture::Weather>(registry, Fixture_Weather) && registered;
     return registered;
 }
 

@@ -103,8 +103,8 @@ public sealed class GenerateTests
     [InlineData("\"kind\": \"array\", \"elementKind\": \"tensor\", \"length\": 2",
                 "Test::Odd::value: its element kind 'tensor' is not one generate-type-registry knows")]
     [InlineData("\"kind\": \"string\"",
-                "Test::Odd::value: a string in a fixed-layout type, which is visited by offset (ticket 06 generates " +
-                "visitors for the owning kinds)")]
+                "Test::Odd::value: a string in a type the description lays out, which is visited by offset; only a " +
+                "type visited by member, which records no size, holds the owning kinds")]
     public void AFieldOfAKindTheToolDoesNotKnowFailsNamingTheTypeAndField(string kind, string diagnostic)
     {
         var description = Description(Type("Test::Odd", "struct", "component", Field("value", kind)));
@@ -131,21 +131,168 @@ public sealed class GenerateTests
     }
 
     [Theory]
-    [InlineData("data-asset", "Test::Owned: a data asset is visited by member, by a generated function ticket 06 writes")]
-    [InlineData("settings", "Test::Owned: a settings type is visited by member, by a generated function ticket 06 writes")]
-    public void ADataAssetOrSettingsTypeFailsUntilTicket06(string role, string diagnostic)
+    [InlineData("data-asset")]
+    [InlineData("settings")]
+    public void ADataAssetOrSettingsTypeIsVisitedByMemberThroughAGeneratedFunction(string role)
     {
-        var description = Description(TypeWithoutLayout("Test::Owned", role, Field("name", "\"kind\": \"string\"")));
+        var generated = Generate(Description(TypeWithoutLayout("Test::Owned", role,
+                                                               Field("name", "\"kind\": \"string\""),
+                                                               Field("count", "\"kind\": \"u32\""))));
 
-        AssertFails(description, diagnostic, skipUnsupported: false);
+        AssertContains(generated.Source, "    void Test_Owned_Visit(void* instance, Fenrir::FieldVisitor& visitor)\n" +
+                                         "    {\n" +
+                                         "        auto& value = *static_cast<Test::Owned*>(instance);\n" +
+                                         "        visitor.Field(Test_Owned_Fields[0], Fenrir::ValueRef(&value.name, Test_Owned_Fields[0].type));\n" +
+                                         "        visitor.Field(Test_Owned_Fields[1], Fenrir::ValueRef(&value.count, Test_Owned_Fields[1].type));\n" +
+                                         "    }\n",
+                       "A by-member type's visit function should push each field once, by member.");
+        AssertContains(generated.Source, "        .visit = &Test_Owned_Visit,\n", "The description should hold its visit function.");
+        AssertContains(generated.Source, "{.name = \"name\", .type = {.kind = Fenrir::Kind::String}}",
+                       "A by-member type's fields should have no offset.");
+        Assert.False(generated.Source.Contains("static_assert(sizeof(Test::Owned)", StringComparison.Ordinal),
+                     "A by-member type has no layout of the description's to check.");
+        AssertContains(generated.Source, "        .size = sizeof(Test::Owned),\n", "The size should be the compiler's.");
+    }
+
+    [Fact]
+    public void ADerivedDataAssetVisitsItsBaseFirstAndRecordsItsBase()
+    {
+        var generated = Generate(Description(
+            TypeWithoutLayout("Test::Weapon", "data-asset", Field("name", "\"kind\": \"string\"")),
+            DerivedType("Test::Sword", "Test::Weapon", Field("reach", "\"kind\": \"f32\""))));
+
+        AssertContains(generated.Source, "        auto& value = *static_cast<Test::Sword*>(instance);\n" +
+                                         "        // Its base's fields first (ADR-0075).\n" +
+                                         "        Test_Weapon_Visit(static_cast<Test::Weapon*>(&value), visitor);\n" +
+                                         "        visitor.Field(Test_Sword_Fields[0], Fenrir::ValueRef(&value.reach, Test_Sword_Fields[0].type));\n",
+                       "A derived data asset's visit should walk its base's fields first, then its own.");
+        AssertContains(generated.Source, "        .base = \"Test::Weapon\",\n", "The description should name the base.");
+    }
+
+    [Fact]
+    public void ADataAssetWithNoFieldsOfItsOwnStillVisitsItsBase()
+    {
+        var generated = Generate(Description(
+            TypeWithoutLayout("Test::Weapon", "data-asset", Field("name", "\"kind\": \"string\"")),
+            DerivedType("Test::Club", "Test::Weapon")));
+
+        AssertContains(generated.Source, "        auto& value = *static_cast<Test::Club*>(instance);\n" +
+                                         "        // Its base's fields first (ADR-0075).\n" +
+                                         "        Test_Weapon_Visit(static_cast<Test::Weapon*>(&value), visitor);\n" +
+                                         "    }\n",
+                       "A data asset declaring no fields should visit its base's alone.");
+        Assert.False(generated.Source.Contains("Test_Club_Fields", StringComparison.Ordinal),
+                     "A data asset declaring no fields has no fields array.");
+    }
+
+    [Fact]
+    public void ADataAssetWhoseBaseTheDescriptionDoesNotDescribeBeforeItFailsNamingBoth()
+    {
+        var description = Description(
+            DerivedType("Test::Sword", "Test::Weapon", Field("reach", "\"kind\": \"f32\"")),
+            TypeWithoutLayout("Test::Weapon", "data-asset", Field("name", "\"kind\": \"string\"")));
+
+        AssertFails(description, "Test::Sword: extends Test::Weapon, which the description does not describe before it",
+                    skipUnsupported: false);
+    }
+
+    [Fact]
+    public void ListsAndOptionalsReachTheirElementsThroughTheMembersOwnType()
+    {
+        var generated = Generate(Description(
+            TypeWithoutLayout("Test::Row", "nested", Field("name", "\"kind\": \"string\"")),
+            TypeWithoutLayout("Test::Table", "data-asset",
+                              Field("rows", "\"kind\": \"list\", \"elementKind\": \"struct\", \"elementType\": \"Test::Row\""),
+                              Field("combos", "\"kind\": \"list\", \"elementKind\": \"list\", \"element\": {\"kind\": \"list\", \"elementKind\": \"i32\"}"),
+                              Field("cooldown", "\"kind\": \"optional\", \"elementKind\": \"f32\""))));
+
+        AssertContains(generated.Source, "    void Test_Row_Visit(void* instance, Fenrir::FieldVisitor& visitor)\n",
+                       "A nested struct holding an owning kind should be visited by member too.");
+        AssertContains(generated.Source,
+                       "    constexpr Fenrir::ValueType Test_Table_rows_Element{.kind = Fenrir::Kind::Struct, .type = &Test_Row};\n",
+                       "A list's element type should be written before the field.");
+        AssertContains(generated.Source,
+                       "{.name = \"rows\", .type = {.kind = Fenrir::Kind::List, .element = &Test_Table_rows_Element, " +
+                       ".list = &Fenrir::ListOperationsOf<decltype(Test::Table::rows)::value_type>}}",
+                       "A list should reach its elements through the operations of its member's element type.");
+        AssertContains(generated.Source,
+                       "    constexpr Fenrir::ValueType Test_Table_combos_Element_Element{.kind = Fenrir::Kind::I32};\n" +
+                       "    constexpr Fenrir::ValueType Test_Table_combos_Element{.kind = Fenrir::Kind::List, " +
+                       ".element = &Test_Table_combos_Element_Element, " +
+                       ".list = &Fenrir::ListOperationsOf<decltype(Test::Table::combos)::value_type::value_type>};\n",
+                       "A list of lists should reach each level's elements through that level's type.");
+        AssertContains(generated.Source,
+                       "{.name = \"cooldown\", .type = {.kind = Fenrir::Kind::Optional, .element = &Test_Table_cooldown_Element, " +
+                       ".optional = &Fenrir::OptionalOperationsOf<decltype(Test::Table::cooldown)::value_type>}}",
+                       "An optional should reach its value through the operations of its member's value type.");
+    }
+
+    [Theory]
+    [InlineData("component", "Fenrir::AttachComponent")]
+    [InlineData("scene-resource", "Fenrir::AttachSceneResource")]
+    [InlineData("app-resource", "Fenrir::AttachAppResource")]
+    public void AComponentOrResourceIsHandedToItsRolesHookWhenItRegisters(string role, string hook)
+    {
+        var generated = Generate(Description(Type("Test::Plain", "struct", role, Field("value", "\"kind\": \"i32\""))));
+
+        AssertContains(generated.Source,
+                       $"    registered = registry.Register(Test_Plain) && {hook}<Test::Plain>(registry, Test_Plain) && registered;\n",
+                       "The registration should call the role's hook for a type that registered.");
+        AssertContains(generated.Header, "#include \"FenrirTypes/RoleHooks.hpp\"\n", "The hooks are declared by FenrirTypes.");
+        AssertContains(generated.Header, $"template <typename T>\ninline bool {hook}(Fenrir::TypeRegistry&, const Fenrir::TypeDescription&)\n" +
+                                         "{\n    return true;\n}\n",
+                       "Until the packages above FenrirTypes define the hooks, the generated header's are no-ops.");
+    }
+
+    [Theory]
+    [InlineData("event")]
+    [InlineData("shared-struct")]
+    [InlineData("bound-type")]
+    [InlineData("nested")]
+    public void AFixedLayoutTypeOfAnotherRoleCallsNoHook(string role)
+    {
+        var generated = Generate(Description(Type("Test::Plain", "struct", role, Field("value", "\"kind\": \"i32\""))));
+
+        AssertContains(generated.Source, "    registered = registry.Register(Test_Plain) && registered;\n",
+                       "The type should be registered.");
+        Assert.False(generated.Source.Contains("Attach", StringComparison.Ordinal) ||
+                     generated.Header.Contains("Attach", StringComparison.Ordinal),
+                     $"A {role} should be handed to no hook.");
+    }
+
+    [Theory]
+    [InlineData("data-asset")]
+    [InlineData("settings")]
+    public void AByMemberTypeCallsNoHook(string role)
+    {
+        var generated = Generate(Description(TypeWithoutLayout("Test::Owned", role, Field("name", "\"kind\": \"string\""))));
+
+        Assert.False(generated.Source.Contains("Attach", StringComparison.Ordinal) ||
+                     generated.Header.Contains("Attach", StringComparison.Ordinal),
+                     $"A {role} should be handed to no hook.");
+    }
+
+    [Fact]
+    public void AnEnumCallsNoHook()
+    {
+        var generated = Generate(Description(
+            "{\"name\": \"Test::Mode\", \"category\": \"enum\", \"underlying\": \"u8\", \"size\": 1, \"alignment\": 1, " +
+            "\"values\": [{\"name\": \"A\", \"value\": 0}]}"));
+
+        AssertContains(generated.Source, "    registered = registry.Register(Test_Mode) && registered;\n",
+                       "The enum should be registered.");
+        Assert.False(generated.Source.Contains("Attach", StringComparison.Ordinal), "An enum should be handed to no hook.");
     }
 
     [Fact]
     public void ASkippedTypeHoldingAnUnknownKindStillFailsTheTool()
     {
-        var description = Description(TypeWithoutLayout("Test::Owned", "data-asset", Field("value", "\"kind\": \"quaternion\"")));
+        var description = Description(TaggedUnion("Test::Shape"),
+                                      Type("Test::Collider", "struct", "component",
+                                           Field("shape", "\"kind\": \"struct\", \"type\": \"Test::Shape\""),
+                                           Field("value", "\"kind\": \"quaternion\"")));
 
-        AssertFails(description, "Test::Owned::value: its kind 'quaternion' is not one generate-type-registry knows",
+        AssertFails(description, "Test::Collider::value: its kind 'quaternion' is not one generate-type-registry knows",
                     skipUnsupported: true);
     }
 
@@ -201,11 +348,12 @@ public sealed class GenerateTests
     }
 
     [Fact]
-    public void SkippingUnsupportedTypesLeavesOutByMemberTypesAndWhatHoldsThem()
+    public void SkippingUnsupportedTypesLeavesOutADataAssetExtendingOneLeftOut()
     {
         var description = Description(
-            TypeWithoutLayout("Test::Row", "nested", Field("name", "\"kind\": \"string\"")),
-            TypeWithoutLayout("Test::Table", "data-asset", Field("rows", "\"kind\": \"list\", \"elementKind\": \"struct\", \"elementType\": \"Test::Row\"")),
+            TaggedUnion("Test::Shape"),
+            TypeWithoutLayout("Test::Weapon", "data-asset", Field("shape", "\"kind\": \"struct\", \"type\": \"Test::Shape\"")),
+            DerivedType("Test::Sword", "Test::Weapon", Field("reach", "\"kind\": \"f32\"")),
             Type("Test::Plain", "struct", "component", Field("value", "\"kind\": \"i32\"")));
         using var directory = new TemporaryDirectory();
         var registration = Registration.Read(WriteRegisteredSelection(directory, description))!;
@@ -213,13 +361,10 @@ public sealed class GenerateTests
         var generated = Generator.Generate(registration, description, skipUnsupported: true);
 
         Assert.True(generated.Header.Contains("Fenrir::Describe<Test::Plain>", StringComparison.Ordinal),
-                    "A fixed-layout type should still be described.");
-        Assert.False(generated.Header.Contains("Test::Row", StringComparison.Ordinal) ||
-                     generated.Header.Contains("Test::Table", StringComparison.Ordinal),
-                     "Skipped types should have no Describe<T>.");
-        Assert.False(generated.Source.Contains("Test::Row", StringComparison.Ordinal) ||
-                     generated.Source.Contains("Test::Table", StringComparison.Ordinal),
-                     "Skipped types should have no description.");
+                    "A type holding no tagged union should still be described.");
+        Assert.False(generated.Source.Contains("Test::Weapon", StringComparison.Ordinal) ||
+                     generated.Source.Contains("Test::Sword", StringComparison.Ordinal),
+                     "A data asset holding a tagged union, and one extending it, should be left out.");
     }
 
     [Fact]
@@ -259,6 +404,17 @@ public sealed class GenerateTests
                     $"Reading the selection should fail with\n  {diagnostic}\nbut failed with\n  {exception.Message}");
     }
 
+    // The registration a description gives, skipping nothing.
+    private static GeneratedFiles Generate(string description)
+    {
+        using var directory = new TemporaryDirectory();
+        var registration = Registration.Read(WriteRegisteredSelection(directory, description))!;
+        return Generator.Generate(registration, description, skipUnsupported: false);
+    }
+
+    private static void AssertContains(string text, string expected, string why) =>
+        Assert.True(text.Contains(expected, StringComparison.Ordinal), $"{why}\nExpected to find:\n{expected}\nin:\n{text}");
+
     private static void AssertFails(string description, string diagnostic, bool skipUnsupported)
     {
         using var directory = new TemporaryDirectory();
@@ -295,6 +451,11 @@ public sealed class GenerateTests
 
     private static string TypeWithoutLayout(string name, string role, params string[] fields) =>
         $"{{\"name\": \"{name}\", \"category\": \"struct\", \"role\": \"{role}\", \"fields\": [{string.Join(", ", fields)}]}}";
+
+    // A data asset extending another, by member as every data asset is.
+    private static string DerivedType(string name, string baseName, params string[] fields) =>
+        $"{{\"name\": \"{name}\", \"category\": \"struct\", \"role\": \"data-asset\", \"base\": \"{baseName}\", " +
+        $"\"fields\": [{string.Join(", ", fields)}]}}";
 
     // A tagged union of one kind, in the shape describe-api records one.
     private static string TaggedUnion(string name) =>
