@@ -141,6 +141,36 @@ public sealed class GenerateTests
     }
 
     [Fact]
+    public void ASkippedTypeHoldingAnUnknownKindStillFailsTheTool()
+    {
+        var description = Description(TypeWithoutLayout("Test::Owned", "data-asset", Field("value", "\"kind\": \"quaternion\"")));
+
+        AssertFails(description, "Test::Owned::value: its kind 'quaternion' is not one generate-type-registry knows",
+                    skipUnsupported: true);
+    }
+
+    [Fact]
+    public void ATypesFieldAndATypeOfTheJoinedNameNeverNameOneArray()
+    {
+        // Foo's field Bar and the type Foo::Bar would both name their former-names array Foo_Bar_Formerly.
+        var formerly = "\"kind\": \"i32\", \"formerly\": [\"old\"]";
+        var description = Description(Type("Foo::Bar", "struct", "component", Field("value", "\"kind\": \"i32\"")),
+                                      Type("Foo", "struct", "component", Field("Bar", formerly)));
+        var typed = description.Replace("\"name\": \"Foo::Bar\", \"category\": \"struct\", \"role\": \"component\", \"size\": 4, \"alignment\": 4,",
+                                        "\"name\": \"Foo::Bar\", \"category\": \"struct\", \"role\": \"component\", \"size\": 4, \"alignment\": 4, \"formerly\": [\"Foo::Old\"],",
+                                        StringComparison.Ordinal);
+        using var directory = new TemporaryDirectory();
+        var registration = Registration.Read(WriteRegisteredSelection(directory, typed))!;
+
+        var source = Generator.Generate(registration, typed, skipUnsupported: false).Source;
+
+        Assert.True(source.Contains("constexpr std::string_view Foo_Bar_Formerly[] = {\"Foo::Old\"};", StringComparison.Ordinal),
+                    "The type Foo::Bar should keep the plain name for its former names.");
+        Assert.True(source.Contains("constexpr std::string_view Foo_Bar_Formerly_2[] = {\"old\"};", StringComparison.Ordinal),
+                    "Foo's field Bar should get the next free name for its former names.");
+    }
+
+    [Fact]
     public void ATaggedUnionFailsNamingTheTypeUntilFenrirTypesDescribesOne()
     {
         var description = Description(TaggedUnion("Test::Shape"),

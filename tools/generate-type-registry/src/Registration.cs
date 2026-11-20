@@ -15,7 +15,10 @@ internal sealed partial record Registration(string SelectionPath, string Package
     public const string Extension = ".api.toml";
 
     /// <summary>The package's description, <c>&lt;Package&gt;.api.json</c> beside the selection.</summary>
-    public string DescriptionPath => Path.Combine(Path.GetDirectoryName(SelectionPath)!, Package + ".api.json");
+    public string DescriptionPath => Path.Combine(Path.GetDirectoryName(SelectionPath)!, DescriptionName);
+
+    /// <summary>The description's file name, which the generated files name as what they were generated from.</summary>
+    public string DescriptionName => Package + ".api.json";
 
     /// <summary>
     /// Reads the <c>[registration]</c> table of a selection: null when it has none, so the package registers nothing.
@@ -50,7 +53,7 @@ internal sealed partial record Registration(string SelectionPath, string Package
             throw new GenerateException($"{selectionPath}: 'registration' is a table");
         }
 
-        foreach (var key in table.Keys.Where(key => key is not ("header" or "source" or "function" or "includes")))
+        if (table.Keys.FirstOrDefault(key => key is not ("header" or "source" or "function" or "includes")) is { } key)
         {
             throw new GenerateException(
                 $"{selectionPath}: [registration] has an unknown key '{key}' (it has 'header', 'source', 'function' and 'includes')");

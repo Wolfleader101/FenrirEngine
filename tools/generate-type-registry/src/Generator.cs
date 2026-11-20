@@ -35,10 +35,9 @@ internal static class Generator
                 $"{registration.DescriptionPath}: describes package '{package}', not the selection's '{registration.Package}'");
         }
 
-        var types = Read(root.GetProperty("types"), skipUnsupported);
-        var descriptionName = registration.Package + ".api.json";
-        return new GeneratedFiles(WriteHeader(registration, descriptionName, types),
-                                  WriteSource(registration, descriptionName, types));
+        var identifiers = new Identifiers();
+        var types = Read(root.GetProperty("types"), skipUnsupported, identifiers);
+        return new GeneratedFiles(WriteHeader(registration, types), WriteSource(registration, types, identifiers));
     }
 
     private static JsonDocument ParseDescription(Registration registration, string json)
@@ -58,16 +57,16 @@ internal static class Generator
     private sealed record Described(string Name, string Identifier, JsonElement Json);
 
     // The types to describe, in the description's order (dependencies first), each checked and given an identifier.
-    private static List<Described> Read(JsonElement types, bool skipUnsupported)
+    private static List<Described> Read(JsonElement types, bool skipUnsupported, Identifiers identifiers)
     {
         var described = new List<Described>();
         var skipped = new HashSet<string>(StringComparer.Ordinal);
-        var identifiers = new HashSet<string>(StringComparer.Ordinal);
         foreach (var type in types.EnumerateArray())
         {
             var name = type.GetProperty("name").GetString()!;
-            var unsupported = Unsupported(name, type) ??
-                              HeldSkipped(name, type, skipped);
+            // Whatever the skip flag, so a skipped type holding something the tool does not know still fails it.
+            CheckKnown(name, type);
+            var unsupported = Unsupported(name, type) ?? HeldSkipped(name, type, skipped);
             if (unsupported is not null)
             {
                 if (!skipUnsupported)
@@ -79,21 +78,14 @@ internal static class Generator
                 continue;
             }
 
-            Check(name, type, described.Select(d => d.Name).ToHashSet(StringComparer.Ordinal));
-            var identifier = Identifier(name);
-            for (var suffix = 2; !identifiers.Add(identifier); ++suffix)
-            {
-                identifier = $"{Identifier(name)}_{suffix}";
-            }
-
-            described.Add(new Described(name, identifier, type));
+            CheckFixedLayout(name, type, described.Select(d => d.Name).ToHashSet(StringComparer.Ordinal));
+            described.Add(new Described(name, identifiers.Unique(Identifier(name)), type));
         }
 
         return described;
     }
 
-    // Why the tool cannot generate this type yet, naming it; null when it can. Unknown categories and roles fail in
-    // Check, whatever the skip flag.
+    // Why the tool cannot generate this type yet, naming it; null when it can.
     private static string? Unsupported(string name, JsonElement type)
     {
         var category = type.GetProperty("category").GetString();
@@ -126,16 +118,25 @@ internal static class Generator
     {
         foreach (var field in Fields(type))
         {
-            foreach (var held in new[] { "type", "elementType" })
+            foreach (var held in HeldTypes(field).Where(skipped.Contains))
             {
-                if (field.TryGetProperty(held, out var heldType) && skipped.Contains(heldType.GetString()!))
-                {
-                    return $"{name}::{field.GetProperty("name").GetString()}: holds {heldType.GetString()}, which is left out";
-                }
+                return $"{name}::{field.GetProperty("name").GetString()}: holds {held}, which is left out";
             }
         }
 
         return null;
+    }
+
+    // The described types a field's value or its elements are, by name.
+    private static IEnumerable<string> HeldTypes(JsonElement field)
+    {
+        foreach (var key in new[] { "type", "elementType" })
+        {
+            if (field.TryGetProperty(key, out var held))
+            {
+                yield return held.GetString()!;
+            }
+        }
     }
 
     private static IEnumerable<JsonElement> Fields(JsonElement type)
@@ -152,11 +153,12 @@ internal static class Generator
         }
     }
 
-    // Fails naming the type, or the type and field, when the description holds something the tool does not know.
-    private static void Check(string name, JsonElement type, HashSet<string> earlier)
+    // Fails naming the type, or the type and field, when the description holds a category, role or kind the tool does
+    // not know.
+    private static void CheckKnown(string name, JsonElement type)
     {
         var category = type.GetProperty("category").GetString();
-        if (category is not ("struct" or "bound-type" or "enum"))
+        if (category is not ("struct" or "bound-type" or "enum" or "tagged-union"))
         {
             throw new GenerateException($"{name}: its category '{category}' is not one generate-type-registry knows");
         }
@@ -181,36 +183,45 @@ internal static class Generator
         foreach (var field in Fields(type))
         {
             var fieldName = $"{name}::{field.GetProperty("name").GetString()}";
+            foreach (var (key, what) in new[] { ("kind", "kind"), ("elementKind", "element kind") })
+            {
+                if (field.TryGetProperty(key, out var kind) && KindName(kind.GetString()!) is null)
+                {
+                    throw new GenerateException(
+                        $"{fieldName}: its {what} '{kind.GetString()}' is not one generate-type-registry knows");
+                }
+            }
+        }
+    }
+
+    // Fails naming the type and field when a type the tool writes as a table of offsets holds what a table cannot
+    // reach, or a type the description has not described before it.
+    private static void CheckFixedLayout(string name, JsonElement type, HashSet<string> earlier)
+    {
+        foreach (var field in Fields(type))
+        {
+            var fieldName = $"{name}::{field.GetProperty("name").GetString()}";
             var kind = field.GetProperty("kind").GetString()!;
-            CheckKind(fieldName, kind, "kind");
+            CheckOwning(fieldName, kind);
             if (kind == "array")
             {
                 var element = field.GetProperty("elementKind").GetString()!;
-                CheckKind(fieldName, element, "element kind");
+                CheckOwning(fieldName, element);
                 if (element is "array" or "fixed-string")
                 {
                     throw new GenerateException($"{fieldName}: an array of {element}s, which the description never records");
                 }
             }
 
-            foreach (var held in new[] { "type", "elementType" })
+            foreach (var held in HeldTypes(field).Where(held => !earlier.Contains(held)))
             {
-                if (field.TryGetProperty(held, out var heldType) && !earlier.Contains(heldType.GetString()!))
-                {
-                    throw new GenerateException(
-                        $"{fieldName}: holds {heldType.GetString()}, which the description does not describe before it");
-                }
+                throw new GenerateException($"{fieldName}: holds {held}, which the description does not describe before it");
             }
         }
     }
 
-    private static void CheckKind(string fieldName, string kind, string what)
+    private static void CheckOwning(string fieldName, string kind)
     {
-        if (KindName(kind) is null)
-        {
-            throw new GenerateException($"{fieldName}: its {what} '{kind}' is not one generate-type-registry knows");
-        }
-
         if (kind is "string" or "list" or "optional" or "path")
         {
             throw new GenerateException(
@@ -219,10 +230,10 @@ internal static class Generator
         }
     }
 
-    private static string WriteHeader(Registration registration, string descriptionName, List<Described> types)
+    private static string WriteHeader(Registration registration, List<Described> types)
     {
         var text = new Text();
-        text.Line($"// Generated by {Tool} from {descriptionName}. Do not edit.");
+        text.Line($"// Generated by {Tool} from {registration.DescriptionName}. Do not edit.");
         text.Line("// clang-format off");
         text.Line($"// The type registration of {registration.Package} (ADR-0074): each described type's Describe<T> and");
         text.Line("// the function adding every description to a type registry.");
@@ -282,10 +293,10 @@ internal static class Generator
         return text.ToString();
     }
 
-    private static string WriteSource(Registration registration, string descriptionName, List<Described> types)
+    private static string WriteSource(Registration registration, List<Described> types, Identifiers identifiers)
     {
         var text = new Text();
-        text.Line($"// Generated by {Tool} from {descriptionName}. Do not edit.");
+        text.Line($"// Generated by {Tool} from {registration.DescriptionName}. Do not edit.");
         text.Line("// clang-format off");
         text.Line();
         var header = Path.GetRelativePath(Path.GetDirectoryName(registration.SourcePath)!, registration.HeaderPath)
@@ -302,7 +313,7 @@ internal static class Generator
         text.Line();
         text.Line("namespace");
         text.Line("{");
-        var identifiers = types.ToDictionary(type => type.Name, type => type.Identifier, StringComparer.Ordinal);
+        var typeIds = types.ToDictionary(type => type.Name, type => type.Identifier, StringComparer.Ordinal);
         var first = true;
         foreach (var type in types)
         {
@@ -312,7 +323,7 @@ internal static class Generator
             }
 
             first = false;
-            WriteDescription(text, registration, descriptionName, type, identifiers);
+            WriteDescription(text, registration, type, typeIds, identifiers);
         }
 
         text.Line("} // namespace");
@@ -359,8 +370,8 @@ internal static class Generator
         return text.ToString();
     }
 
-    private static void WriteDescription(Text text, Registration registration, string descriptionName, Described type,
-                                         Dictionary<string, string> identifiers)
+    private static void WriteDescription(Text text, Registration registration, Described type,
+                                         Dictionary<string, string> typeIds, Identifiers identifiers)
     {
         var json = type.Json;
         var name = type.Name;
@@ -371,12 +382,12 @@ internal static class Generator
 
         text.Line($"    // {name}");
         text.Line($"    static_assert(sizeof({name}) == {size} && alignof({name}) == {alignment},");
-        text.Line($"                  {Literal($"{name} is not the layout {descriptionName} describes: regenerate the description, then this registration")});");
+        text.Line($"                  {Literal($"{name} is not the layout {registration.DescriptionName} describes: regenerate the description, then this registration")});");
 
         string? formerly = null;
         if (json.TryGetProperty("formerly", out var formerlyNames))
         {
-            formerly = $"{id}_Formerly";
+            formerly = identifiers.Unique($"{id}_Formerly");
             text.Line($"    constexpr std::string_view {formerly}[] = {{{Strings(formerlyNames)}}};");
         }
 
@@ -386,7 +397,7 @@ internal static class Generator
         {
             if (json.GetProperty("values").GetArrayLength() > 0)
             {
-                enumerators = $"{id}_Enumerators";
+                enumerators = identifiers.Unique($"{id}_Enumerators");
                 text.Line($"    constexpr Fenrir::Enumerator {enumerators}[] = {{");
                 foreach (var value in json.GetProperty("values").EnumerateArray())
                 {
@@ -403,10 +414,10 @@ internal static class Generator
             var entries = new List<string>();
             foreach (var field in Fields(json))
             {
-                entries.Add(FieldEntry(text, id, field, identifiers));
+                entries.Add(FieldEntry(text, id, field, typeIds, identifiers));
             }
 
-            fields = $"{id}_Fields";
+            fields = identifiers.Unique($"{id}_Fields");
             text.Line($"    constexpr Fenrir::FieldInfo {fields}[] = {{");
             foreach (var entry in entries)
             {
@@ -469,7 +480,8 @@ internal static class Generator
     }
 
     // One FieldInfo initialiser; writes the arrays it points at (an array's element type, former names) first.
-    private static string FieldEntry(Text text, string id, JsonElement field, Dictionary<string, string> identifiers)
+    private static string FieldEntry(Text text, string id, JsonElement field, Dictionary<string, string> typeIds,
+                                     Identifiers identifiers)
     {
         var name = field.GetProperty("name").GetString()!;
         var fieldId = $"{id}_{Identifier(name)}";
@@ -479,13 +491,13 @@ internal static class Generator
         switch (kind)
         {
             case "enum" or "struct":
-                valueType.Add($".type = &{identifiers[field.GetProperty("type").GetString()!]}");
+                valueType.Add($".type = &{typeIds[field.GetProperty("type").GetString()!]}");
                 break;
             case "array":
                 var element = new List<string> { $".kind = Fenrir::Kind::{KindName(field.GetProperty("elementKind").GetString()!)}" };
                 if (field.TryGetProperty("elementType", out var elementType))
                 {
-                    element.Add($".type = &{identifiers[elementType.GetString()!]}");
+                    element.Add($".type = &{typeIds[elementType.GetString()!]}");
                 }
 
                 if (field.TryGetProperty("elementTarget", out var elementTarget))
@@ -493,8 +505,9 @@ internal static class Generator
                     element.Add($".target = {Literal(elementTarget.GetString()!)}");
                 }
 
-                text.Line($"    constexpr Fenrir::ValueType {fieldId}_Element{{{string.Join(", ", element)}}};");
-                valueType.Add($".element = &{fieldId}_Element");
+                var elementId = identifiers.Unique($"{fieldId}_Element");
+                text.Line($"    constexpr Fenrir::ValueType {elementId}{{{string.Join(", ", element)}}};");
+                valueType.Add($".element = &{elementId}");
                 valueType.Add($".count = {field.GetProperty("length").GetInt64()}");
                 break;
             case "fixed-string":
@@ -514,8 +527,9 @@ internal static class Generator
 
         if (field.TryGetProperty("formerly", out var formerly))
         {
-            text.Line($"    constexpr std::string_view {fieldId}_Formerly[] = {{{Strings(formerly)}}};");
-            entry.Add($".formerly = {fieldId}_Formerly");
+            var formerlyId = identifiers.Unique($"{fieldId}_Formerly");
+            text.Line($"    constexpr std::string_view {formerlyId}[] = {{{Strings(formerly)}}};");
+            entry.Add($".formerly = {formerlyId}");
         }
 
         if (field.TryGetProperty("doc", out var doc))
@@ -680,6 +694,24 @@ internal static class Generator
         "settings" => "Settings",
         _ => null,
     };
+
+    // The names the source gives its data, each unique: a name wanted twice gets the next free numbered suffix, so a
+    // type Foo's field Bar and a type Foo::Bar never name one array.
+    private sealed class Identifiers
+    {
+        private readonly HashSet<string> m_taken = new(StringComparer.Ordinal);
+
+        public string Unique(string wanted)
+        {
+            var identifier = wanted;
+            for (var suffix = 2; !m_taken.Add(identifier); ++suffix)
+            {
+                identifier = $"{wanted}_{suffix}";
+            }
+
+            return identifier;
+        }
+    }
 
     // Lines joined with LF, whatever the platform's newline.
     private sealed class Text

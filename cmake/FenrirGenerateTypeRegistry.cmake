@@ -11,7 +11,9 @@
 # settings types and other types visited by member, which ticket 06 of the types spec adds, and tagged unions), with the
 # types holding them, instead of failing on them.
 
-find_program(FENRIR_DOTNET_EXECUTABLE NAMES dotnet HINTS "$ENV{DOTNET_ROOT}" DOC "dotnet executable that builds and runs tools/describe-api")
+# The same cached dotnet FenrirDescribeApi.cmake finds, when it is included first.
+find_program(FENRIR_DOTNET_EXECUTABLE NAMES dotnet HINTS "$ENV{DOTNET_ROOT}"
+    DOC "dotnet executable that builds and runs the .NET tools (describe-api, generate-type-registry)")
 
 set(fenrir_generate_type_registry_project
     "${CMAKE_CURRENT_LIST_DIR}/../tools/generate-type-registry/src/GenerateTypeRegistry.csproj")
