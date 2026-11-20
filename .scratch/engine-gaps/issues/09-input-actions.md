@@ -23,3 +23,4 @@ No. The game can read both devices and merge them in its own code. Raised so tri
 
 - 2026-11-19, charting [Engine gaps for Flightless Frenzy](../map.md): settled by [Does the engine offer input actions or dead zones?](29-does-the-engine-offer-input-actions.md).
 - 2026-11-19, round 1 of charting [Engine gaps for Flightless Frenzy](../map.md): stick dead zones are spec-ready and the action layer is deferred, in [Does the engine offer input actions or dead zones?](29-does-the-engine-offer-input-actions.md).
+- 2026-11-20: the dead-zone spec is written, [Stick and trigger dead zones](../../fenrir-input-dead-zones/spec.md), `ready-for-agent` for `/to-tickets`.
