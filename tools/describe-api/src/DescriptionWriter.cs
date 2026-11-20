@@ -50,6 +50,11 @@ internal static class DescriptionWriter
             case StructDescription structType:
                 json.WriteString("category", "struct");
                 json.WriteString("role", Roles.Spelling(structType.Role));
+                if (structType.Base is not null)
+                {
+                    json.WriteString("base", structType.Base);
+                }
+
                 break;
             case TaggedUnionDescription union:
                 json.WriteString("category", "tagged-union");
@@ -61,8 +66,13 @@ internal static class DescriptionWriter
                 break;
         }
 
-        json.WriteNumber("size", type.Size);
-        json.WriteNumber("alignment", type.Alignment);
+        // A type reached by member has the standard library's layout, which the description leaves to the compiler.
+        if (type is not StructDescription { ByMember: true })
+        {
+            json.WriteNumber("size", type.Size);
+            json.WriteNumber("alignment", type.Alignment);
+        }
+
         WriteDoc(json, type.Doc);
         WriteTypeCommands(json, type.Commands);
         switch (type)
@@ -131,7 +141,11 @@ internal static class DescriptionWriter
     {
         json.WriteStartObject();
         json.WriteString("name", field.Name);
-        json.WriteNumber("offset", field.Offset);
+        if (field.Offset is { } offset)
+        {
+            json.WriteNumber("offset", offset);
+        }
+
         WriteFieldType(json, field.Type);
         json.WritePropertyName("default");
         WriteDefault(json, field.Default);
@@ -248,9 +262,18 @@ internal static class DescriptionWriter
             {
                 json.WriteString("elementTarget", type.Element.Target);
             }
+
+            // The element keys above say one level only, so an element with keys of its own (a list of lists, of arrays, of
+            // fixed strings) is recorded whole, as a field's kind would be.
+            if (type.Element.Element is not null || type.Element.Kind == "fixed-string")
+            {
+                json.WriteStartObject("element");
+                WriteFieldType(json, type.Element);
+                json.WriteEndObject();
+            }
         }
 
-        if (type.Element is not null || type.Kind == "fixed-string")
+        if (type.Kind is "array" or "fixed-string")
         {
             json.WriteNumber("length", type.Length);
         }

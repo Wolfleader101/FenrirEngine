@@ -911,6 +911,39 @@
       ]
     },
     {
+      "name": "Fixture::Paths",
+      "category": "struct",
+      "role": "settings",
+      "doc": "A settings type: an Install config a project file fills, holding a path and a list.",
+      "fields": [
+        {
+          "name": "root",
+          "kind": "path",
+          "default": "assets",
+          "doc": "A path, its default the literal."
+        },
+        {
+          "name": "extensions",
+          "kind": "list",
+          "elementKind": "string",
+          "default": [],
+          "doc": "A list of strings, empty by default."
+        },
+        {
+          "name": "label",
+          "kind": "string",
+          "default": "",
+          "doc": "A string given its own defaults."
+        },
+        {
+          "name": "threads",
+          "kind": "u32",
+          "default": 4,
+          "doc": "A number beside them."
+        }
+      ]
+    },
+    {
       "name": "Fixture::Size",
       "category": "bound-type",
       "role": "bound-type",
@@ -1028,6 +1061,104 @@
           "target": "Fenrir::Mesh",
           "default": null,
           "doc": "Another, given its own defaults."
+        }
+      ]
+    },
+    {
+      "name": "Fixture::Stat",
+      "category": "struct",
+      "role": "nested",
+      "doc": "A row of a data asset's table: a nested struct holding a string, reached only from data assets.",
+      "fields": [
+        {
+          "name": "name",
+          "kind": "string",
+          "default": "",
+          "doc": "Owned text, empty by default."
+        },
+        {
+          "name": "value",
+          "kind": "f32",
+          "default": 1
+        }
+      ]
+    },
+    {
+      "name": "Fixture::WeaponData",
+      "category": "struct",
+      "role": "data-asset",
+      "doc": "A data asset: plain data in the asset store, owning its strings and lists, which a generated visitor reaches by member rather than by offset.",
+      "fields": [
+        {
+          "name": "displayName",
+          "kind": "string",
+          "default": "Weapon",
+          "doc": "A string, its default the literal."
+        },
+        {
+          "name": "stats",
+          "kind": "list",
+          "elementKind": "struct",
+          "elementType": "Fixture::Stat",
+          "default": [],
+          "doc": "A list of nested structs, empty by default."
+        },
+        {
+          "name": "cooldown",
+          "kind": "optional",
+          "elementKind": "f32",
+          "default": null,
+          "doc": "An optional number, empty by default."
+        },
+        {
+          "name": "mesh",
+          "kind": "reference",
+          "target": "Fenrir::Mesh",
+          "default": null,
+          "doc": "A reference to another asset, a fixed-layout kind a data asset holds too."
+        },
+        {
+          "name": "damage",
+          "kind": "f32",
+          "default": 10,
+          "doc": "A number beside them, which records no offset either: the layout is the library's."
+        }
+      ]
+    },
+    {
+      "name": "Fixture::Sword",
+      "category": "struct",
+      "role": "data-asset",
+      "base": "Fixture::WeaponData",
+      "doc": "A data asset extending another: its base's fields are the base's, its own follow.",
+      "fields": [
+        {
+          "name": "reach",
+          "kind": "f32",
+          "default": 1.5,
+          "doc": "A number of its own."
+        },
+        {
+          "name": "combos",
+          "kind": "list",
+          "elementKind": "list",
+          "element": {
+            "kind": "list",
+            "elementKind": "i32"
+          },
+          "default": [],
+          "doc": "A list of lists."
+        },
+        {
+          "name": "titles",
+          "kind": "optional",
+          "elementKind": "list",
+          "element": {
+            "kind": "list",
+            "elementKind": "string"
+          },
+          "default": null,
+          "doc": "An optional list of strings."
         }
       ]
     },

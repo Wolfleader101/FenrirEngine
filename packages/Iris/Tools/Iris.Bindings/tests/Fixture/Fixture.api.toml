@@ -22,5 +22,9 @@ private-members = ["Fixture::Tag"]
 # A specialisation named with its arguments, which no alias names and nothing instantiates.
 "Fixture::Pair<double>" = "bound-type"
 "Fixture::Ticket" = "bound-type"
+# Skipped by the binding, with Fixture::Stat, which only they hold.
+"Fixture::WeaponData" = "data-asset"
+"Fixture::Sword" = "data-asset"
+"Fixture::Paths" = "settings"
 # Held by no field: described because the selection names it.
 "Fixture::Heading" = "enum"

@@ -33,3 +33,4 @@ We decided that **the API description stays the one description of a type, widen
 - Doc text ships in the registration until the cooked-form work adds an option to strip it.
 - The generated registration is a second consumer of the description, so a change to `SCHEMA.md` changes two generators and Iris's copy of the schema.
 - *Narrowed by ADR-0075:* the open slot is built in its reference form only; a data asset type may extend one other, so the description records a base type for the `data-asset` role.
+- *Amended by ADR-0084:* a `settings` role (an `Install` config or an importer's options) joins `data-asset` under the owning rule, and `path` (`std::filesystem::path`) joins the owning kinds; `reference` is a fixed-layout kind allowed in every role (the types spec).

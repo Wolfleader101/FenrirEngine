@@ -5,8 +5,12 @@
 
 #include <array>
 #include <cstdint>
+#include <filesystem>
 #include <limits>
 #include <numbers>
+#include <optional>
+#include <string>
+#include <vector>
 
 // The engine's entity and asset handle, as the tool recognises them by qualified name: the shapes FenrirECS and
 // FenrirAssets declare, so the fixture reads without the engine's headers.
@@ -477,5 +481,55 @@ namespace Fixture
         Fenrir::AssetHandle<Fenrir::Mesh> mesh;
         /** @brief Another, given its own defaults. */
         Fenrir::AssetHandle<Fenrir::Mesh> lod{};
+    };
+
+    /** @brief A row of a data asset's table: a nested struct holding a string, reached only from data assets. */
+    struct Stat
+    {
+        /** @brief Owned text, empty by default. */
+        std::string name;
+        float value = 1.0f;
+    };
+
+    /**
+     * @brief A data asset: plain data in the asset store, owning its strings and lists, which a generated visitor reaches
+     * by member rather than by offset.
+     */
+    struct WeaponData
+    {
+        /** @brief A string, its default the literal. */
+        std::string displayName = "Weapon";
+        /** @brief A list of nested structs, empty by default. */
+        std::vector<Stat> stats;
+        /** @brief An optional number, empty by default. */
+        std::optional<float> cooldown;
+        /** @brief A reference to another asset, a fixed-layout kind a data asset holds too. */
+        Fenrir::AssetHandle<Fenrir::Mesh> mesh;
+        /** @brief A number beside them, which records no offset either: the layout is the library's. */
+        float damage = 10.0f;
+    };
+
+    /** @brief A data asset extending another: its base's fields are the base's, its own follow. */
+    struct Sword : WeaponData
+    {
+        /** @brief A number of its own. */
+        float reach = 1.5f;
+        /** @brief A list of lists. */
+        std::vector<std::vector<std::int32_t>> combos{};
+        /** @brief An optional list of strings. */
+        std::optional<std::vector<std::string>> titles = std::nullopt;
+    };
+
+    /** @brief A settings type: an Install config a project file fills, holding a path and a list. */
+    struct Paths
+    {
+        /** @brief A path, its default the literal. */
+        std::filesystem::path root = "assets";
+        /** @brief A list of strings, empty by default. */
+        std::vector<std::string> extensions;
+        /** @brief A string given its own defaults. */
+        std::string label{};
+        /** @brief A number beside them. */
+        std::uint32_t threads = 4;
     };
 } // namespace Fixture

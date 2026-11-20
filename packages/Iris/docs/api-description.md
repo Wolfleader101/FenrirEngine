@@ -26,8 +26,9 @@ Every type has:
 | --- | --- |
 | `name` | The C++ qualified name: as the selection spells it for a selected type (an alias such as `Math::Vec3` included), else clang's canonical spelling (`Ns::Type`). |
 | `category` | `struct`, `tagged-union`, `bound-type` or `enum`. |
-| `role` | Not on enums. `component`, `event`, `scene-resource`, `app-resource`, `shared-struct` or `bound-type` for a selected type; `nested` for a type described only because a field uses it. |
-| `size`, `alignment` | In bytes. An empty struct is 1 byte. |
+| `role` | Not on enums. `component`, `event`, `scene-resource`, `app-resource`, `shared-struct`, `data-asset`, `settings` or `bound-type` for a selected type; `nested` for a type described only because a field uses it. Iris.Bindings skips `data-asset` and `settings` types (see "Owning kinds"). |
+| `base` | For a `data-asset` extending another: the `name` of the data asset it extends. Absent otherwise. |
+| `size`, `alignment` | In bytes. An empty struct is 1 byte. Absent for a struct reached by member (see "Owning kinds"). |
 | `doc` | The doc comment, when there is one (see "Doc comments"). |
 | `version` | The type's version from `@version`, when it is above 1; absent means 1 (see "Type and field doc commands"). |
 | `formerly` | The type's former qualified names from `@formerly`, in the order written, when it has any. |
@@ -45,7 +46,8 @@ Plain data. `fields` lists every non-static data member in declaration order (wh
 | `kind` | See "Kinds". |
 | `type` | For `enum` and `struct` kinds: the `name` of the described type. |
 | `target` | For the `reference` kind: the canonical name of the type the handle names (`Fenrir::Mesh`), never described for it. |
-| `elementKind`, `elementType`, `elementTarget`, `length` | For the `array` kind: the element's kind, the element's type for `enum` and `struct` elements, its target for `reference` elements, and the element count. For the `fixed-string` kind, `length` alone: its bytes. |
+| `elementKind`, `elementType`, `elementTarget`, `length` | For the `array` kind: the element's kind, the element's type for `enum` and `struct` elements, its target for `reference` elements, and the element count. For the `fixed-string` kind, `length` alone: its bytes. For the `list` and `optional` kinds, the element keys alone. |
+| `element` | For a `list` or `optional` whose element has keys of its own (an `array`, a `fixed-string`, a `list` or an `optional`): every key of the element, `kind` first. |
 | `default` | See "Defaults". Every field has one. |
 | `doc` | The member's doc comment, when there is one. |
 | `formerly` | The member's former names from `@formerly`, in the order written, when it has any. |
@@ -86,8 +88,13 @@ Described when a field uses it, or when the selection names it with the role `en
 | `entity` | 16 bytes: the engine's entity (`Fenrir::Entity`), recognised by its qualified name. It is never described for the kind: FenrirECS's description, which selects it as a `shared-struct`, records its layout. |
 | `fixed-string` | `length` bytes of UTF-8 text, zero-terminated: a C array of `char` or `char8_t` (`char name[256]`), holding at most `length` - 1 bytes. A reader cuts longer text at `length` - 1 bytes on a UTF-8 boundary. An array of `signed char`, `unsigned char` or `std::uint8_t`, and a `std::array` of `char`, stay an `array` of `u8`. |
 | `reference` | 8 bytes: an asset handle (`Fenrir::AssetHandle<T>`, recognised by its qualified name), a `u32` slot index then a `u32` generation; `target` names `T`. The handle is never described for the kind. |
+| `string`, `list`, `optional`, `path` | The owning kinds: a `std::string`, a `std::vector<T>` (any element kind, a `list` included), a `std::optional<T>` (any but `optional`) and a `std::filesystem::path`, with the element keys for a list and an optional. Only a `data-asset` or `settings` type, or a nested struct only they reach, holds one. |
 
 Anything else (a C++ reference, `T&`, `long double`, `wchar_t`, a bit-field, ...) fails the tool.
+
+## Owning kinds
+
+A `data-asset` or `settings` type is reached by member through a generated visitor, so it may hold the owning kinds. It, and every struct whose layout holds an owning kind, records no `size`, `alignment` or field `offset`: they are the standard library's. A `data-asset` may extend one other, recorded as `base`, and its `fields` are only those it declares. Iris.Bindings skips every `data-asset` and `settings` type and every nested type and enum that only they reach, without failing or logging (the C# spec binds them), and fails naming the field on an owning kind or a missing layout in any type it binds.
 
 ## Defaults
 
@@ -105,6 +112,9 @@ Each field's `default` is the value its default member initialiser gives, record
 | `array` | A list of `length` element defaults. |
 | `entity`, `reference` | `null`: the empty entity or handle, the only default recorded. |
 | `fixed-string` | The text, as a string: `""` when empty. |
+| `string`, `path` | The text, as a string: `""` when empty. |
+| `list` | `[]`, the only default recorded. |
+| `optional` | `null`, the only default recorded. |
 
 The initialisers recorded are: for a number or `bool`, any constant expression libclang evaluates, recorded as its value: a literal (`1.0f`, `0.05f`, `true`, `u'A'`), a named constant (`inline constexpr bool DebugValidationByDefault = ...`), a `std::numbers` constant, `std::numeric_limits<T>::infinity()`, `max()` and `lowest()`, or operators applied to those (`-1.0f`, `~0u`, `1u << 3`, `2 * 4`, `std::numbers::pi_v<float> / 4.0f`); an enumerator; `{}` or `T{}` or no initialiser for a nested struct or bound type, and an aggregate initialiser setting some of a nested struct's members (`{.frequency = 2.0f}`); a constant of a nested struct's type that is const and defined with one of these initialisers (`Colour::Black`, declared `static const` in its class and defined `inline constexpr Colour Colour::Black{0.0f, 0.0f, 0.0f, 1.0f}`), recorded as the values its initialiser gives; a bound type's constructor with literal arguments; and for arrays, a braced list of those (missing elements are zero). A field of an enum with no enumerators has no enumerator to name, so its initialiser may be any constant the reader evaluates, recorded as the integer. An entity or reference records only the empty value. A fixed string's initialiser is a string literal, a braced list of character constants or `{}`, and no initialiser is the empty string. A scalar, enum, pointer or array of them with no initialiser fails, as does any other expression.
 

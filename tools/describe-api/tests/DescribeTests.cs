@@ -50,11 +50,13 @@ public sealed class DescribeTests
     [InlineData("ReferenceMember",
                 "Failing::ReferenceMember::target: a reference member: a shared type holds values, not references")]
     [InlineData("VirtualFunction",
-                "Failing::VirtualFunction::Update: a virtual function: a shared type is plain data")]
+                "Failing::VirtualFunction::Update: a virtual function: a component is plain data")]
     [InlineData("BaseWithData",
-                "Failing::BaseWithData: its base class Base has data members or virtual functions")]
+                "Failing::BaseWithData: its base class Base has data members or virtual functions, which a component's " +
+                "base may not have (only a data asset extends a type with data members)")]
     [InlineData("NonTriviallyCopyableMember",
-                "Failing::Copied: not trivially copyable: it declares its own copy, move, assignment or destructor " +
+                "Failing::Copied: not trivially copyable: it declares its own copy, move, assignment or destructor, " +
+                "which a nested type may not (only a data asset or settings type may) " +
                 "(reached through Failing::NonTriviallyCopyableMember::member)")]
     [InlineData("Inexpressible",
                 "Failing::Inexpressible::wide: its type 'long double' is not a kind the description records")]
@@ -102,6 +104,163 @@ public sealed class DescribeTests
                     $"Describing Failing::{type} should fail with\n  {diagnostic}\nbut failed with\n  {exception.Message}");
         Assert.False(File.Exists(Path.Combine(directory.Path, $"{type}.api.json")),
                      "A failed run should write no description.");
+    }
+
+    [Theory]
+    [InlineData("\"Failing::NamedComponent\" = \"component\"",
+                "Failing::NamedComponent::name: a string, which a component cannot hold: the owning kinds (string, list, " +
+                "optional and path) are for data assets and settings types")]
+    [InlineData("\"Failing::ListedEvent\" = \"event\"", "Failing::ListedEvent::values: a list, which an event cannot hold")]
+    [InlineData("\"Failing::MaybeResource\" = \"scene-resource\"",
+                "Failing::MaybeResource::value: an optional, which a scene resource cannot hold")]
+    [InlineData("\"Failing::MaybeResource\" = \"app-resource\"",
+                "Failing::MaybeResource::value: an optional, which an app resource cannot hold")]
+    [InlineData("\"Failing::RootedShared\" = \"shared-struct\"",
+                "Failing::RootedShared::root: a path, which a shared struct cannot hold")]
+    [InlineData("\"Failing::HoldsLabelledOnly\" = \"component\"",
+                "Failing::Labelled::label: a string, which a nested type reached from a component cannot hold: the " +
+                "owning kinds (string, list, optional and path) are for data assets and settings types (reached through " +
+                "Failing::HoldsLabelledOnly::labelled)")]
+    [InlineData("\"Failing::HoldsLabelled\" = \"component\"\n\"Failing::AssetHoldsLabelled\" = \"data-asset\"",
+                "Failing::Labelled: holds a string (Failing::Labelled::label), which a component cannot reach, but is " +
+                "reached from a component through Failing::HoldsLabelled::labelled and from a data asset through " +
+                "Failing::AssetHoldsLabelled::labelled")]
+    [InlineData("\"Failing::NamedAssetBase\" = \"data-asset\"\n\"Failing::DerivedAsset\" = \"data-asset\"\n" +
+                "\"Failing::HoldsDerivedAsset\" = \"component\"",
+                "Failing::NamedAssetBase: holds a string (Failing::NamedAssetBase::name), which a component cannot " +
+                "reach, but is reached from a component through Failing::HoldsDerivedAsset::held and from a data asset " +
+                "where it is selected")]
+    [InlineData("\"Failing::VirtualAsset\" = \"data-asset\"",
+                "Failing::VirtualAsset::~VirtualAsset: a virtual function: a data asset is plain data")]
+    [InlineData("\"Failing::SharedBase\" = \"shared-struct\"\n\"Failing::ExtendsShared\" = \"data-asset\"",
+                "Failing::ExtendsShared: its base class Failing::SharedBase is a shared struct: a data asset extends only " +
+                "another data asset")]
+    [InlineData("\"Failing::ExtendsShared\" = \"data-asset\"",
+                "Failing::ExtendsShared: its base class Failing::SharedBase is not selected: a data asset extends only " +
+                "another data asset")]
+    [InlineData("\"Failing::AssetA\" = \"data-asset\"\n\"Failing::AssetB\" = \"data-asset\"\n\"Failing::ExtendsTwo\" = \"data-asset\"",
+                "Failing::ExtendsTwo: extends 2 types: a data asset extends one other data asset at most")]
+    [InlineData("\"Failing::ExtendsSettings\" = \"settings\"",
+                "Failing::ExtendsSettings: its base class SettingsBase has data members or virtual functions, which a " +
+                "settings type's base may not have (only a data asset extends a type with data members)")]
+    [InlineData("\"Failing::DoublyOptional\" = \"data-asset\"",
+                "Failing::DoublyOptional::value: an optional of an optional, which the kinds cannot express")]
+    [InlineData("\"Failing::Flags\" = \"settings\"",
+                "Failing::Flags::flags: a std::vector<bool>, whose elements are bits rather than values: hold a list of u8")]
+    [InlineData("\"Failing::FilledList\" = \"data-asset\"",
+                "Failing::FilledList::values: the default '{1.0f, 2.0f}' is not one a list records: its default is the " +
+                "empty list (no initialiser or {})")]
+    [InlineData("\"Failing::FilledOptional\" = \"data-asset\"",
+                "Failing::FilledOptional::value: the default '1.0f' is not one an optional records: its default is " +
+                "empty (no initialiser, {} or std::nullopt)")]
+    [InlineData("\"Failing::ComputedName\" = \"data-asset\"",
+                "Failing::ComputedName::name: the default 'std::string(3, 'a')' is not one a string records: a string " +
+                "literal, or {} or no initialiser for the empty string")]
+    [InlineData("\"Failing::ArrayOfStrings\" = \"data-asset\"",
+                "Failing::ArrayOfStrings::names: an array of strings, which the kinds cannot express: hold a list")]
+    public void EachRoleRefusesWhatItCannotHoldNamingTheTypeMemberAndRole(string types, string diagnostic)
+    {
+        using var directory = new TemporaryDirectory();
+        var header = Path.Combine(FixtureDirectory(), "Failing.hpp").Replace('\\', '/');
+        var selection = Path.Combine(directory.Path, "Roles.api.toml");
+        File.WriteAllText(selection, $"headers = [\"{header}\"]\n\n[types]\n{types}\n");
+
+        var exception = Assert.Throws<DescribeException>(() => Describer.Describe(Selection.Read(selection), []));
+
+        Assert.True(exception.Message.Contains("error: " + diagnostic, StringComparison.Ordinal),
+                    $"Describing\n  {types}\nshould fail with\n  {diagnostic}\nbut failed with\n  {exception.Message}");
+    }
+
+    [Fact]
+    public void ADataAssetRecordsTheDataAssetItExtendsAndASettingsTypeNone()
+    {
+        var types = Describer.Describe(Selection.Read(FixtureSelection), []).Types;
+        StructDescription Of(string name) => (StructDescription)types.Single(type => type.Name == name);
+
+        Assert.Equal((Role.DataAsset, (string?)null), (Of("Fixture::WeaponData").Role, Of("Fixture::WeaponData").Base));
+        Assert.Equal((Role.DataAsset, (string?)"Fixture::WeaponData"), (Of("Fixture::Sword").Role, Of("Fixture::Sword").Base));
+        Assert.Equal((Role.Settings, (string?)null), (Of("Fixture::Paths").Role, Of("Fixture::Paths").Base));
+        Assert.Equal(Role.Nested, Of("Fixture::Stat").Role);
+    }
+
+    [Fact]
+    public void ADataAssetRecordsOnlyItsOwnFieldsAfterItsBase()
+    {
+        var types = Describer.Describe(Selection.Read(FixtureSelection), []).Types;
+        var names = types.Select(type => type.Name).ToList();
+        var sword = (StructDescription)types.Single(type => type.Name == "Fixture::Sword");
+
+        Assert.Equal(["reach", "combos", "titles"], sword.Fields.Select(field => field.Name));
+        Assert.True(names.IndexOf("Fixture::WeaponData") < names.IndexOf("Fixture::Sword"),
+                    "A data asset should be described after the base it extends.");
+    }
+
+    [Fact]
+    public void TheOwningKindsAreRecordedWithTheirElementsAndNoOffset()
+    {
+        var types = Describer.Describe(Selection.Read(FixtureSelection), []).Types;
+        FieldDescription Of(string type, string name) =>
+            ((StructDescription)types.Single(t => t.Name == type)).Fields.Single(field => field.Name == name);
+
+        Assert.Equal(new FieldType("string"), Of("Fixture::WeaponData", "displayName").Type);
+        Assert.Equal(new FieldType("list", Element: new FieldType("struct", "Fixture::Stat")),
+                     Of("Fixture::WeaponData", "stats").Type);
+        Assert.Equal(new FieldType("optional", Element: new FieldType("f32")), Of("Fixture::WeaponData", "cooldown").Type);
+        Assert.Equal(new FieldType("list", Element: new FieldType("list", Element: new FieldType("i32"))),
+                     Of("Fixture::Sword", "combos").Type);
+        Assert.Equal(new FieldType("optional", Element: new FieldType("list", Element: new FieldType("string"))),
+                     Of("Fixture::Sword", "titles").Type);
+        Assert.Equal(new FieldType("path"), Of("Fixture::Paths", "root").Type);
+        Assert.Equal(new FieldType("string"), Of("Fixture::Stat", "name").Type);
+    }
+
+    [Fact]
+    public void ATypeReachedByMemberRecordsNoOffsetsAndAFixedLayoutTypeKeepsThem()
+    {
+        var types = Describer.Describe(Selection.Read(FixtureSelection), []).Types;
+        StructDescription Of(string name) => (StructDescription)types.Single(type => type.Name == name);
+
+        // Its layout is the standard library's, so not even a number beside an owning kind records its offset.
+        foreach (var name in new[] { "Fixture::WeaponData", "Fixture::Sword", "Fixture::Paths", "Fixture::Stat" })
+        {
+            Assert.True(Of(name).ByMember, $"{name} should be reached by member.");
+            Assert.All(Of(name).Fields, field => Assert.Null(field.Offset));
+        }
+
+        Assert.False(Of("Fixture::Socket").ByMember);
+        Assert.All(Of("Fixture::Socket").Fields, field => Assert.NotNull(field.Offset));
+    }
+
+    [Fact]
+    public void AStringOrPathDefaultIsItsLiteralAndAListOrOptionalDefaultIsEmpty()
+    {
+        var types = Describer.Describe(Selection.Read(FixtureSelection), []).Types;
+        DefaultValue Of(string type, string name) =>
+            ((StructDescription)types.Single(t => t.Name == type)).Fields.Single(field => field.Name == name).Default;
+
+        Assert.Equal(new DefaultValue.Text("Weapon"), Of("Fixture::WeaponData", "displayName"));
+        Assert.Equal(new DefaultValue.Text(""), Of("Fixture::Stat", "name"));
+        Assert.Equal(new DefaultValue.Text(""), Of("Fixture::Paths", "label"));
+        Assert.Equal(new DefaultValue.Text("assets"), Of("Fixture::Paths", "root"));
+        Assert.Empty(Assert.IsType<DefaultValue.Array>(Of("Fixture::WeaponData", "stats")).Elements);
+        Assert.Empty(Assert.IsType<DefaultValue.Array>(Of("Fixture::Sword", "combos")).Elements);
+        Assert.Equal(new DefaultValue.Null(), Of("Fixture::WeaponData", "cooldown"));
+        Assert.Equal(new DefaultValue.Null(), Of("Fixture::Sword", "titles"));
+    }
+
+    [Fact]
+    public void ADataAssetMayHoldAComponentTypeByValue()
+    {
+        using var directory = new TemporaryDirectory();
+        var header = Path.Combine(FixtureDirectory(), "Failing.hpp").Replace('\\', '/');
+        var selection = Path.Combine(directory.Path, "Holds.api.toml");
+        // Base has no owning kind, so a component and a data asset may both hold it.
+        File.WriteAllText(selection, $"headers = [\"{header}\"]\n\n[types]\n\"Failing::Base\" = \"component\"\n" +
+                                     "\"Failing::HoldsBase\" = \"data-asset\"\n");
+
+        var types = Describer.Describe(Selection.Read(selection), []).Types;
+
+        Assert.Contains(types, type => type.Name == "Failing::HoldsBase");
     }
 
     [Theory]

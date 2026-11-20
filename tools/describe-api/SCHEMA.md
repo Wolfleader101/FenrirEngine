@@ -23,8 +23,9 @@ Every type has:
 | --- | --- |
 | `name` | The C++ qualified name: as the selection spells it for a selected type (an alias such as `Math::Vec3` included), else clang's canonical spelling (`Ns::Type`). |
 | `category` | `struct`, `tagged-union`, `bound-type` or `enum`. |
-| `role` | Not on enums. `component`, `event`, `scene-resource`, `app-resource`, `shared-struct` or `bound-type` for a selected type; `nested` for a type described only because a field uses it. |
-| `size`, `alignment` | In bytes. An empty struct is 1 byte. |
+| `role` | Not on enums. `component`, `event`, `scene-resource`, `app-resource`, `shared-struct`, `data-asset`, `settings` or `bound-type` for a selected type; `nested` for a type described only because a field uses it. |
+| `base` | For a `data-asset` extending another: the `name` of the data asset it extends (see "Owning kinds"). Absent otherwise. |
+| `size`, `alignment` | In bytes. An empty struct is 1 byte. Absent for a struct reached by member (see "Owning kinds"), whose layout is the standard library's. |
 | `doc` | The doc comment, when there is one (see "Doc comments"). |
 | `version` | The type's version from `@version`, when it is above 1; absent means 1 (see "Type and field doc commands"). |
 | `formerly` | The type's former qualified names from `@formerly`, in the order written, when it has any. |
@@ -38,11 +39,12 @@ Plain data. `fields` lists every non-static data member in declaration order (wh
 | Key | Value |
 | --- | --- |
 | `name` | The C++ member name. |
-| `offset` | Bytes from the start of the struct. |
+| `offset` | Bytes from the start of the struct. Absent in a struct reached by member. |
 | `kind` | See "Kinds". |
 | `type` | For `enum` and `struct` kinds: the `name` of the described type. |
 | `target` | For the `reference` kind: the canonical name of the type the handle names (`Fenrir::Mesh`), never described for it. |
-| `elementKind`, `elementType`, `elementTarget`, `length` | For the `array` kind: the element's kind, the element's type for `enum` and `struct` elements, its target for `reference` elements, and the element count. For the `fixed-string` kind, `length` alone: its bytes. |
+| `elementKind`, `elementType`, `elementTarget`, `length` | For the `array` kind: the element's kind, the element's type for `enum` and `struct` elements, its target for `reference` elements, and the element count. For the `fixed-string` kind, `length` alone: its bytes. For the `list` and `optional` kinds, the element keys alone, with no `length`. |
+| `element` | For a `list` or `optional` whose element has keys of its own (an `array`, a `fixed-string`, a `list` or an `optional`): every key of the element, `kind` first, as a field's kind keys are (`{"kind": "list", "elementKind": "i32"}` for a list of lists of `i32`). |
 | `default` | See "Defaults". Every field has one. |
 | `doc` | The member's doc comment, when there is one. |
 | `formerly` | The member's former names from `@formerly`, in the order written, when it has any. |
@@ -83,8 +85,21 @@ Described when a field uses it, or when the selection names it with the role `en
 | `entity` | 16 bytes: the engine's entity (`Fenrir::Entity`), recognised by its qualified name. It is never described for the kind: FenrirECS's description, which selects it as a `shared-struct`, records its layout. |
 | `fixed-string` | `length` bytes of UTF-8 text, zero-terminated: a C array of `char` or `char8_t` (`char name[256]`), holding at most `length` - 1 bytes. A reader cuts longer text at `length` - 1 bytes on a UTF-8 boundary. An array of `signed char`, `unsigned char` or `std::uint8_t`, and a `std::array` of `char`, stay an `array` of `u8`. |
 | `reference` | 8 bytes: an asset handle (`Fenrir::AssetHandle<T>`, recognised by its qualified name), a `u32` slot index then a `u32` generation; `target` names `T`. The handle is never described for the kind. |
+| `string` | Owned UTF-8 text: a `std::string`. A `std::basic_string` of another character type fails the tool. |
+| `list` | A `std::vector<T>` of any kind, a `list` included, recorded with the element keys. A `std::vector<bool>`, whose elements are bits, fails the tool. |
+| `optional` | A `std::optional<T>` of any kind but `optional`, recorded with the element keys. |
+| `path` | A `std::filesystem::path`, written as its text. |
 
-Anything else (a C++ reference, `T&`, `long double`, `wchar_t`, a bit-field, ...) fails the tool.
+`string`, `list`, `optional` and `path` are the **owning kinds** (see below), recognised by their qualified names in `std`. Anything else (a C++ reference, `T&`, `long double`, `wchar_t`, a bit-field, an array of an owning kind, ...) fails the tool.
+
+## Owning kinds
+
+A `data-asset` (ADR-0075) or `settings` type (ADR-0084) is read and written through a generated visitor that reaches each field by member, never at an offset, so it may hold the owning kinds, whose bytes are the standard library's own. The rest of the roles keep their fixed layout:
+
+- **Who may hold them.** A `data-asset` or `settings` type, and a nested struct that only those reach (by value, through any chain of fields, list elements and optionals included). An owning kind in a `component`, `event`, `scene-resource`, `app-resource` or `shared-struct`, or in a nested struct one of them reaches, fails the tool naming the type, member and role; a struct holding one that both a fixed-layout role and a data asset or settings type reach fails naming a path from each. A struct holding none may be reached from both: a data asset may hold a component type by value.
+- **Reached by member.** A `data-asset` or `settings` type, and every struct whose layout holds an owning kind (itself, in a struct it holds by value, or in a data asset it extends), records no `size`, `alignment` or field `offset`: they differ between standard libraries, so a description that recorded them would not be the same bytes on every platform, and the code a generator writes for the type takes them from the compiler. A nested struct of fixed kinds that only data assets reach keeps its layout.
+- **Bases.** A `data-asset` may extend one other type, which the selection selects as a `data-asset`, recorded as `base`; the base's fields are its own description's, and the type's `fields` are only those it declares. A second base, a virtual base, or a base the selection does not select as a `data-asset` fails the tool. No other role's base may have data members.
+- **Plain data still.** A virtual function (a virtual destructor included) fails the tool in every role. A `data-asset` or `settings` type may declare its own copy, move, assignment or destructor; any other may not.
 
 ## Defaults
 
@@ -102,8 +117,11 @@ Each field's `default` is the value its default member initialiser gives, record
 | `array` | A list of `length` element defaults. |
 | `entity`, `reference` | `null`: the empty entity or handle, the only default recorded. |
 | `fixed-string` | The text, as a string: `""` when empty. |
+| `string`, `path` | The text, as a string: `""` when empty. |
+| `list` | `[]`: the empty list, the only default recorded. |
+| `optional` | `null`: empty, the only default recorded. |
 
-The initialisers recorded are: for a number or `bool`, any constant expression libclang evaluates, recorded as its value: a literal (`1.0f`, `0.05f`, `true`, `u'A'`), a named constant (`inline constexpr bool DebugValidationByDefault = ...`), a `std::numbers` constant, `std::numeric_limits<T>::infinity()`, `max()` and `lowest()`, or operators applied to those (`-1.0f`, `~0u`, `1u << 3`, `2 * 4`, `std::numbers::pi_v<float> / 4.0f`); an enumerator; `{}` or `T{}` or no initialiser for a nested struct or bound type, and an aggregate initialiser setting some of a nested struct's members (`{.frequency = 2.0f}`); a bound type's constructor with literal arguments; and for arrays, a braced list of those (missing elements are zero; a `std::array`'s with its braces elided or not). A field of an enum with no enumerators has no enumerator to name, so its initialiser may be any constant libclang evaluates (`entt::null`, which converts to all bits set), recorded as the integer. An entity or reference records only the empty value: no initialiser, `{}`, `Entity()` or `AssetHandle<T>()`. A fixed string's initialiser is a string literal, a braced list of character constants (its text ends at the first zero) or `{}`, and no initialiser is the empty string; text that fills every byte, leaving no terminator, or is not UTF-8 fails. A scalar, enum, pointer or array of them (a `std::array` too) with no initialiser fails, as does any other expression.
+The initialisers recorded are: for a number or `bool`, any constant expression libclang evaluates, recorded as its value: a literal (`1.0f`, `0.05f`, `true`, `u'A'`), a named constant (`inline constexpr bool DebugValidationByDefault = ...`), a `std::numbers` constant, `std::numeric_limits<T>::infinity()`, `max()` and `lowest()`, or operators applied to those (`-1.0f`, `~0u`, `1u << 3`, `2 * 4`, `std::numbers::pi_v<float> / 4.0f`); an enumerator; `{}` or `T{}` or no initialiser for a nested struct or bound type, and an aggregate initialiser setting some of a nested struct's members (`{.frequency = 2.0f}`); a bound type's constructor with literal arguments; and for arrays, a braced list of those (missing elements are zero; a `std::array`'s with its braces elided or not). A field of an enum with no enumerators has no enumerator to name, so its initialiser may be any constant libclang evaluates (`entt::null`, which converts to all bits set), recorded as the integer. An entity or reference records only the empty value: no initialiser, `{}`, `Entity()` or `AssetHandle<T>()`. A fixed string's initialiser is a string literal, a braced list of character constants (its text ends at the first zero) or `{}`, and no initialiser is the empty string; text that fills every byte, leaving no terminator, or is not UTF-8 fails. A string's or path's initialiser is a string literal it is constructed from (`= "assets"`, `{"assets"}`), and `{}` or no initialiser is the empty text. A list's is `{}` or none, and an optional's `{}`, `std::nullopt` or none: anything else fails. A scalar, enum, pointer or array of them (a `std::array` too) with no initialiser fails, as does any other expression.
 
 A bound type's constructor arguments are matched to its components by name: its components are its fields in storage order (of an anonymous union, the first member's), and each parameter names one, ignoring leading underscores (`Quat(float w, float x, float y, float z)` and `qua(T _w, T _x, T _y, T _z)` both set `w` first). A constructor with one argument sets every component to it (`Vec3(0.5f)`). Anything else fails.
 
