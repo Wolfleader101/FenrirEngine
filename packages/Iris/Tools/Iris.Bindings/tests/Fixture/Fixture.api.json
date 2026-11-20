@@ -707,6 +707,30 @@
       ]
     },
     {
+      "name": "Fixture::Paths",
+      "category": "struct",
+      "role": "settings",
+      "doc": "A settings type holding a path and a list of strings.",
+      "fields": [
+        {
+          "name": "root",
+          "kind": "path",
+          "default": "assets"
+        },
+        {
+          "name": "extensions",
+          "kind": "list",
+          "elementKind": "string",
+          "default": []
+        },
+        {
+          "name": "threads",
+          "kind": "u32",
+          "default": 4
+        }
+      ]
+    },
+    {
       "name": "Fixture::Size",
       "category": "bound-type",
       "role": "bound-type",
@@ -756,6 +780,79 @@
         }
       ],
       "defaultKind": "m_box"
+    },
+    {
+      "name": "Fixture::Stat",
+      "category": "struct",
+      "role": "nested",
+      "doc": "A row of a data asset's table, which only data assets hold.",
+      "fields": [
+        {
+          "name": "name",
+          "kind": "string",
+          "default": ""
+        },
+        {
+          "name": "value",
+          "kind": "f32",
+          "default": 1
+        }
+      ]
+    },
+    {
+      "name": "Fixture::WeaponData",
+      "category": "struct",
+      "role": "data-asset",
+      "doc": "A data asset holding a string, a list of nested structs and an optional number.",
+      "fields": [
+        {
+          "name": "displayName",
+          "kind": "string",
+          "default": "Weapon"
+        },
+        {
+          "name": "stats",
+          "kind": "list",
+          "elementKind": "struct",
+          "elementType": "Fixture::Stat",
+          "default": []
+        },
+        {
+          "name": "cooldown",
+          "kind": "optional",
+          "elementKind": "f32",
+          "default": null
+        },
+        {
+          "name": "damage",
+          "kind": "f32",
+          "default": 10
+        }
+      ]
+    },
+    {
+      "name": "Fixture::Sword",
+      "category": "struct",
+      "role": "data-asset",
+      "base": "Fixture::WeaponData",
+      "doc": "A data asset extending another, with a list of lists of its own.",
+      "fields": [
+        {
+          "name": "reach",
+          "kind": "f32",
+          "default": 1.5
+        },
+        {
+          "name": "combos",
+          "kind": "list",
+          "elementKind": "list",
+          "element": {
+            "kind": "list",
+            "elementKind": "i32"
+          },
+          "default": []
+        }
+      ]
     },
     {
       "name": "Fixture::Tag",

@@ -1469,6 +1469,67 @@ public sealed class BindingTests
                     $"A reference whose handle nothing describes should fail naming it, but failed with\n  {exception.Message}");
     }
 
+    // describe-api's data asset and settings roles and its owning kinds (SCHEMA.md, "Owning kinds"): the C# spec binds
+    // them; until then a binding skips them and the nested types only they hold, and generates what it did without them.
+
+    [Fact]
+    public void DataAssetsSettingsTypesAndWhatOnlyTheyHoldAreSkipped()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "");
+        var without = Generator.Generate(config, [WriteDescription(directory, root =>
+        {
+            var types = root["types"]!.AsArray();
+            foreach (var skipped in types.Where(type => type!["name"]!.GetValue<string>() is
+                                                            "Fixture::WeaponData" or "Fixture::Sword" or "Fixture::Paths" or
+                                                            "Fixture::Stat").ToList())
+            {
+                types.Remove(skipped);
+            }
+        })]);
+        var with = Generator.Generate(config, [FixtureDescription]);
+
+        var changes = Changes(without, with);
+        Assert.True(changes.Count == 0, "A data asset, settings type or what only they hold changed the binding:\n" +
+                                        string.Join("\n", changes));
+        Assert.DoesNotContain(with.Values, text => text.Contains("WeaponData", StringComparison.Ordinal) ||
+                                                    text.Contains("Fixture::Stat", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ANestedTypeASkippedTypeAndABoundTypeBothHoldStaysBound()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "");
+        var description = WriteDescription(directory, root => Type(root, "Fixture::WeaponData")["fields"]!.AsArray().Add(
+            new JsonObject
+            {
+                ["name"] = "springs", ["kind"] = "list", ["elementKind"] = "struct", ["elementType"] = "Fixture::Spring",
+                ["default"] = new JsonArray(),
+            }));
+
+        var changes = Changes(Generator.Generate(config, [FixtureDescription]), Generator.Generate(config, [description]));
+
+        Assert.True(changes.Count == 0, "A data asset holding a nested type Body holds changed the binding:\n" +
+                                        string.Join("\n", changes));
+    }
+
+    [Fact]
+    public void AnOwningKindInAnyOtherRoleFailsNamingTheField()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "");
+        var description = WriteDescription(directory, root => Type(root, "Fixture::Hit")["fields"]!.AsArray().Add(
+            new JsonObject { ["name"] = "label", ["kind"] = "string", ["default"] = "" }));
+
+        var exception = Assert.Throws<BindingException>(() => Generator.Generate(config, [description]));
+
+        Assert.True(exception.Message.Contains("Fixture::Hit::label: a string, an owning kind, which a binding skips only " +
+                                               "in a data asset or settings type and what only they hold",
+                                               StringComparison.Ordinal),
+                    $"A string in a shared struct should fail naming it, but failed with\n  {exception.Message}");
+    }
+
     // The fixture's configuration, binding the mesh handle beside its own bound types.
     private static string ConfigBindingAMeshHandle(TemporaryDirectory directory) =>
         CopyConfig(directory, string.Join('\n', File.ReadAllLines(FixtureConfig)

@@ -82,7 +82,7 @@ internal sealed record Selection(string Path, string Package, IReadOnlyList<stri
             if (roleValue is not string spelling || Roles.Parse(spelling) is not { } role)
             {
                 throw new DescribeException(
-                    $"{path}: type '{name}' has role '{roleValue}'; a role is component, event, scene-resource, app-resource, shared-struct, bound-type or enum");
+                    $"{path}: type '{name}' has role '{roleValue}'; a role is component, event, scene-resource, app-resource, shared-struct, data-asset, settings, bound-type or enum");
             }
 
             types.Add(new(name, role));

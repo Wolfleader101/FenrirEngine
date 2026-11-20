@@ -20,6 +20,15 @@ internal enum Role
     /// </summary>
     Enum,
 
+    /// <summary>
+    /// A game's data in the asset store (ADR-0075): may hold the owning kinds and extend one other data asset, whose data
+    /// members it inherits. No virtual functions.
+    /// </summary>
+    DataAsset,
+
+    /// <summary>An `Install` config or an importer's options (ADR-0084): may hold the owning kinds, extends nothing with data.</summary>
+    Settings,
+
     /// <summary>Not selected: described because a selected type's field uses it.</summary>
     Nested,
 }
@@ -34,6 +43,8 @@ internal static class Roles
         Role.BoundType => "bound-type",
         Role.SceneResource => "scene-resource",
         Role.AppResource => "app-resource",
+        Role.DataAsset => "data-asset",
+        Role.Settings => "settings",
         _ => "nested",
     };
 
@@ -45,20 +56,51 @@ internal static class Roles
         "bound-type" => Role.BoundType,
         "scene-resource" => Role.SceneResource,
         "app-resource" => Role.AppResource,
+        "data-asset" => Role.DataAsset,
+        "settings" => Role.Settings,
         "enum" => Role.Enum,
         _ => null,
     };
+
+    /// <summary>The role as a diagnostic names a type of it: "a component", "a data asset".</summary>
+    public static string Phrase(Role role) => role switch
+    {
+        Role.Component => "a component",
+        Role.Event => "an event",
+        Role.SharedStruct => "a shared struct",
+        Role.BoundType => "a bound type",
+        Role.SceneResource => "a scene resource",
+        Role.AppResource => "an app resource",
+        Role.DataAsset => "a data asset",
+        Role.Settings => "a settings type",
+        Role.Enum => "an enum",
+        _ => "a nested type",
+    };
+
+    /// <summary>
+    /// Whether a type of the role holds its fields by member rather than by offset, and so may hold the owning kinds
+    /// (SCHEMA.md, "Owning kinds").
+    /// </summary>
+    public static bool IsOwning(Role role) => role is Role.DataAsset or Role.Settings;
 }
 
 /// <summary>
 /// A field's kind: what its bytes hold (SCHEMA.md, "Kinds"). <see cref="TypeName" /> names the described type of an
 /// <c>enum</c> or <c>struct</c>; <see cref="Element" /> and <see cref="Length" /> are an <c>array</c>'s, and
-/// <see cref="Length" /> alone a <c>fixed-string</c>'s bytes; <see cref="Target" /> is the type a <c>reference</c>
-/// names, which is never described for it.
+/// <see cref="Length" /> alone a <c>fixed-string</c>'s bytes; <see cref="Element" /> alone is a <c>list</c>'s or an
+/// <c>optional</c>'s; <see cref="Target" /> is the type a <c>reference</c> names, which is never described for it.
 /// </summary>
 internal sealed record FieldType(string Kind, string? TypeName = null, FieldType? Element = null, long Length = 0,
                                  string? Target = null)
 {
+    /// <summary>
+    /// The kinds a type holds by member rather than at an offset, allowed only where the role is owning
+    /// (<see cref="Roles.IsOwning" />).
+    /// </summary>
+    public static bool IsOwningKind(string kind) => kind is "string" or "list" or "optional" or "path";
+
+    public bool IsOwning => IsOwningKind(Kind);
+
     /// <summary>
     /// For a <c>reference</c> whose handle the selection also selects as a bound type (for a binding's mapping): that
     /// type's name, which the dependency order keeps before the types holding the reference, as it did when they held
@@ -121,7 +163,8 @@ internal sealed record FieldMetadata((double Min, double Max)? Range, double? St
     public static readonly FieldMetadata None = new(null, null, null, null, false, false, false, null);
 }
 
-internal sealed record FieldDescription(string Name, long Offset, FieldType Type, DefaultValue Default, string? Doc)
+/// <summary>A field: <see cref="Offset" /> is null for an owning kind, which a generated visitor reaches by member.</summary>
+internal sealed record FieldDescription(string Name, long? Offset, FieldType Type, DefaultValue Default, string? Doc)
 {
     /// <summary>The names the field had before, from its <c>@formerly</c> commands, in the order written.</summary>
     public IReadOnlyList<string> Formerly { get; init; } = [];
@@ -159,7 +202,21 @@ internal sealed record StructDescription(string Name, long Size, long Alignment,
                                          IReadOnlyList<FieldDescription> Fields)
     : TypeDescription(Name, Size, Alignment, Doc)
 {
-    public override IEnumerable<string> References() => Fields.SelectMany(field => field.Type.References());
+    /// <summary>
+    /// For a <c>data-asset</c>: the data asset it extends, whose fields are its base's description's and not repeated in
+    /// <see cref="Fields" />; null when it extends none.
+    /// </summary>
+    public string? Base { get; init; }
+
+    /// <summary>
+    /// Whether a generated visitor reaches its fields by member rather than by offset: a data asset, a settings type, or
+    /// a type holding an owning kind (itself, or in a type it holds by value). Its size, alignment and offsets are the
+    /// standard library's, which differ between them, so the description records none (SCHEMA.md, "Owning kinds").
+    /// </summary>
+    public bool ByMember { get; init; }
+
+    public override IEnumerable<string> References() =>
+        Fields.SelectMany(field => field.Type.References()).Concat(Base is null ? [] : [Base]);
 }
 
 internal sealed record TaggedUnionDescription(string Name, long Size, long Alignment, string? Doc, Role Role,

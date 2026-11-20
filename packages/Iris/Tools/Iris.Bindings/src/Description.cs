@@ -82,9 +82,10 @@ internal static class Description
     {
         var types = new List<DescribedType>();
         var byName = new Dictionary<string, DescribedType>(StringComparer.Ordinal);
+        var skipped = new HashSet<string>(StringComparer.Ordinal);
         foreach (var path in paths)
         {
-            foreach (var type in ReadOne(Path.GetFullPath(path)))
+            foreach (var type in ReadOne(Path.GetFullPath(path), skipped))
             {
                 if (byName.TryGetValue(type.Name, out var earlier))
                 {
@@ -118,7 +119,71 @@ internal static class Description
             }
         }
 
-        return types;
+        return Bound(types, skipped);
+    }
+
+    // The data asset and settings roles, which the C# spec binds; until then a binding skips them and what only they
+    // hold.
+    private static bool IsSkippedRole(string role) => role is "data-asset" or "settings";
+
+    // describe-api's owning kinds (SCHEMA.md of the input format, "Owning kinds"), which only skipped types hold.
+    private static bool IsOwningKind(string kind) => kind is "string" or "list" or "optional" or "path";
+
+    // The types a binding binds: all but the nested types that no other type reaches except through a skipped one (a
+    // data asset's table row), each checked to hold no owning kind and to have a layout.
+    private static List<DescribedType> Bound(List<DescribedType> types, HashSet<string> skippedReach)
+    {
+        var byName = types.ToDictionary(type => type.Name, StringComparer.Ordinal);
+        var fromSkipped = new HashSet<string>(skippedReach, StringComparer.Ordinal);
+        var next = new Queue<string>(skippedReach);
+        while (next.Count > 0)
+        {
+            if (byName.TryGetValue(next.Dequeue(), out var held))
+            {
+                foreach (var name in Binding.Named(held).Where(name => name is not null && fromSkipped.Add(name)))
+                {
+                    next.Enqueue(name!);
+                }
+            }
+        }
+
+        var reached = new HashSet<string>(StringComparer.Ordinal);
+        var queue = new Queue<DescribedType>(types.Where(type => type.Role != Role.Nested));
+        while (queue.Count > 0)
+        {
+            foreach (var name in Binding.Named(queue.Dequeue()))
+            {
+                if (name is not null && byName.TryGetValue(name, out var held) && reached.Add(name))
+                {
+                    queue.Enqueue(held);
+                }
+            }
+        }
+
+        var bound = types.Where(type => type.Role != Role.Nested || reached.Contains(type.Name) ||
+                                        !fromSkipped.Contains(type.Name))
+                         .ToList();
+        foreach (var type in bound)
+        {
+            foreach (var field in type.Fields.Where(field => IsOwningKind(field.Kind.Kind)))
+            {
+                throw new BindingException(
+                    $"{type.Source}: {type.Name}::{field.Name}: a {field.Kind.Kind}, an owning kind, which a binding skips " +
+                    "only in a data asset or settings type and what only they hold");
+            }
+
+            if (type.Size < 0)
+            {
+                throw new BindingException($"{type.Source}: {type.Name}: the description has no 'size'");
+            }
+
+            foreach (var field in type.Fields.Where(field => field.Offset < 0))
+            {
+                throw new BindingException($"{type.Source}: {type.Name}::{field.Name}: the description has no 'offset'");
+            }
+        }
+
+        return bound;
     }
 
     // Whether two descriptions of a type that is not a bound type record the same fields, tag, kinds and values. Docs may
@@ -135,7 +200,8 @@ internal static class Description
                a.Values.Select(value => (value.Name, value.Value)).SequenceEqual(b.Values.Select(value => (value.Name, value.Value)));
     }
 
-    private static IEnumerable<DescribedType> ReadOne(string path)
+    // A description's types but the skipped ones, whose names and the types they name go to `skipped`.
+    private static IEnumerable<DescribedType> ReadOne(string path, HashSet<string> skipped)
     {
         JsonDocument document;
         try
@@ -156,7 +222,45 @@ internal static class Description
 
         foreach (var type in Array(root, "types", path).EnumerateArray())
         {
+            if (OptionalString(type, "role") is { } role && IsSkippedRole(role))
+            {
+                skipped.UnionWith(NamesIn(type));
+                continue;
+            }
+
             yield return ReadType(type, path);
+        }
+    }
+
+    // Every type a skipped type names: its base, and its fields' types and elements' types at any depth.
+    private static IEnumerable<string> NamesIn(JsonElement element)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                foreach (var property in element.EnumerateObject())
+                {
+                    if (property.Name is "type" or "elementType" or "base" && property.Value.ValueKind == JsonValueKind.String)
+                    {
+                        yield return property.Value.GetString()!;
+                    }
+                    else if (property.Name is "fields" or "element")
+                    {
+                        foreach (var name in NamesIn(property.Value))
+                        {
+                            yield return name;
+                        }
+                    }
+                }
+
+                break;
+            case JsonValueKind.Array:
+                foreach (var name in element.EnumerateArray().SelectMany(NamesIn))
+                {
+                    yield return name;
+                }
+
+                break;
         }
     }
 
@@ -218,7 +322,10 @@ internal static class Description
                          .ToList();
         }
 
-        return new DescribedType(name, category, role, Integer(type, "size", where), Integer(type, "alignment", where),
+        // A type reached by member records no layout; Bound refuses one a binding keeps.
+        var reachedByMember = !type.TryGetProperty("size", out _);
+        return new DescribedType(name, category, role, reachedByMember ? -1 : Integer(type, "size", where),
+                                 reachedByMember ? -1 : Integer(type, "alignment", where),
                                  OptionalString(type, "doc"), path, fields, tag, unionOffset, kinds, defaultKind,
                                  underlying, values);
     }
@@ -240,7 +347,9 @@ internal static class Description
                          : throw new BindingException($"{subject}: 'default' is not a list")),
             _ => described.Clone(),
         };
-        return new Field(name, Integer(field, "offset", where), ReadKind(field, subject), value, OptionalString(field, "doc"));
+        // A field of a type reached by member records no offset; Bound refuses one a binding keeps.
+        var offset = field.TryGetProperty("offset", out _) ? Integer(field, "offset", where) : -1;
+        return new Field(name, offset, ReadKind(field, subject), value, OptionalString(field, "doc"));
     }
 
     // describe-api's fixed-layout kinds are read as the shapes they bind as (SCHEMA.md of the input format, "Kinds"): an
@@ -279,6 +388,9 @@ internal static class Description
                 return new FieldKind("struct", HandleType(target), null, null, 0) { Target = target };
             case "fixed-string":
                 return new FieldKind("array", null, "u8", null, Integer(field, "length", where));
+            case "string" or "list" or "optional" or "path":
+                // Read only to be skipped, or refused (Bound): what it names is what Binding.Named reaches through it.
+                return new FieldKind(kind, NamesIn(field).FirstOrDefault(), null, null, 0);
             default:
                 return new FieldKind(kind, OptionalString(field, "type"), null, null, 0);
         }
