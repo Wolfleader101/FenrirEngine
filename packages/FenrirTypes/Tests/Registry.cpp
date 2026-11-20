@@ -289,6 +289,37 @@ TEST_CASE("A nested struct holding an owning kind is judged in the role of the t
     REQUIRE(recording.registry.Register(dataAsset));
 }
 
+TEST_CASE("A tagged union whose alternative reaches an owning kind is refused, in any role", "[types][registry]")
+{
+    RecordingRegistry recording;
+    REQUIRE(recording.registry.Register(TypesTest::MobilityDescription));
+    REQUIRE(recording.registry.Register(CaptionDescription));
+
+    static const Fenrir::Alternative alternatives[] = {
+        {.tag = 0, .field = {.name = "m_count", .type = {.kind = Fenrir::Kind::U32}, .offset = 8}},
+        {.tag = 7,
+         .field = {.name = "m_caption",
+                   .type = {.kind = Fenrir::Kind::Struct, .type = &CaptionDescription},
+                   .offset = 8}},
+    };
+    const TypeDescription choice{
+        .name = "TypesTest::Choice",
+        .package = "FenrirTypesTests",
+        .role = Role::Settings,
+        .tag = {.name = "m_type",
+                .type = {.kind = Fenrir::Kind::Enum, .type = &TypesTest::MobilityDescription, .unionTag = true}},
+        .unionOffset = 8,
+        .alternatives = alternatives,
+    };
+
+    INFO("an alternative is read at the union's offset, so a settings type's tagged union holds no string either");
+    REQUIRE_FALSE(recording.registry.Register(choice));
+    REQUIRE(recording.diagnostics.size() == 1);
+    INFO("the diagnostic names the alternative and the kind: " << recording.diagnostics.front());
+    REQUIRE(Contains(recording.diagnostics.front(), "m_caption"));
+    REQUIRE(Contains(recording.diagnostics.front(), "string"));
+}
+
 TEST_CASE("A type with an owning field and no visit function is refused", "[types][registry]")
 {
     RecordingRegistry recording;

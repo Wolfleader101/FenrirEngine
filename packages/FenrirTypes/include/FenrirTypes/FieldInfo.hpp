@@ -95,6 +95,11 @@ namespace Fenrir
         const ListOperations* list = nullptr;
         /** @brief For `Optional`: how its value is reached. */
         const OptionalOperations* optional = nullptr;
+        /**
+         * @brief For `Enum`: the value is a tagged union's tag, which a value reference reads but refuses to write;
+         * only `TypeDescription::SelectAlternative` changes it, with the live alternative.
+         */
+        bool unionTag = false;
     };
 
     /** @brief The size in bytes a value of this type takes, as an element of a fixed array would. */
@@ -154,5 +159,15 @@ namespace Fenrir
         std::int64_t value = 0;
         /** @brief Its doc comment. */
         std::string_view doc;
+    };
+
+    /** @brief One alternative of a described tagged union: a member of its anonymous union. */
+    struct Alternative
+    {
+        /** @brief The tag value that makes it the live alternative, widened to 64 bits. */
+        std::int64_t tag = 0;
+        /** @brief The member: its name, its value's kind, its offset (the union's, where every alternative starts) and
+         * its doc. Fixed-layout kinds only. */
+        FieldInfo field;
     };
 } // namespace Fenrir
