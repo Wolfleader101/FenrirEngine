@@ -18,8 +18,7 @@ public sealed class GenerateTests
         var registration = Registration.Read(FixtureSelection);
         Assert.True(registration is not null, "The fixture's selection should have a [registration] table.");
 
-        var generated = Generator.Generate(registration, File.ReadAllText(registration.DescriptionPath),
-                                           skipUnsupported: true);
+        var generated = Generator.Generate(registration, File.ReadAllText(registration.DescriptionPath));
 
         var committedHeader = File.ReadAllText(registration.HeaderPath);
         Assert.True(committedHeader == generated.Header,
@@ -39,12 +38,11 @@ public sealed class GenerateTests
         Path.Combine(RepositoryDirectory(), "packages", "FenrirTypes", "Tests", "Package", "TestPackage.api.toml");
 
     [Fact]
-    public void TheTestPackageGivesTheCommittedHeaderAndSourceByteForByteSkippingNothing()
+    public void TheTestPackageGivesTheCommittedHeaderAndSourceByteForByte()
     {
         var registration = Registration.Read(TestPackageSelection)!;
 
-        var generated = Generator.Generate(registration, File.ReadAllText(registration.DescriptionPath),
-                                           skipUnsupported: false);
+        var generated = Generator.Generate(registration, File.ReadAllText(registration.DescriptionPath));
 
         var committedHeader = File.ReadAllText(registration.HeaderPath);
         Assert.True(committedHeader == generated.Header,
@@ -62,8 +60,7 @@ public sealed class GenerateTests
     public void TheGeneratedFilesStartWithTheGeneratedLineAndHaveOnlyLineFeeds()
     {
         var registration = Registration.Read(FixtureSelection)!;
-        var generated = Generator.Generate(registration, File.ReadAllText(registration.DescriptionPath),
-                                           skipUnsupported: true);
+        var generated = Generator.Generate(registration, File.ReadAllText(registration.DescriptionPath));
 
         foreach (var text in new[] { generated.Header, generated.Source })
         {
@@ -84,11 +81,11 @@ public sealed class GenerateTests
         var header = Path.Combine(directory.Path, "include", "Fixture", "Generated", "FixtureTypes.hpp");
         var source = Path.Combine(directory.Path, "src", "Generated", "FixtureTypes.cpp");
 
-        Assert.True(Program.Main([selection, "--skip-unsupported"]) == 0, "The first run should write the registration.");
+        Assert.True(Program.Main([selection]) == 0, "The first run should write the registration.");
         var earlier = DateTime.UtcNow.AddHours(-1);
         File.SetLastWriteTimeUtc(header, earlier);
         File.SetLastWriteTimeUtc(source, earlier);
-        Assert.True(Program.Main([selection, "--skip-unsupported"]) == 0, "The second run should succeed.");
+        Assert.True(Program.Main([selection]) == 0, "The second run should succeed.");
 
         Assert.True(File.GetLastWriteTimeUtc(header) == earlier, "A second run rewrote the unchanged header.");
         Assert.True(File.GetLastWriteTimeUtc(source) == earlier, "A second run rewrote the unchanged source.");
@@ -102,7 +99,7 @@ public sealed class GenerateTests
                                                                               Field("value", "\"kind\": \"i32\""))));
 
         var registration = Registration.Read(selection)!;
-        var generated = Generator.Generate(registration, File.ReadAllText(registration.DescriptionPath), false);
+        var generated = Generator.Generate(registration, File.ReadAllText(registration.DescriptionPath));
 
         Assert.True(generated.Source.Contains("#include \"../../include/Fixture/Generated/FixtureTypes.hpp\"\n",
                                               StringComparison.Ordinal),
@@ -134,7 +131,7 @@ public sealed class GenerateTests
     {
         var description = Description(Type("Test::Odd", "struct", "component", Field("value", kind)));
 
-        AssertFails(description, diagnostic, skipUnsupported: true);
+        AssertFails(description, diagnostic);
     }
 
     [Fact]
@@ -142,8 +139,7 @@ public sealed class GenerateTests
     {
         var description = Description(Type("Test::Odd", "struct", "widget", Field("value", "\"kind\": \"i32\"")));
 
-        AssertFails(description, "Test::Odd: its role 'widget' is not one generate-type-registry knows",
-                    skipUnsupported: true);
+        AssertFails(description, "Test::Odd: its role 'widget' is not one generate-type-registry knows");
     }
 
     [Fact]
@@ -151,8 +147,7 @@ public sealed class GenerateTests
     {
         var description = Description(Type("Test::Odd", "variant", "component", Field("value", "\"kind\": \"i32\"")));
 
-        AssertFails(description, "Test::Odd: its category 'variant' is not one generate-type-registry knows",
-                    skipUnsupported: true);
+        AssertFails(description, "Test::Odd: its category 'variant' is not one generate-type-registry knows");
     }
 
     [Theory]
@@ -217,8 +212,7 @@ public sealed class GenerateTests
             DerivedType("Test::Sword", "Test::Weapon", Field("reach", "\"kind\": \"f32\"")),
             TypeWithoutLayout("Test::Weapon", "data-asset", Field("name", "\"kind\": \"string\"")));
 
-        AssertFails(description, "Test::Sword: extends Test::Weapon, which the description does not describe before it",
-                    skipUnsupported: false);
+        AssertFails(description, "Test::Sword: extends Test::Weapon, which the description does not describe before it");
     }
 
     [Fact]
@@ -310,18 +304,6 @@ public sealed class GenerateTests
     }
 
     [Fact]
-    public void ASkippedTypeHoldingAnUnknownKindStillFailsTheTool()
-    {
-        var description = Description(TaggedUnion("Test::Shape"),
-                                      Type("Test::Collider", "struct", "component",
-                                           Field("shape", "\"kind\": \"struct\", \"type\": \"Test::Shape\""),
-                                           Field("value", "\"kind\": \"quaternion\"")));
-
-        AssertFails(description, "Test::Collider::value: its kind 'quaternion' is not one generate-type-registry knows",
-                    skipUnsupported: true);
-    }
-
-    [Fact]
     public void ATypesFieldAndATypeOfTheJoinedNameNeverNameOneArray()
     {
         // Foo's field Bar and the type Foo::Bar would both name their former-names array Foo_Bar_Formerly.
@@ -334,7 +316,7 @@ public sealed class GenerateTests
         using var directory = new TemporaryDirectory();
         var registration = Registration.Read(WriteRegisteredSelection(directory, typed))!;
 
-        var source = Generator.Generate(registration, typed, skipUnsupported: false).Source;
+        var source = Generator.Generate(registration, typed).Source;
 
         Assert.True(source.Contains("constexpr std::string_view Foo_Bar_Formerly[] = {\"Foo::Old\"};", StringComparison.Ordinal),
                     "The type Foo::Bar should keep the plain name for its former names.");
@@ -343,53 +325,91 @@ public sealed class GenerateTests
     }
 
     [Fact]
-    public void ATaggedUnionFailsNamingTheTypeUntilFenrirTypesDescribesOne()
+    public void ATaggedUnionIsWrittenWithItsTagItsAlternativesAtTheUnionsOffsetAndItsDefault()
     {
-        var description = Description(TaggedUnion("Test::Shape"),
-                                      Type("Test::Collider", "struct", "component",
-                                           Field("shape", "\"kind\": \"struct\", \"type\": \"Test::Shape\"")));
+        var generated = Generate(Description(ShapeType, TaggedUnion("Test::Shape")));
 
-        AssertFails(description, "Test::Shape: a tagged union, which is not yet described by FenrirTypes",
-                    skipUnsupported: false);
+        AssertContains(generated.Source,
+                       "    constexpr Fenrir::ValueType Test_Shape_m_extents_Element{.kind = Fenrir::Kind::F32};\n" +
+                       "    constexpr Fenrir::Alternative Test_Shape_Alternatives[] = {\n" +
+                       "        {.tag = 0, .field = {.name = \"m_radius\", .type = {.kind = Fenrir::Kind::F32}, .offset = 4, " +
+                       ".doc = \"Held when the tag is Sphere.\"}},\n" +
+                       "        {.tag = 3, .field = {.name = \"m_extents\", .type = {.kind = Fenrir::Kind::Array, " +
+                       ".element = &Test_Shape_m_extents_Element, .count = 3}, .offset = 4}},\n" +
+                       "    };\n",
+                       "Each alternative should be its tag value and its member as a field at the union's offset.");
+        AssertContains(generated.Source,
+                       "        .tag = {.name = \"m_type\", .type = {.kind = Fenrir::Kind::Enum, .type = &Test_ShapeType, " +
+                       ".unionTag = true}, .offset = 0},\n" +
+                       "        .unionOffset = 4,\n" +
+                       "        .alternatives = Test_Shape_Alternatives,\n" +
+                       "        .defaultAlternative = 1,\n",
+                       "The description should hold the tag, refusing writes, the union's offset, the alternatives " +
+                       "and the default alternative's index.");
+        AssertContains(generated.Source, "        .construct = &Fenrir::ConstructValue<Test::Shape>,\n",
+                       "Construct should be the default constructor, which holds the default alternative.");
+        Assert.False(generated.Source.Contains("Test_Shape_Fields", StringComparison.Ordinal),
+                     "A tagged union's members are its tag and alternatives, not fields.");
     }
 
     [Fact]
-    public void SkippingUnsupportedTypesLeavesOutTaggedUnionsAndWhatHoldsThem()
+    public void ATypeHoldingATaggedUnionIsWrittenToo()
     {
-        var description = Description(TaggedUnion("Test::Shape"),
-                                      Type("Test::Collider", "struct", "component",
-                                           Field("shape", "\"kind\": \"struct\", \"type\": \"Test::Shape\"")),
-                                      Type("Test::Plain", "struct", "component", Field("value", "\"kind\": \"i32\"")));
-        using var directory = new TemporaryDirectory();
-        var registration = Registration.Read(WriteRegisteredSelection(directory, description))!;
+        var generated = Generate(Description(ShapeType, TaggedUnion("Test::Shape"),
+                                             Type("Test::Collider", "struct", "component",
+                                                  Field("shape", "\"kind\": \"struct\", \"type\": \"Test::Shape\""))));
 
-        var generated = Generator.Generate(registration, description, skipUnsupported: true);
+        AssertContains(generated.Source, "{.name = \"shape\", .type = {.kind = Fenrir::Kind::Struct, .type = &Test_Shape}",
+                       "A component holding a tagged union should point at its description.");
+        AssertContains(generated.Source,
+                       "    registered = registry.Register(Test_Shape) && registered;\n" +
+                       "    registered = registry.Register(Test_Collider) && " +
+                       "Fenrir::AttachComponent<Test::Collider>(registry, Test_Collider) && registered;\n",
+                       "The tagged union should register before the component holding it.");
+    }
 
-        Assert.True(generated.Header.Contains("Fenrir::Describe<Test::Plain>", StringComparison.Ordinal),
-                    "A type holding no tagged union should still be described.");
-        Assert.False(generated.Source.Contains("Test::Shape", StringComparison.Ordinal) ||
-                     generated.Source.Contains("Test::Collider", StringComparison.Ordinal),
-                     "A tagged union, and a type holding one, should be left out.");
+    [Theory]
+    [InlineData("\"tag\": \"Sphere\"", "\"tag\": \"Cube\"",
+                "Test::Shape::m_radius: its tag 'Cube' is not an enumerator of Test::ShapeType")]
+    [InlineData("\"kind\": \"f32\", \"doc\"", "\"kind\": \"string\", \"doc\"",
+                "Test::Shape::m_radius: a string in a type the description lays out, which is visited by offset; only " +
+                "a type visited by member, which records no size, holds the owning kinds")]
+    [InlineData("\"kind\": \"f32\", \"doc\"", "\"kind\": \"quaternion\", \"doc\"",
+                "Test::Shape::m_radius: its kind 'quaternion' is not one generate-type-registry knows")]
+    public void ATaggedUnionsAlternativeTheToolCannotWriteFailsNamingIt(string original, string replacement,
+                                                                         string diagnostic)
+    {
+        var description = Description(ShapeType,
+                                      TaggedUnion("Test::Shape").Replace(original, replacement, StringComparison.Ordinal));
+
+        AssertFails(description, diagnostic);
     }
 
     [Fact]
-    public void SkippingUnsupportedTypesLeavesOutADataAssetExtendingOneLeftOut()
+    public void ATaggedUnionWhoseDefaultKindIsNoAlternativeFailsNamingIt()
     {
-        var description = Description(
-            TaggedUnion("Test::Shape"),
-            TypeWithoutLayout("Test::Weapon", "data-asset", Field("shape", "\"kind\": \"struct\", \"type\": \"Test::Shape\"")),
-            DerivedType("Test::Sword", "Test::Weapon", Field("reach", "\"kind\": \"f32\"")),
-            Type("Test::Plain", "struct", "component", Field("value", "\"kind\": \"i32\"")));
-        using var directory = new TemporaryDirectory();
-        var registration = Registration.Read(WriteRegisteredSelection(directory, description))!;
+        var description = Description(ShapeType, TaggedUnion("Test::Shape").Replace(
+            "\"defaultKind\": \"m_extents\"", "\"defaultKind\": \"m_cone\"", StringComparison.Ordinal));
 
-        var generated = Generator.Generate(registration, description, skipUnsupported: true);
+        AssertFails(description, "Test::Shape: its default kind 'm_cone' is none of its alternatives");
+    }
 
-        Assert.True(generated.Header.Contains("Fenrir::Describe<Test::Plain>", StringComparison.Ordinal),
-                    "A type holding no tagged union should still be described.");
-        Assert.False(generated.Source.Contains("Test::Weapon", StringComparison.Ordinal) ||
-                     generated.Source.Contains("Test::Sword", StringComparison.Ordinal),
-                     "A data asset holding a tagged union, and one extending it, should be left out.");
+    [Fact]
+    public void ATaggedUnionWhoseTagIsNoEnumFailsNamingIt()
+    {
+        var description = Description(ShapeType, TaggedUnion("Test::Shape").Replace(
+            "\"kind\": \"enum\", \"type\": \"Test::ShapeType\"", "\"kind\": \"u8\"", StringComparison.Ordinal));
+
+        AssertFails(description, "Test::Shape::m_type: a tagged union's tag is an enum, not a u8");
+    }
+
+    [Fact]
+    public void ATaggedUnionWhoseTagEnumIsNotDescribedBeforeItFailsNamingIt()
+    {
+        var description = Description(TaggedUnion("Test::Shape"), ShapeType);
+
+        AssertFails(description,
+                    "Test::Shape::m_type: holds Test::ShapeType, which the description does not describe before it");
     }
 
     [Fact]
@@ -429,23 +449,23 @@ public sealed class GenerateTests
                     $"Reading the selection should fail with\n  {diagnostic}\nbut failed with\n  {exception.Message}");
     }
 
-    // The registration a description gives, skipping nothing.
+    // The registration a description gives.
     private static GeneratedFiles Generate(string description)
     {
         using var directory = new TemporaryDirectory();
         var registration = Registration.Read(WriteRegisteredSelection(directory, description))!;
-        return Generator.Generate(registration, description, skipUnsupported: false);
+        return Generator.Generate(registration, description);
     }
 
     private static void AssertContains(string text, string expected, string why) =>
         Assert.True(text.Contains(expected, StringComparison.Ordinal), $"{why}\nExpected to find:\n{expected}\nin:\n{text}");
 
-    private static void AssertFails(string description, string diagnostic, bool skipUnsupported)
+    private static void AssertFails(string description, string diagnostic)
     {
         using var directory = new TemporaryDirectory();
         var registration = Registration.Read(WriteRegisteredSelection(directory, description))!;
 
-        var exception = Assert.Throws<GenerateException>(() => Generator.Generate(registration, description, skipUnsupported));
+        var exception = Assert.Throws<GenerateException>(() => Generator.Generate(registration, description));
 
         Assert.True(exception.Message.Contains(diagnostic, StringComparison.Ordinal),
                     $"Generating should fail with\n  {diagnostic}\nbut failed with\n  {exception.Message}");
@@ -482,11 +502,19 @@ public sealed class GenerateTests
         $"{{\"name\": \"{name}\", \"category\": \"struct\", \"role\": \"data-asset\", \"base\": \"{baseName}\", " +
         $"\"fields\": [{string.Join(", ", fields)}]}}";
 
-    // A tagged union of one kind, in the shape describe-api records one.
+    // The enum a TaggedUnion's tag is: Sphere is 0 and Box 3.
+    private const string ShapeType =
+        "{\"name\": \"Test::ShapeType\", \"category\": \"enum\", \"underlying\": \"u8\", \"size\": 1, \"alignment\": 1, " +
+        "\"values\": [{\"name\": \"Sphere\", \"value\": 0}, {\"name\": \"Box\", \"value\": 3}]}";
+
+    // A tagged union of two kinds tagged by ShapeType, its second the default, in the shape describe-api records one.
     private static string TaggedUnion(string name) =>
-        $"{{\"name\": \"{name}\", \"category\": \"tagged-union\", \"role\": \"nested\", \"size\": 8, \"alignment\": 4, " +
-        "\"tag\": {\"name\": \"m_type\", \"offset\": 0, \"kind\": \"u8\", \"default\": 0}, \"unionOffset\": 4, " +
-        "\"kinds\": [{\"name\": \"m_radius\", \"tag\": \"Sphere\", \"kind\": \"f32\"}], \"defaultKind\": \"m_radius\"}";
+        $"{{\"name\": \"{name}\", \"category\": \"tagged-union\", \"role\": \"nested\", \"size\": 16, \"alignment\": 4, " +
+        "\"tag\": {\"name\": \"m_type\", \"offset\": 0, \"kind\": \"enum\", \"type\": \"Test::ShapeType\", \"default\": \"Box\"}, " +
+        "\"unionOffset\": 4, \"kinds\": [" +
+        "{\"name\": \"m_radius\", \"tag\": \"Sphere\", \"kind\": \"f32\", \"doc\": \"Held when the tag is Sphere.\"}, " +
+        "{\"name\": \"m_extents\", \"tag\": \"Box\", \"kind\": \"array\", \"elementKind\": \"f32\", \"length\": 3}" +
+        "], \"defaultKind\": \"m_extents\"}";
 
     private static string Field(string name, string kind) =>
         $"{{\"name\": \"{name}\", \"offset\": 0, {kind}, \"default\": 0}}";

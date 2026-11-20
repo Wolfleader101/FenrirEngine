@@ -14,6 +14,43 @@
 
 namespace
 {
+    // Test::Vec2
+    static_assert(sizeof(Test::Vec2) == 8 && alignof(Test::Vec2) == 4,
+                  "Test::Vec2 is not the layout TestPackage.api.json describes: regenerate the description, then this registration");
+    constexpr Fenrir::FieldInfo Test_Vec2_Fields[] = {
+        {.name = "x", .type = {.kind = Fenrir::Kind::F32}, .offset = 0},
+        {.name = "y", .type = {.kind = Fenrir::Kind::F32}, .offset = 4},
+    };
+    constexpr Fenrir::TypeDescription Test_Vec2{
+        .name = "Test::Vec2",
+        .package = "TestPackage",
+        .role = Fenrir::Role::BoundType,
+        .size = sizeof(Test::Vec2),
+        .alignment = alignof(Test::Vec2),
+        .construct = &Fenrir::ConstructValue<Test::Vec2>,
+        .destroy = &Fenrir::DestroyValue<Test::Vec2>,
+        .doc = "A bound type: a maths library's two-component vector, visited as its components.",
+        .fields = Test_Vec2_Fields,
+    };
+
+    // Test::Box
+    static_assert(sizeof(Test::Box) == 8 && alignof(Test::Box) == 4,
+                  "Test::Box is not the layout TestPackage.api.json describes: regenerate the description, then this registration");
+    constexpr Fenrir::FieldInfo Test_Box_Fields[] = {
+        {.name = "halfExtents", .type = {.kind = Fenrir::Kind::Struct, .type = &Test_Vec2}, .offset = 0},
+    };
+    constexpr Fenrir::TypeDescription Test_Box{
+        .name = "Test::Box",
+        .package = "TestPackage",
+        .role = Fenrir::Role::Nested,
+        .size = sizeof(Test::Box),
+        .alignment = alignof(Test::Box),
+        .construct = &Fenrir::ConstructValue<Test::Box>,
+        .destroy = &Fenrir::DestroyValue<Test::Box>,
+        .doc = "A box's half extents, as a Volume's alternative.",
+        .fields = Test_Box_Fields,
+    };
+
     // Test::Layers
     static_assert(sizeof(Test::Layers) == 4 && alignof(Test::Layers) == 4,
                   "Test::Layers is not the layout TestPackage.api.json describes: regenerate the description, then this registration");
@@ -51,25 +88,6 @@ namespace
         .doc = "How rare an item is.",
         .enumerators = Test_Rarity_Enumerators,
         .underlying = Fenrir::Kind::U8,
-    };
-
-    // Test::Vec2
-    static_assert(sizeof(Test::Vec2) == 8 && alignof(Test::Vec2) == 4,
-                  "Test::Vec2 is not the layout TestPackage.api.json describes: regenerate the description, then this registration");
-    constexpr Fenrir::FieldInfo Test_Vec2_Fields[] = {
-        {.name = "x", .type = {.kind = Fenrir::Kind::F32}, .offset = 0},
-        {.name = "y", .type = {.kind = Fenrir::Kind::F32}, .offset = 4},
-    };
-    constexpr Fenrir::TypeDescription Test_Vec2{
-        .name = "Test::Vec2",
-        .package = "TestPackage",
-        .role = Fenrir::Role::BoundType,
-        .size = sizeof(Test::Vec2),
-        .alignment = alignof(Test::Vec2),
-        .construct = &Fenrir::ConstructValue<Test::Vec2>,
-        .destroy = &Fenrir::DestroyValue<Test::Vec2>,
-        .doc = "A bound type: a maths library's two-component vector, visited as its components.",
-        .fields = Test_Vec2_Fields,
     };
 
     // Test::Marker
@@ -211,6 +229,67 @@ namespace
         .visit = &Test_Sword_Visit,
     };
 
+    // Test::VolumeKind
+    static_assert(sizeof(Test::VolumeKind) == 1 && alignof(Test::VolumeKind) == 1,
+                  "Test::VolumeKind is not the layout TestPackage.api.json describes: regenerate the description, then this registration");
+    constexpr Fenrir::Enumerator Test_VolumeKind_Enumerators[] = {
+        {.name = "Box", .value = 0},
+        {.name = "Circle", .value = 2},
+    };
+    constexpr Fenrir::TypeDescription Test_VolumeKind{
+        .name = "Test::VolumeKind",
+        .package = "TestPackage",
+        .role = Fenrir::Role::Enum,
+        .size = sizeof(Test::VolumeKind),
+        .alignment = alignof(Test::VolumeKind),
+        .construct = &Fenrir::ConstructValue<Test::VolumeKind>,
+        .destroy = &Fenrir::DestroyValue<Test::VolumeKind>,
+        .doc = "Which alternative a Volume holds.",
+        .enumerators = Test_VolumeKind_Enumerators,
+        .underlying = Fenrir::Kind::U8,
+    };
+
+    // Test::Volume
+    static_assert(sizeof(Test::Volume) == 12 && alignof(Test::Volume) == 4,
+                  "Test::Volume is not the layout TestPackage.api.json describes: regenerate the description, then this registration");
+    constexpr Fenrir::Alternative Test_Volume_Alternatives[] = {
+        {.tag = 0, .field = {.name = "m_box", .type = {.kind = Fenrir::Kind::Struct, .type = &Test_Box}, .offset = 4}},
+        {.tag = 2, .field = {.name = "m_radius", .type = {.kind = Fenrir::Kind::F32}, .offset = 4, .doc = "A circle's radius."}},
+    };
+    constexpr Fenrir::TypeDescription Test_Volume{
+        .name = "Test::Volume",
+        .package = "TestPackage",
+        .role = Fenrir::Role::Nested,
+        .size = sizeof(Test::Volume),
+        .alignment = alignof(Test::Volume),
+        .construct = &Fenrir::ConstructValue<Test::Volume>,
+        .destroy = &Fenrir::DestroyValue<Test::Volume>,
+        .doc = "A tagged union: a struct alternative, the default, and a scalar one, its tag value not its index.",
+        .tag = {.name = "m_kind", .type = {.kind = Fenrir::Kind::Enum, .type = &Test_VolumeKind, .unionTag = true}, .offset = 0},
+        .unionOffset = 4,
+        .alternatives = Test_Volume_Alternatives,
+        .defaultAlternative = 0,
+    };
+
+    // Test::Trigger
+    static_assert(sizeof(Test::Trigger) == 16 && alignof(Test::Trigger) == 4,
+                  "Test::Trigger is not the layout TestPackage.api.json describes: regenerate the description, then this registration");
+    constexpr Fenrir::FieldInfo Test_Trigger_Fields[] = {
+        {.name = "volume", .type = {.kind = Fenrir::Kind::Struct, .type = &Test_Volume}, .offset = 0},
+        {.name = "once", .type = {.kind = Fenrir::Kind::Bool}, .offset = 12},
+    };
+    constexpr Fenrir::TypeDescription Test_Trigger{
+        .name = "Test::Trigger",
+        .package = "TestPackage",
+        .role = Fenrir::Role::Component,
+        .size = sizeof(Test::Trigger),
+        .alignment = alignof(Test::Trigger),
+        .construct = &Fenrir::ConstructValue<Test::Trigger>,
+        .destroy = &Fenrir::DestroyValue<Test::Trigger>,
+        .doc = "A component holding a tagged union.",
+        .fields = Test_Trigger_Fields,
+    };
+
     // Test::Weather
     static_assert(sizeof(Test::Weather) == 4 && alignof(Test::Weather) == 4,
                   "Test::Weather is not the layout TestPackage.api.json describes: regenerate the description, then this registration");
@@ -231,6 +310,16 @@ namespace
     };
 } // namespace
 
+const Fenrir::TypeDescription& Fenrir::Describe<Test::Vec2>::Description() noexcept
+{
+    return Test_Vec2;
+}
+
+const Fenrir::TypeDescription& Fenrir::Describe<Test::Box>::Description() noexcept
+{
+    return Test_Box;
+}
+
 const Fenrir::TypeDescription& Fenrir::Describe<Test::Layers>::Description() noexcept
 {
     return Test_Layers;
@@ -239,11 +328,6 @@ const Fenrir::TypeDescription& Fenrir::Describe<Test::Layers>::Description() noe
 const Fenrir::TypeDescription& Fenrir::Describe<Test::Rarity>::Description() noexcept
 {
     return Test_Rarity;
-}
-
-const Fenrir::TypeDescription& Fenrir::Describe<Test::Vec2>::Description() noexcept
-{
-    return Test_Vec2;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Test::Marker>::Description() noexcept
@@ -271,6 +355,21 @@ const Fenrir::TypeDescription& Fenrir::Describe<Test::Sword>::Description() noex
     return Test_Sword;
 }
 
+const Fenrir::TypeDescription& Fenrir::Describe<Test::VolumeKind>::Description() noexcept
+{
+    return Test_VolumeKind;
+}
+
+const Fenrir::TypeDescription& Fenrir::Describe<Test::Volume>::Description() noexcept
+{
+    return Test_Volume;
+}
+
+const Fenrir::TypeDescription& Fenrir::Describe<Test::Trigger>::Description() noexcept
+{
+    return Test_Trigger;
+}
+
 const Fenrir::TypeDescription& Fenrir::Describe<Test::Weather>::Description() noexcept
 {
     return Test_Weather;
@@ -281,14 +380,18 @@ bool Fenrir::Generated::RegisterTestPackageTypes(Fenrir::TypeRegistry& registry)
     // As the description lists them: a type after every type its fields name and the data asset it
     // extends. A component or resource that registers goes to its role's hook, which hangs its attachments.
     bool registered = true;
+    registered = registry.Register(Test_Vec2) && registered;
+    registered = registry.Register(Test_Box) && registered;
     registered = registry.Register(Test_Layers) && Fenrir::AttachAppResource<Test::Layers>(registry, Test_Layers) && registered;
     registered = registry.Register(Test_Rarity) && registered;
-    registered = registry.Register(Test_Vec2) && registered;
     registered = registry.Register(Test_Marker) && Fenrir::AttachComponent<Test::Marker>(registry, Test_Marker) && registered;
     registered = registry.Register(Test_Options) && registered;
     registered = registry.Register(Test_Stat) && registered;
     registered = registry.Register(Test_WeaponData) && registered;
     registered = registry.Register(Test_Sword) && registered;
+    registered = registry.Register(Test_VolumeKind) && registered;
+    registered = registry.Register(Test_Volume) && registered;
+    registered = registry.Register(Test_Trigger) && Fenrir::AttachComponent<Test::Trigger>(registry, Test_Trigger) && registered;
     registered = registry.Register(Test_Weather) && Fenrir::AttachSceneResource<Test::Weather>(registry, Test_Weather) && registered;
     return registered;
 }

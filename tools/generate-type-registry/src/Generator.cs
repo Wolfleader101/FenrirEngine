@@ -10,9 +10,9 @@ internal sealed record GeneratedFiles(string Header, string Source);
 /// <summary>
 /// Writes a package's type registration (ADR-0074) from its API description: one <c>TypeDescription</c> per described
 /// type as constant data, a fixed-layout type's fields with the offsets its description records (the table a
-/// <c>TypeDescription::Visit</c> walks), an enum's enumerators, each type's <c>Describe&lt;T&gt;</c> and the function
-/// registering them all. The text is the same bytes on every platform: LF line ends, and only ASCII, any other text
-/// escaped.
+/// <c>TypeDescription::Visit</c> walks), an enum's enumerators, a tagged union's tag and alternatives, each type's
+/// <c>Describe&lt;T&gt;</c> and the function registering them all. The text is the same bytes on every platform: LF line
+/// ends, and only ASCII, any other text escaped.
 /// </summary>
 internal static class Generator
 {
@@ -21,10 +21,9 @@ internal static class Generator
     /// <summary>
     /// Generates the registration's header and source from the description's JSON text. Throws
     /// <see cref="GenerateException" /> naming the type (and field) when the description holds a category, role or kind
-    /// the tool does not know, or a type it cannot generate yet; with <paramref name="skipUnsupported" />, a type of the
-    /// last sort is left out, as is every type that holds one, instead.
+    /// the tool does not know, or a type it cannot write.
     /// </summary>
-    public static GeneratedFiles Generate(Registration registration, string descriptionJson, bool skipUnsupported)
+    public static GeneratedFiles Generate(Registration registration, string descriptionJson)
     {
         using var document = ParseDescription(registration, descriptionJson);
         var root = document.RootElement;
@@ -36,7 +35,7 @@ internal static class Generator
         }
 
         var identifiers = new Identifiers();
-        var types = Read(root.GetProperty("types"), skipUnsupported, identifiers);
+        var types = Read(root.GetProperty("types"), identifiers);
         return new GeneratedFiles(WriteHeader(registration, types), WriteSource(registration, types, identifiers));
     }
 
@@ -57,39 +56,28 @@ internal static class Generator
     private sealed record Described(string Name, string Identifier, JsonElement Json);
 
     // The types to describe, in the description's order (dependencies first), each checked and given an identifier.
-    private static List<Described> Read(JsonElement types, bool skipUnsupported, Identifiers identifiers)
+    private static List<Described> Read(JsonElement types, Identifiers identifiers)
     {
         var described = new List<Described>();
-        var skipped = new HashSet<string>(StringComparer.Ordinal);
+        var earlier = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         foreach (var type in types.EnumerateArray())
         {
             var name = type.GetProperty("name").GetString()!;
-            // Whatever the skip flag, so a skipped type holding something the tool does not know still fails it.
             CheckKnown(name, type);
-            var unsupported = Unsupported(name, type) ?? HeldSkipped(name, type, skipped);
-            if (unsupported is not null)
+            CheckFields(name, type, earlier.Keys.ToHashSet(StringComparer.Ordinal));
+            if (IsTaggedUnion(type))
             {
-                if (!skipUnsupported)
-                {
-                    throw new GenerateException(unsupported);
-                }
-
-                skipped.Add(name);
-                continue;
+                CheckTaggedUnion(name, type, earlier);
             }
 
-            CheckFields(name, type, described.Select(d => d.Name).ToHashSet(StringComparer.Ordinal));
             described.Add(new Described(name, identifiers.Unique(Identifier(name)), type));
+            earlier.Add(name, type);
         }
 
         return described;
     }
 
-    // Why the tool cannot generate this type yet, naming it; null when it can.
-    private static string? Unsupported(string name, JsonElement type) =>
-        type.GetProperty("category").GetString() == "tagged-union"
-            ? $"{name}: a tagged union, which is not yet described by FenrirTypes"
-            : null;
+    private static bool IsTaggedUnion(JsonElement type) => type.GetProperty("category").GetString() == "tagged-union";
 
     // Whether the type is reached by member through a generated visit function rather than by offset: a struct whose
     // description records no layout (a data asset, a settings type, a struct holding an owning kind).
@@ -99,25 +87,6 @@ internal static class Generator
     // The data asset the type extends; null when it extends none.
     private static string? Base(JsonElement type) =>
         type.TryGetProperty("base", out var baseName) ? baseName.GetString() : null;
-
-    // Why a type holding or extending a type left out is left out too; null when it holds and extends none.
-    private static string? HeldSkipped(string name, JsonElement type, HashSet<string> skipped)
-    {
-        if (Base(type) is { } baseName && skipped.Contains(baseName))
-        {
-            return $"{name}: extends {baseName}, which is left out";
-        }
-
-        foreach (var field in Fields(type))
-        {
-            foreach (var held in HeldTypes(field).Where(skipped.Contains))
-            {
-                return $"{name}::{field.GetProperty("name").GetString()}: holds {held}, which is left out";
-            }
-        }
-
-        return null;
-    }
 
     // The described types a field's value or its elements are, by name, through elements recorded whole too.
     private static IEnumerable<string> HeldTypes(JsonElement field)
@@ -188,6 +157,82 @@ internal static class Generator
         }
     }
 
+    // Every member a type holds, each checked as a field is: its fields, and a tagged union's tag and alternatives.
+    private static IEnumerable<JsonElement> Members(JsonElement type)
+    {
+        foreach (var field in Fields(type))
+        {
+            yield return field;
+        }
+
+        if (!IsTaggedUnion(type))
+        {
+            yield break;
+        }
+
+        yield return type.GetProperty("tag");
+        foreach (var alternative in type.GetProperty("kinds").EnumerateArray())
+        {
+            yield return alternative;
+        }
+    }
+
+    // Fails naming the tag, an alternative or the type when the tag is not an enum, an alternative's tag is none of the
+    // enum's enumerators, or the default kind is none of the alternatives. The tag's enum is described before it, as
+    // CheckFields has checked.
+    private static void CheckTaggedUnion(string name, JsonElement type, Dictionary<string, JsonElement> earlier)
+    {
+        var tag = type.GetProperty("tag");
+        var tagKind = tag.GetProperty("kind").GetString()!;
+        if (tagKind != "enum")
+        {
+            throw new GenerateException(
+                $"{name}::{tag.GetProperty("name").GetString()}: a tagged union's tag is an enum, not {WithArticle(tagKind)}");
+        }
+
+        var tagEnum = earlier[tag.GetProperty("type").GetString()!];
+        foreach (var alternative in type.GetProperty("kinds").EnumerateArray())
+        {
+            TagValue(name, alternative, tagEnum);
+        }
+
+        DefaultAlternative(name, type);
+    }
+
+    // The value of the enumerator an alternative's tag names, as the tag's enum describes it.
+    private static JsonElement TagValue(string name, JsonElement alternative, JsonElement tagEnum)
+    {
+        var enumerator = alternative.GetProperty("tag").GetString()!;
+        foreach (var value in tagEnum.GetProperty("values").EnumerateArray())
+        {
+            if (value.GetProperty("name").GetString() == enumerator)
+            {
+                return value.GetProperty("value");
+            }
+        }
+
+        throw new GenerateException($"{name}::{alternative.GetProperty("name").GetString()}: its tag '{enumerator}' is not " +
+                                    $"an enumerator of {tagEnum.GetProperty("name").GetString()}");
+    }
+
+    // The index among a tagged union's alternatives of the one its default constructor holds.
+    private static int DefaultAlternative(string name, JsonElement type)
+    {
+        var defaultKind = type.GetProperty("defaultKind").GetString()!;
+        var index = 0;
+        foreach (var alternative in type.GetProperty("kinds").EnumerateArray())
+        {
+            if (alternative.GetProperty("name").GetString() == defaultKind)
+            {
+                return index;
+            }
+
+            ++index;
+        }
+
+        throw new GenerateException($"{name}: its default kind '{defaultKind}' is none of its alternatives");
+    }
+
     // Fails naming the type, or the type and field, when the description holds a category, role or kind the tool does
     // not know.
     private static void CheckKnown(string name, JsonElement type)
@@ -215,7 +260,7 @@ internal static class Generator
             throw new GenerateException($"{name}: its role '{role}' is not one generate-type-registry knows");
         }
 
-        foreach (var field in Fields(type))
+        foreach (var field in Members(type))
         {
             var fieldName = $"{name}::{field.GetProperty("name").GetString()}";
             foreach (var (key, what) in new[] { ("kind", "kind"), ("elementKind", "element kind") })
@@ -239,7 +284,7 @@ internal static class Generator
             throw new GenerateException($"{name}: extends {baseName}, which the description does not describe before it");
         }
 
-        foreach (var field in Fields(type))
+        foreach (var field in Members(type))
         {
             var fieldName = $"{name}::{field.GetProperty("name").GetString()}";
             var kind = field.GetProperty("kind").GetString()!;
@@ -386,6 +431,7 @@ internal static class Generator
         text.Line("namespace");
         text.Line("{");
         var typeIds = types.ToDictionary(type => type.Name, type => type.Identifier, StringComparer.Ordinal);
+        var jsons = types.ToDictionary(type => type.Name, type => type.Json, StringComparer.Ordinal);
         var visits = new Dictionary<string, string>(StringComparer.Ordinal);
         var first = true;
         foreach (var type in types)
@@ -396,7 +442,7 @@ internal static class Generator
             }
 
             first = false;
-            WriteDescription(text, registration, type, typeIds, visits, identifiers);
+            WriteDescription(text, registration, type, typeIds, jsons, visits, identifiers);
         }
 
         text.Line("} // namespace");
@@ -442,8 +488,8 @@ internal static class Generator
     }
 
     private static void WriteDescription(Text text, Registration registration, Described type,
-                                         Dictionary<string, string> typeIds, Dictionary<string, string> visits,
-                                         Identifiers identifiers)
+                                         Dictionary<string, string> typeIds, Dictionary<string, JsonElement> jsons,
+                                         Dictionary<string, string> visits, Identifiers identifiers)
     {
         var json = type.Json;
         var name = type.Name;
@@ -503,6 +549,13 @@ internal static class Generator
             text.Line("    };");
         }
 
+        string? tag = null;
+        string? alternatives = null;
+        if (IsTaggedUnion(json))
+        {
+            (tag, alternatives) = WriteAlternatives(text, type, typeIds, jsons, identifiers);
+        }
+
         var visit = byMember ? WriteVisit(text, type, fields, visits, identifiers) : null;
 
         var role = isEnum ? "Enum" : RoleName(json.GetProperty("role").GetString()!)!;
@@ -559,12 +612,50 @@ internal static class Generator
             text.Line($"        .underlying = Fenrir::Kind::{KindName(json.GetProperty("underlying").GetString()!)},");
         }
 
+        if (tag is not null)
+        {
+            text.Line($"        .tag = {tag},");
+            text.Line($"        .unionOffset = {json.GetProperty("unionOffset").GetInt64()},");
+            text.Line($"        .alternatives = {alternatives},");
+            text.Line($"        .defaultAlternative = {DefaultAlternative(name, json)},");
+        }
+
         if (visit is not null)
         {
             text.Line($"        .visit = &{visit},");
         }
 
         text.Line("    };");
+    }
+
+    // Writes a tagged union's alternatives, each its tag value and its member as a field at the union's offset; returns
+    // the tag's FieldInfo initialiser, its type refusing writes, and the alternatives' name.
+    private static (string Tag, string Alternatives) WriteAlternatives(Text text, Described type,
+                                                                     Dictionary<string, string> typeIds,
+                                                                     Dictionary<string, JsonElement> jsons,
+                                                                     Identifiers identifiers)
+    {
+        var json = type.Json;
+        var tagJson = json.GetProperty("tag");
+        var tag = FieldEntry(text, type.Name, type.Identifier, tagJson, false, typeIds, identifiers, unionTag: true);
+        var tagEnum = jsons[tagJson.GetProperty("type").GetString()!];
+        var unionOffset = json.GetProperty("unionOffset").GetInt64();
+        var entries = json.GetProperty("kinds").EnumerateArray()
+                          .Select(alternative =>
+                                      $"{{.tag = {Integer(TagValue(type.Name, alternative, tagEnum))}, .field = " +
+                                      FieldEntry(text, type.Name, type.Identifier, alternative, false, typeIds, identifiers,
+                                                 offset: unionOffset) + "}")
+                          .ToList();
+
+        var alternatives = identifiers.Unique($"{type.Identifier}_Alternatives");
+        text.Line($"    constexpr Fenrir::Alternative {alternatives}[] = {{");
+        foreach (var entry in entries)
+        {
+            text.Line($"        {entry},");
+        }
+
+        text.Line("    };");
+        return (tag, alternatives);
     }
 
     // Writes a by-member type's visit function, which pushes its base's fields (through the base's own visit function),
@@ -605,9 +696,11 @@ internal static class Generator
 
     // One FieldInfo initialiser; writes the data it points at (element types, former names) first. A by-member type's
     // field has no offset, and its lists and optionals reach their elements through operations on the member's own
-    // C++ type, so the generator never spells a standard library type.
+    // C++ type, so the generator never spells a standard library type. A tagged union's alternative records no offset
+    // of its own and is given the union's; its tag's type refuses writes.
     private static string FieldEntry(Text text, string typeName, string id, JsonElement field, bool byMember,
-                                     Dictionary<string, string> typeIds, Identifiers identifiers)
+                                     Dictionary<string, string> typeIds, Identifiers identifiers, long? offset = null,
+                                     bool unionTag = false)
     {
         var name = field.GetProperty("name").GetString()!;
         var fieldId = $"{id}_{Identifier(name)}";
@@ -616,11 +709,12 @@ internal static class Generator
         var entry = new List<string>
         {
             $".name = {Literal(name)}",
-            $".type = {{{ValueTypeOf(text, $"{typeName}::{name}", field, member, fieldId, typeIds, identifiers)}}}",
+            $".type = {{{ValueTypeOf(text, $"{typeName}::{name}", field, member, fieldId, typeIds, identifiers)}" +
+            $"{(unionTag ? ", .unionTag = true" : "")}}}",
         };
         if (!byMember)
         {
-            entry.Add($".offset = {field.GetProperty("offset").GetInt64()}");
+            entry.Add($".offset = {offset ?? field.GetProperty("offset").GetInt64()}");
         }
 
         if (field.TryGetProperty("formerly", out var formerly))

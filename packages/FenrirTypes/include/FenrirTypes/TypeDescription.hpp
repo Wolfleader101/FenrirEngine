@@ -70,6 +70,20 @@ namespace Fenrir
         /** @brief For an `Enum`: its underlying integer kind. */
         Kind underlying = Kind::I32;
         /**
+         * @brief For a tagged union: its tag, a field of kind `Enum` whose value says which alternative is live. Its
+         * type's `unionTag` is set, so a value reference refuses to write it.
+         */
+        FieldInfo tag;
+        /** @brief For a tagged union: the offset of its anonymous union, where every alternative's value starts. */
+        std::size_t unionOffset = 0;
+        /**
+         * @brief For a tagged union: its alternatives, the union's members, in declaration order; empty for any other
+         * type.
+         */
+        std::span<const Alternative> alternatives;
+        /** @brief For a tagged union: the index in `alternatives` of the one the default constructor holds. */
+        std::size_t defaultAlternative = 0;
+        /**
          * @brief For a type holding an owning kind: the generated function that pushes each field of the instance at
          * `instance` to `visitor` once, its base's fields first (ADR-0075). Null for a fixed-layout type, which is
          * visited through its fields' offsets.
@@ -87,11 +101,36 @@ namespace Fenrir
          *
          * Through `visit` when the type has one, else through each field's offset; a visitor cannot tell which. A
          * field of a nested struct arrives as one `Struct` value, which the visitor walks through `ValueRef::Visit`
-         * if it wants its fields.
+         * if it wants its fields. A tagged union pushes its tag, then its live alternative alone; a member that is not
+         * live is never read.
          */
         void Visit(void* instance, FieldVisitor& visitor) const;
 
         /** @brief Pushes each field of the instance at `instance` to `visitor` once, in storage order, read-only. */
         void Visit(const void* instance, ConstFieldVisitor& visitor) const;
+
+        /** @brief Whether the type is a tagged union: a tag, then one alternative live at a time. */
+        [[nodiscard]] bool IsTaggedUnion() const noexcept
+        {
+            return !alternatives.empty();
+        }
+
+        /**
+         * @brief For a tagged union: the alternative live in the instance at `instance`, the one its tag selects; null
+         * for any other type, or when the tag selects none.
+         */
+        [[nodiscard]] const Alternative* LiveAlternative(const void* instance) const noexcept;
+
+        /**
+         * @brief For a tagged union: makes the alternative `tagValue` selects live in the instance at `instance`.
+         *
+         * Destroys the live alternative's value, value-initialises the new one with its own defaults (a struct's
+         * through its description), then writes the tag, so a reader selects first and then fills the live member.
+         * Selecting the live alternative again resets it to its defaults.
+         *
+         * @return Whether it was selected: false, changing nothing, for a type that is not a tagged union or a tag
+         * value that selects no alternative.
+         */
+        bool SelectAlternative(void* instance, std::int64_t tagValue) const;
     };
 } // namespace Fenrir

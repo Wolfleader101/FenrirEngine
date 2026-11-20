@@ -161,6 +161,20 @@ struct Fenrir::Describe<Fixture::SphereShape>
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
+/** @brief The description of Fixture::Shape that RegisterFixtureTypes adds. */
+template <>
+struct Fenrir::Describe<Fixture::Shape>
+{
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of Fixture::Collider that RegisterFixtureTypes adds. */
+template <>
+struct Fenrir::Describe<Fixture::Collider>
+{
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
 /** @brief The description of Fixture::Columns that RegisterFixtureTypes adds. */
 template <>
 struct Fenrir::Describe<Fixture::Columns>
@@ -220,6 +234,13 @@ struct Fenrir::Describe<Fixture::Paths>
 /** @brief The description of Fixture::Size that RegisterFixtureTypes adds. */
 template <>
 struct Fenrir::Describe<Fixture::Size>
+{
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of Fixture::Sky that RegisterFixtureTypes adds. */
+template <>
+struct Fenrir::Describe<Fixture::Sky>
 {
     static const Fenrir::TypeDescription& Description() noexcept;
 };

@@ -3,7 +3,7 @@
 // The FenrirTypes test package: a header that is no engine package's, holding one of everything a type registration
 // describes, run through both real tools (fenrir-describe-api writes TestPackage.api.json beside it, and
 // fenrir-generate-type-registry writes Generated/TestPackageTypes.* from that), whose committed output the tests
-// compile and exercise. No tagged union yet: FenrirTypes describes none until ticket 11 of the types spec.
+// compile and exercise.
 
 #include <cstdint>
 #include <filesystem>
@@ -122,6 +122,61 @@ namespace Test
     struct Layers
     {
         std::uint32_t visible = 0xFFu;
+    };
+
+    /** @brief Which alternative a Volume holds. */
+    enum class VolumeKind : std::uint8_t
+    {
+        Box,
+        Circle = 2,
+    };
+
+    /** @brief A box's half extents, as a Volume's alternative. */
+    struct Box
+    {
+        Vec2 halfExtents{0.5f, 0.5f};
+    };
+
+    /** @brief A tagged union: a struct alternative, the default, and a scalar one, its tag value not its index. */
+    class Volume
+    {
+      public:
+        Volume() : Volume(Box{})
+        {
+        }
+
+        Volume(Box box) : m_kind(VolumeKind::Box), m_box(box)
+        {
+        }
+
+        explicit Volume(float radius) : m_kind(VolumeKind::Circle), m_radius(radius)
+        {
+        }
+
+        [[nodiscard]] VolumeKind Kind() const
+        {
+            return m_kind;
+        }
+
+        [[nodiscard]] float Radius() const
+        {
+            return m_radius;
+        }
+
+      private:
+        VolumeKind m_kind;
+        union {
+            Box m_box;
+            /** @brief A circle's radius. */
+            float m_radius;
+        };
+    };
+
+    /** @brief A component holding a tagged union. */
+    struct Trigger
+    {
+        Volume volume;
+        bool once = false;
     };
 
     /** @brief A row of a data asset's table: a nested struct holding a string, so visited by member too. */

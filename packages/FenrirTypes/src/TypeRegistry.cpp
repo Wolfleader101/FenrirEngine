@@ -39,9 +39,14 @@ namespace Fenrir
             while (leaf->element != nullptr)
                 leaf = leaf->element;
             if (leaf->kind == Kind::Struct && leaf->type != nullptr)
+            {
                 for (const FieldInfo& field : leaf->type->fields)
                     if (const ValueType* owning = HeldOwning(field.type))
                         return owning;
+                for (const Alternative& alternative : leaf->type->alternatives)
+                    if (const ValueType* owning = HeldOwning(alternative.field.type))
+                        return owning;
+            }
             return nullptr;
         }
 
@@ -125,6 +130,17 @@ namespace Fenrir
                 Report(prefix + "its field " + Quoted(field.name) + " holds a " +
                        std::string(KindName(OwnOwning(field.type)->kind)) +
                        ", which has no offset to visit it by, and the type has no visit function");
+                return false;
+            }
+        }
+
+        // An alternative's value lives in the union's bytes, read at the union's offset, so it is fixed-layout.
+        for (const Alternative& alternative : description.alternatives)
+        {
+            if (const ValueType* held = HeldOwning(alternative.field.type))
+            {
+                Report(prefix + "its alternative " + Quoted(alternative.field.name) + " holds a " +
+                       std::string(KindName(held->kind)) + ", and a tagged union's alternatives are fixed-layout");
                 return false;
             }
         }

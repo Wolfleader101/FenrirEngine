@@ -112,8 +112,15 @@ namespace Fenrir
         /** @brief For an `Enum`: its value, read at its underlying kind's width. */
         [[nodiscard]] std::int64_t EnumValue() const noexcept;
 
-        /** @brief For an `Enum`: sets its value, cut to its underlying kind's width. */
-        void SetEnumValue(std::int64_t value) const noexcept;
+        /**
+         * @brief For an `Enum`: sets its value, cut to its underlying kind's width.
+         *
+         * A tagged union's tag is refused: writing it alone would leave the union's bytes the old alternative's, so
+         * `TypeDescription::SelectAlternative` is the one door that changes it.
+         *
+         * @return Whether the value was written: false for another kind, and for a tagged union's tag.
+         */
+        bool SetEnumValue(std::int64_t value) const noexcept;
 
         /** @brief For a `String`, `FixedString` or `Path`: the value as UTF-8 text (a path in its generic form). */
         [[nodiscard]] std::string Text() const;
