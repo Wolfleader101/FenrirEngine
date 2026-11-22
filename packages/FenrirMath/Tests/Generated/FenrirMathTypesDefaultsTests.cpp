@@ -24,9 +24,45 @@ TEST_CASE("Fenrir::Colour, default-constructed through its registration, has its
     });
 }
 
+TEST_CASE("Fenrir::Math::AABB, default-constructed through its registration, has its description's defaults", "[types][defaults]")
+{
+    Fenrir::Testing::CheckDefaults(Fenrir::Describe<Fenrir::Math::AABB>::Description(), {
+        {"min.x", Fenrir::Testing::Unchecked{}},
+        {"min.y", Fenrir::Testing::Unchecked{}},
+        {"min.z", Fenrir::Testing::Unchecked{}},
+        {"max.x", Fenrir::Testing::Unchecked{}},
+        {"max.y", Fenrir::Testing::Unchecked{}},
+        {"max.z", Fenrir::Testing::Unchecked{}},
+    });
+}
+
 TEST_CASE("Fenrir::Math::Frustum, default-constructed through its registration, has its description's defaults", "[types][defaults]")
 {
     Fenrir::Testing::CheckDefaults(Fenrir::Describe<Fenrir::Math::Frustum>::Description(), {
+        {"m_planes[0].x", Fenrir::Testing::Unchecked{}},
+        {"m_planes[0].y", Fenrir::Testing::Unchecked{}},
+        {"m_planes[0].z", Fenrir::Testing::Unchecked{}},
+        {"m_planes[0].w", Fenrir::Testing::Unchecked{}},
+        {"m_planes[1].x", Fenrir::Testing::Unchecked{}},
+        {"m_planes[1].y", Fenrir::Testing::Unchecked{}},
+        {"m_planes[1].z", Fenrir::Testing::Unchecked{}},
+        {"m_planes[1].w", Fenrir::Testing::Unchecked{}},
+        {"m_planes[2].x", Fenrir::Testing::Unchecked{}},
+        {"m_planes[2].y", Fenrir::Testing::Unchecked{}},
+        {"m_planes[2].z", Fenrir::Testing::Unchecked{}},
+        {"m_planes[2].w", Fenrir::Testing::Unchecked{}},
+        {"m_planes[3].x", Fenrir::Testing::Unchecked{}},
+        {"m_planes[3].y", Fenrir::Testing::Unchecked{}},
+        {"m_planes[3].z", Fenrir::Testing::Unchecked{}},
+        {"m_planes[3].w", Fenrir::Testing::Unchecked{}},
+        {"m_planes[4].x", Fenrir::Testing::Unchecked{}},
+        {"m_planes[4].y", Fenrir::Testing::Unchecked{}},
+        {"m_planes[4].z", Fenrir::Testing::Unchecked{}},
+        {"m_planes[4].w", Fenrir::Testing::Unchecked{}},
+        {"m_planes[5].x", Fenrir::Testing::Unchecked{}},
+        {"m_planes[5].y", Fenrir::Testing::Unchecked{}},
+        {"m_planes[5].z", Fenrir::Testing::Unchecked{}},
+        {"m_planes[5].w", Fenrir::Testing::Unchecked{}},
         {"m_count", std::int64_t{0}},
     });
 }
@@ -34,6 +70,9 @@ TEST_CASE("Fenrir::Math::Frustum, default-constructed through its registration, 
 TEST_CASE("Fenrir::Math::Ray, default-constructed through its registration, has its description's defaults", "[types][defaults]")
 {
     Fenrir::Testing::CheckDefaults(Fenrir::Describe<Fenrir::Math::Ray>::Description(), {
+        {"origin.x", Fenrir::Testing::Unchecked{}},
+        {"origin.y", Fenrir::Testing::Unchecked{}},
+        {"origin.z", Fenrir::Testing::Unchecked{}},
         {"dir.x", 0.0},
         {"dir.y", 0.0},
         {"dir.z", 1.0},

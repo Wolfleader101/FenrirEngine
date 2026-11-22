@@ -13,51 +13,19 @@
 #include "FenrirECS/Generated/FenrirECSTypes.hpp"
 #include "FenrirMath/Generated/FenrirMathTypes.hpp"
 #include "FenrirTypes/TypeRegistry.hpp"
+#include "RecordingLogger.hpp"
 
 namespace
 {
-    // A logger that keeps the errors it is given: a second ConsoleLogger in one process throws.
-    class RecordingLogger : public Fenrir::ILogger
-    {
-      public:
-        explicit RecordingLogger(std::shared_ptr<std::vector<std::string>> errors) : m_errors(std::move(errors))
-        {
-        }
-
-        void AddLogger(std::shared_ptr<ILogger>) override
-        {
-        }
-        void RemoveLogger(std::shared_ptr<ILogger>) override
-        {
-        }
-
-      protected:
-        void LogImpl(std::string_view) override
-        {
-        }
-        void InfoImpl(std::string_view) override
-        {
-        }
-        void WarnImpl(std::string_view) override
-        {
-        }
-        void ErrorImpl(std::string_view message) override
-        {
-            m_errors->emplace_back(message);
-        }
-        void FatalImpl(std::string_view message) override
-        {
-            m_errors->emplace_back(message);
-        }
-
-      private:
-        std::shared_ptr<std::vector<std::string>> m_errors;
-    };
-
     struct HeadlessApp
     {
         std::shared_ptr<std::vector<std::string>> errors = std::make_shared<std::vector<std::string>>();
-        Fenrir::App app{std::make_unique<RecordingLogger>(errors), 1};
+        Fenrir::App app{std::make_unique<AppTest::RecordingLogger>(errors), 1};
+
+        [[nodiscard]] Fenrir::TypeRegistry& Registry()
+        {
+            return app.GetResource<Fenrir::TypeRegistry>();
+        }
     };
 } // namespace
 
@@ -65,13 +33,14 @@ TEST_CASE("A headless App holds a type registry as an app resource", "[types]")
 {
     HeadlessApp headless;
 
+    INFO("App's constructor makes the TypeRegistry app resource, so TryGetResource finds it");
     REQUIRE(headless.app.TryGetResource<Fenrir::TypeRegistry>() != nullptr);
 }
 
-TEST_CASE("Before any Install the registry knows FenrirECS's components and FenrirMath's types", "[types]")
+TEST_CASE("Before any Install the registry knows FenrirECS's components and FenrirMath's and FenrirApp's types",
+          "[types]")
 {
     HeadlessApp headless;
-    const auto& registry = headless.app.GetResource<Fenrir::TypeRegistry>();
 
     constexpr std::array names{
         "Fenrir::Transform",     "Fenrir::Name",          "Fenrir::Relationship", "Fenrir::Entity",
@@ -81,40 +50,58 @@ TEST_CASE("Before any Install the registry knows FenrirECS's components and Fenr
     };
     for (const std::string_view name : names)
     {
-        INFO(name);
-        REQUIRE(registry.Find(name) != nullptr);
+        INFO(name << " is described by a package beneath Install, but the App's registry does not know it");
+        REQUIRE(headless.Registry().Find(name) != nullptr);
     }
-    REQUIRE(headless.errors->empty());
+}
+
+TEST_CASE("App's constructor registers its packages' types with no diagnostic", "[types]")
+{
+    HeadlessApp headless;
+
+    INFO("the registry refused a type the constructor registered: " << AppTest::RegistryErrors(*headless.errors));
+    REQUIRE(AppTest::RegistryErrors(*headless.errors) == 0);
 }
 
 TEST_CASE("The registry holds the descriptions Describe<T> yields", "[types]")
 {
     HeadlessApp headless;
-    const auto& registry = headless.app.GetResource<Fenrir::TypeRegistry>();
 
-    REQUIRE(registry.Find("Fenrir::Transform") == &Fenrir::Describe<Fenrir::Transform>::Description());
-    REQUIRE(registry.Find("Fenrir::RawEventRange") == &Fenrir::Describe<Fenrir::RawEventRange>::Description());
+    INFO("the registered Transform is not the object Describe<Fenrir::Transform> yields");
+    REQUIRE(headless.Registry().Find("Fenrir::Transform") == &Fenrir::Describe<Fenrir::Transform>::Description());
+    INFO("the registered RawEventRange is not the object Describe<Fenrir::RawEventRange> yields");
+    REQUIRE(headless.Registry().Find("Fenrir::RawEventRange") ==
+            &Fenrir::Describe<Fenrir::RawEventRange>::Description());
 }
 
 TEST_CASE("Transform's position is FenrirMath's Vec3, not a second description of it", "[types]")
 {
     HeadlessApp headless;
-    const auto& registry = headless.app.GetResource<Fenrir::TypeRegistry>();
-    const Fenrir::TypeDescription& transform = *registry.Find("Fenrir::Transform");
+    const Fenrir::TypeDescription& transform = *headless.Registry().Find("Fenrir::Transform");
 
+    INFO("Transform's first field is its position, pos");
     REQUIRE(transform.fields[0].name == "pos");
-    REQUIRE(transform.fields[0].type.type == registry.Find("Fenrir::Math::Vec3"));
-    REQUIRE(transform.fields[0].type.type == &Fenrir::Describe<Fenrir::Math::Vec3>::Description());
+    INFO("pos's type should be the Vec3 FenrirMath registers, which FenrirECS's registration uses");
+    REQUIRE(transform.fields[0].type.type == headless.Registry().Find("Fenrir::Math::Vec3"));
 }
 
-TEST_CASE("Running a registration the App ran again registers nothing, with no diagnostic", "[types]")
+TEST_CASE("Running a registration the App ran again registers nothing", "[types]")
 {
     HeadlessApp headless;
-    auto& registry = headless.app.GetResource<Fenrir::TypeRegistry>();
-    const std::size_t components = registry.Types(Fenrir::Role::Component).size();
+    const std::size_t components = headless.Registry().Types(Fenrir::Role::Component).size();
 
-    REQUIRE(Fenrir::Generated::RegisterFenrirECSTypes(registry));
+    INFO("a second run of FenrirECS's registration should succeed, every type already registered as itself");
+    REQUIRE(Fenrir::Generated::RegisterFenrirECSTypes(headless.Registry()));
+    INFO("the second run should add no component");
+    REQUIRE(headless.Registry().Types(Fenrir::Role::Component).size() == components);
+}
 
-    REQUIRE(registry.Types(Fenrir::Role::Component).size() == components);
-    REQUIRE(headless.errors->empty());
+TEST_CASE("Running a registration the App ran again reports nothing", "[types]")
+{
+    HeadlessApp headless;
+
+    static_cast<void>(Fenrir::Generated::RegisterFenrirECSTypes(headless.Registry()));
+
+    INFO("the second run should leave the registry nothing to refuse");
+    REQUIRE(AppTest::RegistryErrors(*headless.errors) == 0);
 }

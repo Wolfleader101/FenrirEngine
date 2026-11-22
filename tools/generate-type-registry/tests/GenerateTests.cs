@@ -551,6 +551,50 @@ public sealed class GenerateTests
     }
 
     [Fact]
+    public void UsingASelectionThatDoesNotExistFailsNamingIt()
+    {
+        using var directory = new TemporaryDirectory();
+        var user = WritePackage(directory, "User", PackageDescription("User", VecType), "Missing");
+
+        var registration = Registration.Read(user)!;
+        var exception = Assert.Throws<GenerateException>(() => Generator.Generate(registration, File.ReadAllText(registration.DescriptionPath)));
+
+        Assert.True(exception.Message.Contains("Missing.api.toml, which does not exist", StringComparison.Ordinal),
+                    $"Generating should fail naming the missing selection, but failed with\n  {exception.Message}");
+    }
+
+    [Fact]
+    public void TwoUsedRegistrationsDescribingOneTypeFailNamingIt()
+    {
+        using var directory = new TemporaryDirectory();
+        WritePackage(directory, "Base", PackageDescription("Base", VecType));
+        WritePackage(directory, "Other", PackageDescription("Other", VecType));
+        var user = WritePackage(directory, "User", PackageDescription("User", VecType), "Base", "Other");
+
+        var registration = Registration.Read(user)!;
+        var exception = Assert.Throws<GenerateException>(() => Generator.Generate(registration, File.ReadAllText(registration.DescriptionPath)));
+
+        Assert.True(exception.Message.Contains("two registrations it uses both describe Test::Vec", StringComparison.Ordinal),
+                    $"Generating should fail naming the type, but failed with\n  {exception.Message}");
+    }
+
+    [Fact]
+    public void AFieldWithNoRecordedDefaultFailsTheDefaultsTestNamingIt()
+    {
+        using var directory = new TemporaryDirectory();
+        var description = Description(Type("Test::Plain", "struct", "component",
+                                           "{\"name\": \"value\", \"offset\": 0, \"kind\": \"i32\"}"));
+        var selection = WriteRegisteredSelection(directory, description);
+        File.AppendAllText(selection, "test = \"Tests/Generated/FixtureTypesDefaultsTests.cpp\"\n");
+        var registration = Registration.Read(selection)!;
+
+        var exception = Assert.Throws<GenerateException>(() => Generator.Generate(registration, description));
+
+        Assert.True(exception.Message.Contains("Test::Plain::value: records no default to test", StringComparison.Ordinal),
+                    $"Generating should fail naming the field, but failed with\n  {exception.Message}");
+    }
+
+    [Fact]
     public void AUsedRegistrationWhoseHeaderIsUnderNoIncludeDirectoryFailsNamingIt()
     {
         using var directory = new TemporaryDirectory();
@@ -618,7 +662,7 @@ public sealed class GenerateTests
     }
 
     [Fact]
-    public void TheDefaultsTestExpectsABoundTypesComponentsOnlyWhereTheInitialiserSpellsThem()
+    public void TheDefaultsTestComparesABoundTypesComponentsOnlyWhereTheInitialiserSpellsThem()
     {
         var test = GenerateTest(Description(
             VecType,
@@ -627,8 +671,9 @@ public sealed class GenerateTests
                  "{\"name\": \"own\", \"offset\": 4, \"kind\": \"struct\", \"type\": \"Test::Vec\", \"default\": {}}")));
 
         AssertContains(test, "        {\"spelled.x\", 1.0},\n", "A component the initialiser spells is expected.");
-        Assert.False(test.Contains("\"own.x\"", StringComparison.Ordinal),
-                     "A bound type's own default is its library's, which the description does not record.");
+        AssertContains(test, "        {\"own.x\", Fenrir::Testing::Unchecked{}},\n",
+                       "A bound type's own default is its library's, which the description does not record: reached, " +
+                       "not compared.");
     }
 
     [Fact]

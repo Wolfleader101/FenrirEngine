@@ -30,7 +30,15 @@ internal sealed partial record Registration(string SelectionPath, string Package
     /// this one points its fields at them: the function's namespace, then <c>&lt;Package&gt;Types</c>.
     /// </summary>
     public string DescriptionNamespace =>
-        FunctionNamespace.Length > 0 ? $"{FunctionNamespace}::{Package}Types" : $"{Package}Types";
+        FunctionNamespace.Length > 0 ? $"{FunctionNamespace}::{LocalDescriptionNamespace}" : LocalDescriptionNamespace;
+
+    /// <summary>
+    /// <see cref="DescriptionNamespace" /> as code in the function's own namespace names it: <c>&lt;Package&gt;Types</c>.
+    /// </summary>
+    public string LocalDescriptionNamespace => $"{Package}Types";
+
+    /// <summary>Throws as <see cref="HeaderInclude" /> does when the header lies under no include directory.</summary>
+    public void CheckHeaderIncludable() => _ = HeaderInclude;
 
     /// <summary>
     /// The generated header as another package's header includes it: its path below its last <c>include</c>

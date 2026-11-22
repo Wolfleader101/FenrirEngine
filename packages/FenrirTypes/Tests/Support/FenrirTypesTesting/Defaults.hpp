@@ -34,10 +34,21 @@ namespace Fenrir::Testing
     };
 
     /**
-     * @brief One value a description records as a default: an integer (an enum's value, a `char16`, an unsigned one as
-     * its bits in two's complement), a float, a `bool`, text, the null entity, the empty reference, or `Empty`.
+     * @brief A value the visit reaches whose default the description does not record: a bound type's component its
+     * field's initialiser leaves to the bound type's library. It is expected to be reached, and not compared.
      */
-    using DefaultValue = std::variant<std::int64_t, double, bool, std::string, EntityValue, ReferenceValue, Empty>;
+    struct Unchecked
+    {
+        friend constexpr bool operator==(const Unchecked&, const Unchecked&) = default;
+    };
+
+    /**
+     * @brief One value a description records as a default: an integer (an enum's value, a `char16`, an unsigned one as
+     * its bits in two's complement), a float, a `bool`, text, the null entity, the empty reference, or `Empty`; or
+     * `Unchecked`, for a value it records none for.
+     */
+    using DefaultValue =
+        std::variant<std::int64_t, double, bool, std::string, EntityValue, ReferenceValue, Empty, Unchecked>;
 
     /** @brief A value a description records, at its path from the instance: `pos.x`, `m_planes[2].distance`. */
     struct ExpectedDefault
@@ -180,8 +191,10 @@ namespace Fenrir::Testing
                         return held == EntityValue{} ? "the null entity" : "an entity";
                     else if constexpr (std::is_same_v<Held, ReferenceValue>)
                         return held == ReferenceValue{} ? "the empty reference" : "a reference";
-                    else
+                    else if constexpr (std::is_same_v<Held, Empty>)
                         return "empty";
+                    else
+                        return "not recorded";
                 },
                 value);
         }
@@ -217,7 +230,7 @@ namespace Fenrir::Testing
 
     /**
      * @brief Checks that `description`'s type, default-constructed through it and visited through it, reaches each of
-     * `expected` at its path, holding its value.
+     * `expected` at its path, holding its value (an `Unchecked` one at any value), and reaches nothing else.
      */
     inline void CheckDefaults(const TypeDescription& description, std::initializer_list<ExpectedDefault> expected)
     {
@@ -229,12 +242,22 @@ namespace Fenrir::Testing
         for (const ExpectedDefault& want : expected)
         {
             INFO(description.name << "'s " << want.path << " is " << Detail::Spelled(want.value)
-                                  << " by its description");
+                                  << " by its description, but the visit of the instance its description constructs");
             const auto found = reached.find(want.path);
-            REQUIRE(found != reached.end());
-            INFO("and the visit of the instance its description constructs reaches "
-                 << Detail::Spelled(found->second.value));
-            CHECK(Detail::Matches(found->second, want.value));
+            {
+                INFO("does not reach it");
+                REQUIRE(found != reached.end());
+            }
+            INFO("reaches " << Detail::Spelled(found->second.value));
+            CHECK((std::holds_alternative<Unchecked>(want.value) || Detail::Matches(found->second, want.value)));
+            reached.erase(found);
+        }
+
+        for (const auto& [path, value] : reached)
+        {
+            INFO("the visit of " << description.name << " reaches " << path << ", which its description records no "
+                                 << "default for: " << Detail::Spelled(value.value));
+            CHECK(false);
         }
     }
 } // namespace Fenrir::Testing
