@@ -24,7 +24,7 @@ Design choices that shape the engine:
 
 - **Modular by construction.** Each package is a CMake feature flag, so a headless physics sandbox does not pull in a renderer, and nothing looks for .NET unless scripting is on.
 - **ECS first.** Game code draws a mesh by putting a `MeshRenderer` on an entity. C# scripts work on the same components.
-- **Plain data between packages.** Shared types are described once in C++ headers, then `tools/describe-api` and the Iris binding generator produce the C# mirrors and registrations, and CI fails when they are stale.
+- **Plain data between packages.** Shared types are described once in C++ headers, then `tools/describe-api`, the Iris binding generator and `tools/generate-type-registry` produce the C# mirrors, the extensions' registration lists and the run-time type registrations, and CI fails when they are stale.
 - **Decisions are written down.** Over forty [architecture decision records](docs/adr) explain why things are the way they are, and [GLOSSARY.md](GLOSSARY.md) fixes the vocabulary.
 
 ## Quick start
@@ -107,17 +107,29 @@ build one locally only to chase a failure CI reports there.
 | `FENRIR_BUILD_EXAMPLES` | `ON` | Builds the demo apps on the demo scaffold (`examples/DemoScaffold/README.md`): `FenrirDemoScaffold`, `fenrir_add_demo_app`, RendererDemo (`examples/RendererDemo/README.md`), AnimationDemo (`examples/AnimationDemo/README.md`) and LightingDemo (`examples/LightingDemo/README.md`), UIDemo (`examples/UIDemo/README.md`), and, with `FENRIR_ENABLE_SCRIPTING`, ScriptingDemo (`examples/ScriptingDemo/README.md`), and, with `FENRIR_ENABLE_PHYSICS`, PhysicsDemo (`examples/PhysicsDemo/README.md`), with their tests and CTest smoke runs when `FENRIR_BUILD_TESTS` is on. They draw, and the scaffold's demo UI kit is FenrirUI's, so they exist only with `FENRIR_ENABLE_RENDERER` and `FENRIR_ENABLE_UI`. |
 | `FENRIR_FETCH_DEMO_ASSETS` | `OFF` | Downloads the demo apps' large assets at configure time (ADR-0052): every file in `examples/LightingDemo/fetched-assets.json`, about 100 MB of Khronos models, Poly Haven panoramas and textures and an ambientCG map (taken out of its zip), each checked against its SHA-256 (a mismatch fails configure, naming the file), into `FENRIR_DEMO_ASSET_CACHE`, outside the build directory (by default `%LOCALAPPDATA%/FenrirEngine/demo-assets` on Windows, else `$XDG_CACHE_HOME` or `~/.cache`, under `FenrirEngine/demo-assets`), so a clean build does not download again. Without it the scenes that need them say so on screen. Tests and smoke runs never use them. |
 
-Packages that share types with bindings commit an API description (`packages/<Package>/api/<Package>.api.json`, ADR-0042),
-generated from their headers by `tools/describe-api`. The ordinary build never regenerates them:
-`cmake --build out/build/clang-x64-debug --target fenrir-describe-api` does (it needs the .NET SDK), and CI fails on a pull request
-whose descriptions are stale. See `tools/describe-api/README.md`.
+Described packages commit three generated artefacts, which the ordinary build never regenerates:
 
-Each described package also commits its type registration (ADR-0074), generated from its description by
-`tools/generate-type-registry`: `include/<Package>/Generated/<Package>Types.hpp`, `src/Generated/<Package>Types.cpp` and a
-defaults test in `Tests/Generated/`. The package compiles it and links FenrirTypes, so the App's `TypeRegistry` app resource
-knows the package's types by name once its `Install` has run (FenrirMath's, FenrirECS's and FenrirApp's from the App's
-constructor). After `fenrir-describe-api`, the `fenrir-generate-bindings` target regenerates the bindings and then
-`fenrir-generate-type-registry` the registrations; see `tools/generate-type-registry/README.md`.
+- an **API description** (`packages/<Package>/api/<Package>.api.json`, ADR-0042), generated from the package's headers by
+  `tools/describe-api` (the `fenrir-describe-api` target; see `tools/describe-api/README.md`);
+- the **bindings** generated from the descriptions by `packages/Iris/Tools/Iris.Bindings` (the `fenrir-generate-bindings`
+  target, below);
+- a **type registration** (ADR-0074), generated from the package's description by `tools/generate-type-registry` (the
+  `fenrir-generate-type-registry` target; see `tools/generate-type-registry/README.md`):
+  `include/<Package>/Generated/<Package>Types.hpp`, `src/Generated/<Package>Types.cpp` and a defaults test in
+  `Tests/Generated/`. The package compiles it and links FenrirTypes, so the App's `TypeRegistry` app resource knows the
+  package's types by name once its `Install` has run (FenrirMath's, FenrirECS's and FenrirApp's from the App's constructor).
+
+After changing a described header, regenerate all three, in this order, and commit the result. It needs the .NET SDK and
+a build directory configured with scripting on, as the clang-x64 and msvc-x64 presets are; with the renderer on, its
+default, FenrirWindow's and FenrirRenderer's are among them.
+
+```sh
+cmake --build out/build/clang-x64-debug --target fenrir-describe-api && cmake --build out/build/clang-x64-debug --target fenrir-generate-bindings && cmake --build out/build/clang-x64-debug --target fenrir-generate-type-registry
+```
+
+Each target reads what the one before it writes, so they run one after another rather than as one `--target` list, whose
+targets a build tool may run at once. CI's `.github/workflows/api-descriptions.yml` runs the same three, configured with
+the renderer on, and fails a pull request that leaves the tree dirty.
 
 A C# binding is generated from those descriptions and committed too: FenrirPhysics's components, events and shared
 structs are written once, in its headers, and `packages/Iris/Tools/Iris.Bindings` generates their C# mirrors
@@ -135,8 +147,8 @@ its `packages/<Package>/Scripting/api/<Package>.binding.toml`. The Fenrir.Math c
 by `packages/FenrirScripting/api/FenrirMath.binding.toml`, and every other binding names them through `uses` rather than
 mirroring them again (ADR-0043).
 After changing a shared type or a native, run
-`fenrir-describe-api`, then `cmake --build out/build/clang-x64-debug --target fenrir-generate-bindings`, and commit both;
-CI fails on a stale binding as on a stale description. What each contract still holds by hand is its facades (the static
+the three targets above and commit the result; CI fails on a stale binding as on a stale description or type
+registration. What each contract still holds by hand is its facades (the static
 classes scripts call, such as `Keyboard` or `Renderer`) and the behaviour of its mirrors, as `partial` parts beside the
 generated ones.
 

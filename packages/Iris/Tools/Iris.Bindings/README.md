@@ -33,7 +33,11 @@ cmake --build <build-dir> --target iris-generate-bindings
 
 A parent project names the target by setting `IRIS_GENERATE_BINDINGS_TARGET` before adding Iris (FenrirEngine's is
 `fenrir-generate-bindings`). Running it rebuilds the tool and regenerates every binding; commit the result with the
-header change, and check in CI that it leaves the tree clean.
+header change, and check in CI that it leaves the tree clean. In FenrirEngine it runs after `fenrir-describe-api`
+(`tools/describe-api/README.md`), which writes the descriptions, and before `fenrir-generate-type-registry`
+(`tools/generate-type-registry/README.md`), which writes each package's type registration (ADR-0074) from the same
+descriptions; the root `README.md` ("Building and testing") has the line that runs the three in that order and says
+how CI (`.github/workflows/api-descriptions.yml`) checks them; the workflow also runs this tool's tests.
 
 ## The configuration
 
@@ -199,8 +203,11 @@ description), a `fixed-string` as the array of `u8` its bytes are (a `fixed` buf
 default text as those bytes), and a `reference` as the bound type `Fenrir::AssetHandle<target>`, which a description read
 must describe and `[bound-types]` bind; one no description describes fails naming the field. A `data-asset` or
 `settings` type is skipped, with every nested type and enum that nothing but such types reaches, generating nothing and logging
-nothing, until the C# spec binds them; an owning kind (`string`, `list`, `optional`, `path`) in any type it binds fails
-naming the field.
+nothing, until the C# spec binds them. With them go the owning kinds (`string`, `list`, `optional`, `path`), which only
+such types (and nested types only they reach) may hold: an owning kind in any type it binds fails naming the field. They
+are skipped rather than refused because descriptions hold them for the type registration
+(`tools/generate-type-registry`), so a binding over a description with an `Install` config or a data asset still
+generates and the dirty-tree check passes before C# has mirrors for them.
 
 **Tagged unions.** The mirror holds the storage only, as the scripting SDK's tagged-union generator consumes it:
 `[TaggedUnion]`, `[StructLayout(LayoutKind.Explicit)]`, `[FieldOffset(0)] private Tag _type;` and one

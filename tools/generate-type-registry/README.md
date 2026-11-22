@@ -51,7 +51,7 @@ From a configured build directory:
 cmake --build <build-dir> --target fenrir-generate-type-registry
 ```
 
-That rebuilds the tool and regenerates every registration from the committed descriptions. The ordinary build never runs it. After changing a described type's header, run `fenrir-describe-api` first, then this target, and commit both. A package joins the target in its `CMakeLists.txt` (`cmake/FenrirGenerateTypeRegistry.cmake`):
+That rebuilds the tool and regenerates every registration from the committed descriptions. The ordinary build never runs it. After changing a described type's header, run `fenrir-describe-api` first (`tools/describe-api/README.md`), then `fenrir-generate-bindings`, then this target, and commit all three's output; `README.md` ("Building and testing") has the line that runs them in that order, and says how CI (`.github/workflows/api-descriptions.yml`) checks them; the workflow also runs this tool's tests. A package joins the target in its `CMakeLists.txt` (`cmake/FenrirGenerateTypeRegistry.cmake`):
 
 ```cmake
 fenrir_generate_type_registry(MyPackage api/MyPackage.api.toml)
