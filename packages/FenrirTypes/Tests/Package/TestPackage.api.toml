@@ -1,0 +1,18 @@
+# The FenrirTypes test package's selection: the header to read, relative to this file, and each type's role.
+headers = ["TestPackage.hpp"]
+
+[types]
+"Test::Vec2" = "bound-type"
+"Test::Marker" = "component"
+"Test::Weather" = "scene-resource"
+"Test::Layers" = "app-resource"
+"Test::WeaponData" = "data-asset"
+"Test::Sword" = "data-asset"
+"Test::Options" = "settings"
+
+# What tools/generate-type-registry writes for the package: the FenrirTypes tests compile and exercise it.
+[registration]
+header = "Generated/TestPackageTypes.hpp"
+source = "Generated/TestPackageTypes.cpp"
+function = "Fenrir::Generated::RegisterTestPackageTypes"
+includes = ["TestPackage.hpp"]

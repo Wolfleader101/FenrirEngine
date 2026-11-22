@@ -1,0 +1,267 @@
+{
+  "package": "TestPackage",
+  "pointerSize": 8,
+  "alignment": "natural",
+  "types": [
+    {
+      "name": "Test::Layers",
+      "category": "struct",
+      "role": "app-resource",
+      "size": 4,
+      "alignment": 4,
+      "doc": "An app resource an editor keeps and a cooked build strips.",
+      "editorOnly": true,
+      "fields": [
+        {
+          "name": "visible",
+          "offset": 0,
+          "kind": "u32",
+          "default": 255
+        }
+      ]
+    },
+    {
+      "name": "Test::Rarity",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "How rare an item is.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Common",
+          "value": 0
+        },
+        {
+          "name": "Rare",
+          "value": 3,
+          "doc": "Found once a level."
+        }
+      ]
+    },
+    {
+      "name": "Test::Vec2",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 8,
+      "alignment": 4,
+      "doc": "A bound type: a maths library's two-component vector, visited as its components.",
+      "components": [
+        {
+          "name": "x",
+          "offset": 0,
+          "kind": "f32"
+        },
+        {
+          "name": "y",
+          "offset": 4,
+          "kind": "f32"
+        }
+      ]
+    },
+    {
+      "name": "Test::Marker",
+      "category": "struct",
+      "role": "component",
+      "size": 56,
+      "alignment": 8,
+      "doc": "A component holding the three fixed-layout kinds (an entity, a fixed string and a reference), a bound type, an enum, and every field doc command.",
+      "version": 3,
+      "formerly": [
+        "Test::Beacon",
+        "Test::Flag"
+      ],
+      "fields": [
+        {
+          "name": "target",
+          "offset": 0,
+          "kind": "entity",
+          "default": null,
+          "doc": "The entity the marker points at.",
+          "formerly": [
+            "pointee"
+          ]
+        },
+        {
+          "name": "label",
+          "offset": 16,
+          "kind": "fixed-string",
+          "length": 16,
+          "default": "marker",
+          "doc": "What the marker says.",
+          "metadata": {
+            "display": "Caption",
+            "multiline": true
+          }
+        },
+        {
+          "name": "mesh",
+          "offset": 32,
+          "kind": "reference",
+          "target": "Test::Mesh",
+          "default": null,
+          "doc": "The mesh drawn at the marker.",
+          "metadata": {
+            "group": "Look"
+          }
+        },
+        {
+          "name": "offset",
+          "offset": 40,
+          "kind": "struct",
+          "type": "Test::Vec2",
+          "default": {
+            "x": 0,
+            "y": 1
+          },
+          "doc": "How far the marker sits from its entity.",
+          "metadata": {
+            "range": {
+              "min": -10,
+              "max": 10
+            },
+            "step": 0.25,
+            "units": "m"
+          }
+        },
+        {
+          "name": "rarity",
+          "offset": 48,
+          "kind": "enum",
+          "type": "Test::Rarity",
+          "default": "Rare",
+          "metadata": {
+            "readonly": true
+          }
+        },
+        {
+          "name": "serial",
+          "offset": 52,
+          "kind": "u32",
+          "default": 7,
+          "metadata": {
+            "hidden": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Test::Options",
+      "category": "struct",
+      "role": "settings",
+      "doc": "A settings type, as an Install config is: a path, a list of strings and a number.",
+      "fields": [
+        {
+          "name": "root",
+          "kind": "path",
+          "default": "assets"
+        },
+        {
+          "name": "extensions",
+          "kind": "list",
+          "elementKind": "string",
+          "default": []
+        },
+        {
+          "name": "threads",
+          "kind": "u32",
+          "default": 4
+        }
+      ]
+    },
+    {
+      "name": "Test::Stat",
+      "category": "struct",
+      "role": "nested",
+      "doc": "A row of a data asset's table: a nested struct holding a string, so visited by member too.",
+      "fields": [
+        {
+          "name": "name",
+          "kind": "string",
+          "default": ""
+        },
+        {
+          "name": "value",
+          "kind": "f32",
+          "default": 1
+        }
+      ]
+    },
+    {
+      "name": "Test::WeaponData",
+      "category": "struct",
+      "role": "data-asset",
+      "doc": "A data asset that others extend: a string and a list of nested structs.",
+      "fields": [
+        {
+          "name": "displayName",
+          "kind": "string",
+          "default": "Weapon",
+          "doc": "What a menu calls the weapon."
+        },
+        {
+          "name": "stats",
+          "kind": "list",
+          "elementKind": "struct",
+          "elementType": "Test::Stat",
+          "default": [],
+          "doc": "Its numbers, by name."
+        },
+        {
+          "name": "damage",
+          "kind": "f32",
+          "default": 10
+        }
+      ]
+    },
+    {
+      "name": "Test::Sword",
+      "category": "struct",
+      "role": "data-asset",
+      "base": "Test::WeaponData",
+      "doc": "A data asset extending another: its base's fields first, then its own (an optional, a path and a list of strings).",
+      "version": 2,
+      "formerly": [
+        "Test::Blade"
+      ],
+      "fields": [
+        {
+          "name": "edge",
+          "kind": "optional",
+          "elementKind": "f32",
+          "default": null,
+          "doc": "How sharp the edge is, when it has one."
+        },
+        {
+          "name": "icon",
+          "kind": "path",
+          "default": "icons/sword.png",
+          "doc": "The icon a menu shows."
+        },
+        {
+          "name": "titles",
+          "kind": "list",
+          "elementKind": "string",
+          "default": []
+        }
+      ]
+    },
+    {
+      "name": "Test::Weather",
+      "category": "struct",
+      "role": "scene-resource",
+      "size": 4,
+      "alignment": 4,
+      "doc": "A scene resource: plain run-time data a scene file never holds.",
+      "transient": true,
+      "fields": [
+        {
+          "name": "wind",
+          "offset": 0,
+          "kind": "f32",
+          "default": 2.5
+        }
+      ]
+    }
+  ]
+}
