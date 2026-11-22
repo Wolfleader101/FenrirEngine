@@ -381,12 +381,13 @@ internal sealed class Describer
         {
             try
             {
-                if (IsTransientField(name, field, pending.Role))
+                var fieldDoc = FieldDoc(field, $"{name}::{field.Name}");
+                if (LeavesOutAsTransient(name, field, fieldDoc, pending.Role))
                 {
                     continue;
                 }
 
-                described.Add(DescribeField(name, field));
+                described.Add(DescribeField(name, field, fieldDoc));
             }
             catch (DescribeException exception)
             {
@@ -508,15 +509,15 @@ internal sealed class Describer
         fields[1].IsAnonymousStructOrUnion && fields[1].Type.CanonicalType.AsCXXRecordDecl is { IsUnion: true };
 
     /// <summary>
-    /// Whether a field is marked <c>@transient</c>: code wiring (a list of callbacks, say) that a data asset or settings
-    /// type holds and no file does, left out of the description with its type never read. Those two roles are reached
-    /// by member, so a field left out costs nothing; every other role's fields are its layout, which a binding mirrors
-    /// whole, and a field marked there fails.
+    /// Whether a field is left out because <c>@transient</c> marks it: code wiring (a list of callbacks, say) that a data
+    /// asset or settings type holds and no file does, its type never read. Those two roles are reached by member, so a
+    /// field left out costs nothing; every other role's fields are its layout, which a binding mirrors whole, and a field
+    /// marked there throws.
     /// </summary>
-    private bool IsTransientField(string typeName, FieldDecl field, Role role)
+    private bool LeavesOutAsTransient(string typeName, FieldDecl field, DocComment.FieldDoc doc, Role role)
     {
         var subject = $"{typeName}::{field.Name}";
-        if (!WithDocCommandDiagnostics(field, subject, () => DocComment.Field(RawDoc(field))).Transient)
+        if (!doc.Transient)
         {
             return false;
         }
@@ -532,7 +533,7 @@ internal sealed class Describer
                     $"a data asset or settings type holds, and {phrase}'s fields are its layout");
     }
 
-    private FieldDescription DescribeField(string typeName, FieldDecl field)
+    private FieldDescription DescribeField(string typeName, FieldDecl field, DocComment.FieldDoc doc)
     {
         if (field.IsAnonymousStructOrUnion)
         {
@@ -563,19 +564,17 @@ internal sealed class Describer
 
         var value = IsHandle(field.Type) ? HandleDefault(type, field.InClassInitializer, field, subject)
                                          : Default(type, field.InClassInitializer, field, subject);
-        return Field(field, subject, type, value);
+        return Field(field, subject, type, value, doc);
     }
 
-    /// <summary>A field's description, with what its doc commands give; an owning kind's has no offset.</summary>
-    private FieldDescription Field(FieldDecl field, string subject, FieldType type, DefaultValue value)
-    {
-        var doc = WithDocCommandDiagnostics(field, subject, () => DocComment.Field(RawDoc(field)));
-        if (doc.Transient)
-        {
-            // A struct's transient fields never reach here (IsTransientField leaves them out): this is a tag.
-            throw Error(field, subject, "@transient on a tagged union's tag, which the union cannot leave out");
-        }
+    /// <summary>A field's doc comment, split into its text and doc commands, a malformed command failing naming it.</summary>
+    private DocComment.FieldDoc FieldDoc(FieldDecl field, string subject) =>
+        WithDocCommandDiagnostics(field, subject, () => DocComment.Field(RawDoc(field)));
 
+    /// <summary>A field's description, with what its doc commands give; an owning kind's has no offset.</summary>
+    private FieldDescription Field(FieldDecl field, string subject, FieldType type, DefaultValue value,
+                                   DocComment.FieldDoc doc)
+    {
         return new FieldDescription(field.Name, type.IsOwning ? null : Offset(field), type, value, doc.Text)
         {
             Formerly = doc.Formerly,
@@ -650,7 +649,14 @@ internal sealed class Describer
 
         var defaultKind = DefaultKind(record, name, kindNames);
         var tagDefault = new DefaultValue.Text(kinds.First(kind => kind.Name == defaultKind).Tag);
-        var tag = Field(tagField, $"{name}::{tagField.Name}", tagType, tagDefault);
+        var tagSubject = $"{name}::{tagField.Name}";
+        var tagDoc = FieldDoc(tagField, tagSubject);
+        if (tagDoc.Transient)
+        {
+            throw Error(tagField, tagSubject, "@transient on a tagged union's tag, which the union cannot leave out");
+        }
+
+        var tag = Field(tagField, tagSubject, tagType, tagDefault, tagDoc);
         return new TaggedUnionDescription(name, size, alignment, doc, role, tag, Offset(unionField), kinds, defaultKind);
     }
 

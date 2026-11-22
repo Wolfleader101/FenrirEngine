@@ -17,8 +17,7 @@
 namespace Fenrir
 {
     /**
-     * @brief Where scripting finds .NET and the project's script assembly. A settings type (ADR-0084): a project file
-     * fills it as `Fenrir::ScriptingConfig` before Install, every field but `extensions`.
+     * @brief Where scripting finds .NET and the project's script assembly.
      * @version 1
      */
     struct ScriptingConfig

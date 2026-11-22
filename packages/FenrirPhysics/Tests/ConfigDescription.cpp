@@ -85,20 +85,28 @@ TEST_CASE("A PhysicsConfig's visit reaches its collision layers as a list of nes
     Describe<PhysicsConfig>::Description().Visit(&config, visitor);
 
     const Reached* layers = Find(visitor.reached, "collisionLayers");
+    INFO("the visit should reach collisionLayers");
     REQUIRE(layers != nullptr);
-    CHECK(layers->kind == Kind::List);
-    CHECK(layers->size == 2);
+    INFO("collisionLayers should be a list, not kind " << static_cast<int>(layers->kind));
+    REQUIRE(layers->kind == Kind::List);
+    INFO("collisionLayers should hold the two layers set, not " << layers->size);
+    REQUIRE(layers->size == 2);
 
     for (const auto& [index, name] : {std::pair{0, "Ground"}, std::pair{1, "Player"}})
     {
         const std::string element = "collisionLayers[" + std::to_string(index) + "]";
-        INFO("the layer at " << element);
         const Reached* layer = Find(visitor.reached, element);
+        INFO("the visit should reach " << element);
         REQUIRE(layer != nullptr);
-        CHECK(layer->kind == Kind::Struct);
+        INFO(element << " should be a nested CollisionLayer, not kind " << static_cast<int>(layer->kind));
+        REQUIRE(layer->kind == Kind::Struct);
+
         const Reached* layerName = Find(visitor.reached, element + ".name");
+        INFO("the visit should reach " << element << ".name");
         REQUIRE(layerName != nullptr);
-        CHECK(layerName->kind == Kind::String);
-        CHECK(layerName->text == name);
+        INFO(element << ".name should be a string, not kind " << static_cast<int>(layerName->kind));
+        REQUIRE(layerName->kind == Kind::String);
+        INFO(element << ".name should be " << name << ", not " << layerName->text);
+        REQUIRE(layerName->text == name);
     }
 }

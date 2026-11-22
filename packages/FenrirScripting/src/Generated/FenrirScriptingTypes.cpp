@@ -89,7 +89,7 @@ namespace Fenrir::Generated::FenrirScriptingTypes
         .alignment = alignof(Fenrir::ScriptingConfig),
         .construct = &Fenrir::ConstructValue<Fenrir::ScriptingConfig>,
         .destroy = &Fenrir::DestroyValue<Fenrir::ScriptingConfig>,
-        .doc = "Where scripting finds .NET and the project's script assembly. A settings type (ADR-0084): a project file fills it as `Fenrir::ScriptingConfig` before Install, every field but `extensions`.",
+        .doc = "Where scripting finds .NET and the project's script assembly.",
         .fields = Fenrir_ScriptingConfig_Fields,
         .visit = &Fenrir_ScriptingConfig_Visit,
     };
