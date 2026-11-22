@@ -30,7 +30,7 @@ Grilled 2026-11-22. No engine gap came out of it. Every distance, speed and time
 
   The poacher cannot be defeated. This amends "defeated by a head stomp", settled while charting, for the poacher only.
 - **How they move:** both walk between patrol points in straight lines. The stoat chases Kiki in a straight line at 5.5 m/s when she is within 8 m and in sight. It gives up when she is beyond 12 m, out of sight for 3 seconds, or its next step would take it off a ledge, and then walks back to its patrol. Kiki runs at 7 m/s, so a stoat can always be outrun.
-- **No path-finding.** Sight and the ledge check are ray casts. The engine's navigation stays deferred ([No navigation](../../engine-gaps/issues/08-navigation.md)).
+- **No path-finding.** Sight and the ledge check are ray casts. The engine's navigation stays deferred ([No navigation or path-finding](../../engine-gaps/issues/08-navigation.md)).
 - **Being hit:** 5 seconds off the timer; Kiki is knocked back and up, has no control for half a second, and blinks and cannot be hit for 1.5 seconds. The blink is Kiki shown and hidden.
 - **The fall penalty,** left as "a fixed number" in "What is the game loop?", is also 5 seconds to start with.
 - **The stomp:** landing on an enemy from above while falling. Kiki bounces 1.2 m, or the full 2.0 m if jump is held, and gets her extra jump back if that power-up is active. Touching an enemy any other way is a hit.
