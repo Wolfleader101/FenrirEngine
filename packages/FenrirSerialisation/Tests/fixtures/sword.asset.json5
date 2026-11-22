@@ -1,0 +1,30 @@
+// Iron sword: tuning numbers; `description` is left out, so it takes the type's default
+{
+  format: 1,
+  type: "MyGame::Sword",
+  version: 2,
+  data: {
+    displayName: "Iron Sword",
+    damage: 12.5,
+    durability: Infinity,
+    mesh: "models/sword.glb#Mesh0",
+    tags: ["melee", "one-handed", "iron"],
+    upgrades: [
+      {level: 1, cost: 100, damageBonus: 1.5},
+      {level: 2, cost: 250, damageBonus: 3.25},
+      {level: 3, cost: 600, damageBonus: 6},
+    ],
+    onHit: "#sparks",
+  },
+  sub: {
+    sparks: {
+      type: "MyGame::ParticleEffect",
+      version: 1,
+      data: {
+        texture: "fx/spark.png",
+        count: 24,
+        lifetime: 0.4,
+      },
+    },
+  },
+}
