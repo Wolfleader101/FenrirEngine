@@ -57,12 +57,26 @@ TEST_CASE("ForName gives the same component as the C++ type's own ComponentType"
     entities.Add(ComponentType::Native<Fenrir::Name>(), entity);
 
     const std::optional<ComponentType> name = ComponentType::ForName(registry, "Fenrir::Name");
+    INFO("FenrirECS's registration should hang a ComponentType on Fenrir::Name");
     REQUIRE(name.has_value());
 
     INFO("a Name added through the C++ type is found through the named one");
     REQUIRE(entities.Has(*name, entity));
-    INFO("and removed through it");
+}
+
+TEST_CASE("A component removed through its named ComponentType is gone for the C++ type", "[component-type][types]")
+{
+    const TypeRegistry registry = EcsRegistry();
+    EntityList entities;
+    const auto entity = entities.CreateEntity().GetId();
+    entities.Add(ComponentType::Native<Fenrir::Name>(), entity);
+
+    const std::optional<ComponentType> name = ComponentType::ForName(registry, "Fenrir::Name");
+    INFO("FenrirECS's registration should hang a ComponentType on Fenrir::Name");
+    REQUIRE(name.has_value());
+    INFO("removing the Name through the named ComponentType should succeed");
     REQUIRE(entities.Remove(*name, entity));
+    INFO("and the C++ type should then see no Name");
     REQUIRE(!entities.Has(ComponentType::Native<Fenrir::Name>(), entity));
 }
 
@@ -113,7 +127,8 @@ TEST_CASE("An empty registry finds no component", "[component-type][types]")
 {
     const TypeRegistry registry;
 
-    INFO("nothing registered, so no name is a component's");
+    INFO("nothing registered, so ForName finds no component");
     REQUIRE(!ComponentType::ForName(registry, "Fenrir::Transform").has_value());
+    INFO("and NameOf names none");
     REQUIRE(!ComponentType::NameOf(registry, ComponentType::Native<Fenrir::Transform>()).has_value());
 }

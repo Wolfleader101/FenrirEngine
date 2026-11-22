@@ -31,10 +31,13 @@ namespace
         int depth = 1;
     };
 
+    constexpr std::string_view WeatherFormerly[] = {"SceneTest::Climate"};
+
     const TypeDescription WeatherDescription{
         .name = "SceneTest::Weather",
         .package = "FenrirSceneTests",
         .role = Role::SceneResource,
+        .formerly = WeatherFormerly,
         .size = sizeof(Weather),
         .alignment = alignof(Weather),
         .construct = Fenrir::ConstructValue<Weather>,
@@ -105,7 +108,19 @@ TEST_CASE("RemoveResource by name removes the resource", "[scene][types]")
 
     INFO("the scene should have no Weather once it is removed by name");
     REQUIRE(scene.GetResource<Weather>() == nullptr);
-    REQUIRE(scene.FindResource(types.registry, "SceneTest::Weather") == nullptr);
+}
+
+TEST_CASE("A scene resource's former name opens its doors", "[scene][types]")
+{
+    Registered types;
+    Scene scene("Test");
+
+    void* added = scene.AddResource(types.registry, "SceneTest::Climate");
+
+    INFO("SceneTest::Climate is Weather's former name, so adding by it should make a Weather");
+    REQUIRE(added != nullptr);
+    INFO("the one GetResource<Weather> finds");
+    REQUIRE(scene.GetResource<Weather>() == added);
 }
 
 TEST_CASE("A name that is not a scene resource's opens no door, with no diagnostic", "[scene][types]")

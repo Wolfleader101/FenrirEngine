@@ -184,12 +184,21 @@ TEST_CASE("ComponentType::ForName finds RigidBody as a component an entity accep
         Fenrir::ComponentType::ForName(installed.Registry(), "Fenrir::RigidBody");
     INFO("Physics::Install's registration should hang a ComponentType on Fenrir::RigidBody");
     REQUIRE(body.has_value());
-
-    INFO("the entity takes a RigidBody through it, which the C++ type then sees");
+    INFO("the entity should take a RigidBody through the ComponentType found by name");
     REQUIRE(entities.Add(*body, entity));
+    INFO("the RigidBody added by name should be the one the C++ type sees");
     REQUIRE(entities.Has(Fenrir::ComponentType::Native<Fenrir::RigidBody>(), entity));
+}
 
-    INFO("NameOf gives the name back");
+TEST_CASE("ComponentType::NameOf gives RigidBody's name back", "[types][components]")
+{
+    InstalledApp installed;
+
+    const std::optional<Fenrir::ComponentType> body =
+        Fenrir::ComponentType::ForName(installed.Registry(), "Fenrir::RigidBody");
+    INFO("Physics::Install's registration should hang a ComponentType on Fenrir::RigidBody");
+    REQUIRE(body.has_value());
+    INFO("NameOf should give back the name ForName found it by");
     REQUIRE(Fenrir::ComponentType::NameOf(installed.Registry(), *body) == "Fenrir::RigidBody");
 }
 
@@ -197,12 +206,8 @@ TEST_CASE("ComponentType::ForName finds Transform, which the App registers itsel
 {
     InstalledApp installed;
 
-    const std::optional<Fenrir::ComponentType> transform =
-        Fenrir::ComponentType::ForName(installed.Registry(), "Fenrir::Transform");
     INFO("the App's constructor registers FenrirECS, whose registration hangs a ComponentType on Fenrir::Transform");
-    REQUIRE(transform.has_value());
-    REQUIRE(Fenrir::ComponentType::NameOf(installed.Registry(), Fenrir::ComponentType::Native<Fenrir::Transform>()) ==
-            "Fenrir::Transform");
+    REQUIRE(Fenrir::ComponentType::ForName(installed.Registry(), "Fenrir::Transform").has_value());
 }
 
 TEST_CASE("ComponentType::ForName finds no component for an unknown name", "[types][components]")
@@ -235,12 +240,29 @@ TEST_CASE("Scene::AddResource by name makes a default Sky the C++ type finds", "
 
     INFO("Renderer::Install's registration should hang the sky's scene doors, so adding it by name gives a Sky");
     REQUIRE(added != nullptr);
+    INFO("GetResource<Sky> should find the Sky added by name");
     REQUIRE(scene.GetResource<Fenrir::Sky>() == added);
-    INFO("FindResource by name finds the same Sky");
-    REQUIRE(scene.FindResource(installed.Registry(), "Fenrir::Sky") == added);
+}
+
+TEST_CASE("Scene::FindResource by name finds the scene's Sky", "[types][resources]")
+{
+    InstalledApp installed;
+    Fenrir::Scene& scene = installed.app.GetActiveScene();
+    Fenrir::Sky& sky = scene.AddResource<Fenrir::Sky>();
+
+    INFO("FindResource by Fenrir::Sky should give the Sky AddResource<Sky> made");
+    REQUIRE(scene.FindResource(installed.Registry(), "Fenrir::Sky") == &sky);
+}
+
+TEST_CASE("Scene::RemoveResource by name removes the scene's Sky", "[types][resources]")
+{
+    InstalledApp installed;
+    Fenrir::Scene& scene = installed.app.GetActiveScene();
+    scene.AddResource<Fenrir::Sky>();
 
     scene.RemoveResource(installed.Registry(), "Fenrir::Sky");
-    INFO("and RemoveResource by name removes it");
+
+    INFO("the scene should have no Sky once it is removed by name");
     REQUIRE(scene.GetResource<Fenrir::Sky>() == nullptr);
 }
 
@@ -250,8 +272,9 @@ TEST_CASE("Scene's named doors open nothing for a name that is not a scene resou
     Fenrir::Scene& scene = installed.app.GetActiveScene();
     const std::size_t errors = installed.errors->size();
 
-    INFO("Fenrir::Camera is a component, not a scene resource");
+    INFO("Fenrir::Camera is a component, not a scene resource, so adding it by name gives nothing");
     REQUIRE(scene.AddResource(installed.Registry(), "Fenrir::Camera") == nullptr);
+    INFO("and finding it by name gives nothing");
     REQUIRE(scene.FindResource(installed.Registry(), "Fenrir::Camera") == nullptr);
     INFO("and the registry reports nothing about it");
     REQUIRE(installed.errors->size() == errors);

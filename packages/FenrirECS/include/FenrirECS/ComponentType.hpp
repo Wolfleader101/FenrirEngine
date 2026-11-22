@@ -39,16 +39,16 @@ namespace Fenrir
         [[nodiscard]] static ComponentType Dynamic(DynamicComponentType type);
 
         /**
-         * @brief The component the type registered under `name` (canonical or former) is, as its package's generated
-         * registration attached it (FenrirECS/TypeAttachments.hpp, ADR-0074); empty when no type is registered under
-         * `name` or the type registered is not a component.
+         * @brief The ComponentType of the component registered under `name` (canonical or former), which its
+         * package's generated registration attached (FenrirECS/TypeAttachments.hpp, ADR-0074); empty when no type is
+         * registered under `name`, or the type registered there is not a component.
          */
         [[nodiscard]] static std::optional<ComponentType> ForName(const TypeRegistry& registry, std::string_view name);
 
         /**
-         * @brief The canonical name of the registered component `type` is, the inverse of ForName; empty when no
-         * component registered in `registry` is `type`. A dynamic type is never one: its name is its
-         * DynamicComponentType's. The name lives as long as the registered description.
+         * @brief The canonical name `type` is registered under, the inverse of ForName; empty when no component
+         * registered in `registry` is `type`. A dynamic type never is: its name is its DynamicComponentType's. The
+         * name lives as long as the registered description.
          */
         [[nodiscard]] static std::optional<std::string_view> NameOf(const TypeRegistry& registry,
                                                                     const ComponentType& type);
@@ -74,8 +74,9 @@ namespace Fenrir
       private:
         friend class EntityList;
 
-        // Whether `other` names the same component: the same C++ type (its storage finder, which each native type's
-        // has its own of) or the same dynamic type object.
+        // Whether `other` names the same component: the same C++ type or the same dynamic type object. The storage
+        // finder carries a native type's identity: identical-code folding may merge two types' watch hooks, but not
+        // their finders, since each reaches a storage of its own type, with its own type id and vtable.
         [[nodiscard]] bool IsSameAs(const ComponentType& other) const noexcept
         {
             return m_findNativeStorage == other.m_findNativeStorage && m_hookNativeWatch == other.m_hookNativeWatch &&
