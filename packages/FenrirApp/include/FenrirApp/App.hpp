@@ -693,6 +693,29 @@ namespace Fenrir
         Scene& GetScene(const std::string& name);
 
         /**
+         * @brief A scene request to create a scene called `name`. Scene requests wait, and are applied at the end of
+         * the frame, after its last phase, in the order made, so no system sees a scene change mid-frame; one made
+         * outside a frame waits for the end of the next. From a system the scheduler runs in parallel, a request is
+         * held until the system's batch has run, as an event is. At its turn, a name that exists is refused with a
+         * logged error.
+         */
+        void RequestCreateScene(std::string name);
+
+        /**
+         * @brief A scene request (see RequestCreateScene) to make the scene called `name` active. At its turn, a name
+         * that does not exist is refused with a logged error, as ChangeActiveScene refuses it. A request to create a
+         * scene made earlier has been applied by then, so a scene created and activated in one frame is.
+         */
+        void RequestChangeActiveScene(std::string name);
+
+        /**
+         * @brief A scene request (see RequestCreateScene) to destroy the scene called `name`. At its turn, the active
+         * scene or a name that does not exist is refused with a logged error, as DestroyScene refuses them, so a
+         * restart (create, activate, destroy the old scene) succeeds in one frame because the activate lands first.
+         */
+        void RequestDestroyScene(std::string name);
+
+        /**
          * @brief Calls `func(Scene&)` for every scene, active or not. For code that must reach all the entities there
          * are (a component type that stops existing), not for per-frame work.
          */
@@ -719,6 +742,22 @@ namespace Fenrir
         // references to a scene stay valid.
         std::vector<std::unique_ptr<Scene>> m_scenes;
         size_t activeSceneIndex = 0;
+
+        // The scene requests made and not yet applied, in the order made: applied at the end of the frame.
+        struct SceneRequest
+        {
+            enum class Kind
+            {
+                Create,
+                ChangeActive,
+                Destroy
+            };
+            Kind kind;
+            std::string name;
+        };
+        std::vector<SceneRequest> m_sceneRequests;
+        // Guards m_sceneRequests: a request may come from any thread, held or not.
+        std::mutex m_sceneRequestsMutex;
 
         // Guards the maps of queues below (not the queues): parallel systems look queues up and create them.
         mutable std::mutex m_eventQueuesMutex;
@@ -753,6 +792,12 @@ namespace Fenrir
 
         /** @brief Swaps every event queue's buffers if a tick ran since the last swap. */
         void UpdateEvents();
+
+        /** @brief Queues a scene request, or holds it until a parallel system's batch has run. */
+        void AddSceneRequest(SceneRequest request);
+
+        /** @brief Applies the scene requests made so far, in the order made, and empties the queue. */
+        void ApplySceneRequests();
 
         /**
          * @brief Get the Event Queue object

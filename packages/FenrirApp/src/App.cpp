@@ -5,6 +5,7 @@
 #include "FenrirMath/Generated/FenrirMathTypes.hpp"
 #include "FenrirTypes/TypeRegistry.hpp"
 
+#include <algorithm>
 #include <string_view>
 #include <thread>
 
@@ -301,6 +302,8 @@ namespace Fenrir
         RunPhase(SchedulePriority::Render);
 
         UpdateEvents();
+
+        ApplySceneRequests();
     }
 
     const Time& App::GetTime() const
@@ -357,6 +360,64 @@ namespace Fenrir
 
         //! if we get here, the scene doesnt exist
         m_logger->Error("Scene with name {0} does not exist", name);
+    }
+
+    void App::RequestCreateScene(std::string name)
+    {
+        AddSceneRequest({SceneRequest::Kind::Create, std::move(name)});
+    }
+
+    void App::RequestChangeActiveScene(std::string name)
+    {
+        AddSceneRequest({SceneRequest::Kind::ChangeActive, std::move(name)});
+    }
+
+    void App::RequestDestroyScene(std::string name)
+    {
+        AddSceneRequest({SceneRequest::Kind::Destroy, std::move(name)});
+    }
+
+    void App::AddSceneRequest(SceneRequest request)
+    {
+        // Through the same hold as events, so requests from parallel systems arrive in the order the systems were
+        // registered, every run.
+        Detail::SendOrHold([this, request = std::move(request)] {
+            const std::lock_guard lock(m_sceneRequestsMutex);
+            m_sceneRequests.push_back(request);
+        });
+    }
+
+    void App::ApplySceneRequests()
+    {
+        std::vector<SceneRequest> requests;
+        {
+            const std::lock_guard lock(m_sceneRequestsMutex);
+            requests.swap(m_sceneRequests);
+        }
+        for (const SceneRequest& request : requests)
+        {
+            switch (request.kind)
+            {
+            case SceneRequest::Kind::Create: {
+                const bool exists = std::ranges::any_of(m_scenes, [&request](const std::unique_ptr<Scene>& scene) {
+                    return scene->GetName() == request.name;
+                });
+                if (exists)
+                {
+                    m_logger->Error("Scene {0} already exists; the request to create it was refused", request.name);
+                    break;
+                }
+                CreateScene(request.name);
+                break;
+            }
+            case SceneRequest::Kind::ChangeActive:
+                ChangeActiveScene(request.name);
+                break;
+            case SceneRequest::Kind::Destroy:
+                DestroyScene(request.name);
+                break;
+            }
+        }
     }
 
     Scene& App::GetScene(const std::string& name)
