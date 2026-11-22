@@ -1674,7 +1674,8 @@ namespace Fenrir
         state->config = config;
         Graphics::DeviceConfig device;
         device.framesInFlight = config.framesInFlight == 0 ? 1 : config.framesInFlight;
-        device.debugValidation = config.debugValidation;
+        const bool debugValidation = config.debugValidation.value_or(DebugValidationByDefault);
+        device.debugValidation = debugValidation;
 
         std::unique_ptr<Graphics::GraphicsDevice> made;
         if (config.backend == GraphicsBackend::Null)
@@ -1686,7 +1687,7 @@ namespace Fenrir
         {
             SurfaceRequest request;
             request.api = GraphicsApi::OpenGL;
-            request.debugContext = config.debugValidation;
+            request.debugContext = debugValidation;
             std::string error;
             if (!Window::RequestSurface(app, Window::MainWindow(), request, error))
             {

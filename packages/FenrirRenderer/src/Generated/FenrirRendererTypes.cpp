@@ -775,11 +775,12 @@ namespace Fenrir::Generated::FenrirRendererTypes
     };
 
     // Fenrir::RendererConfig
+    constexpr Fenrir::ValueType Fenrir_RendererConfig_debugValidation_Element{.kind = Fenrir::Kind::Bool};
     constexpr Fenrir::FieldInfo Fenrir_RendererConfig_Fields[] = {
         {.name = "backend", .type = {.kind = Fenrir::Kind::Enum, .type = &Fenrir_GraphicsBackend}, .doc = "The backend; one that cannot start fails Install, never falling back to another."},
         {.name = "vsync", .type = {.kind = Fenrir::Kind::Enum, .type = &Fenrir_Vsync}, .doc = "Changeable later with Renderer::SetVsync. A mode the surface lacks falls back to `On`, logged."},
         {.name = "msaa", .type = {.kind = Fenrir::Kind::U32}, .doc = "Samples per pixel of every view's scene targets, resolved in Output: 1 (off), 2, 4 or 8. Another count uses the largest of those below it, logged."},
-        {.name = "debugValidation", .type = {.kind = Fenrir::Kind::Bool}, .doc = "Whether the graphics API reports misuse to the app's logger; costly. On in Debug builds."},
+        {.name = "debugValidation", .type = {.kind = Fenrir::Kind::Optional, .element = &Fenrir_RendererConfig_debugValidation_Element, .optional = &Fenrir::OptionalOperationsOf<decltype(Fenrir::RendererConfig::debugValidation)::value_type>}, .doc = "Whether the graphics API reports misuse to the app's logger; costly. Empty means the build's default, DebugValidationByDefault: on in Debug builds, off in Release. Empty by default so the default is the same in every build, as a description and a project file record it."},
         {.name = "framesInFlight", .type = {.kind = Fenrir::Kind::U32}, .doc = "How many frames the GPU may still be drawing while the next is recorded (ADR-0019)."},
         {.name = "automaticInstancing", .type = {.kind = Fenrir::Kind::Bool}, .doc = "Whether consecutive opaque and masked MeshRenderers with the same pipeline, material and mesh draw as one instanced draw (ADR-0051); off draws each on its own, for comparison. Changeable later with Renderer::SetAutomaticInstancing."},
         {.name = "computeSkinning", .type = {.kind = Fenrir::Kind::Bool}, .doc = "Whether each skinned mesh is skinned once a frame by a compute pass, which every pass then draws rigidly (ADR-0050); off, every draw of it skins it in its vertex stage, under its shader's `SKINNED` variant (ADR-0035). Changeable later with Renderer::SetComputeSkinning."},

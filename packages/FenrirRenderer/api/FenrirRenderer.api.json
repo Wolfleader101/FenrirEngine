@@ -1666,9 +1666,10 @@
         },
         {
           "name": "debugValidation",
-          "kind": "bool",
-          "default": true,
-          "doc": "Whether the graphics API reports misuse to the app's logger; costly. On in Debug builds."
+          "kind": "optional",
+          "elementKind": "bool",
+          "default": null,
+          "doc": "Whether the graphics API reports misuse to the app's logger; costly. Empty means the build's default, DebugValidationByDefault: on in Debug builds, off in Release. Empty by default so the default is the same in every build, as a description and a project file record it."
         },
         {
           "name": "framesInFlight",
