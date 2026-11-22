@@ -31,3 +31,10 @@ private-members = ["Fixture::Tag"]
 "Fixture::Paths" = "settings"
 # Held by no field: described because the selection names it.
 "Fixture::Heading" = "enum"
+
+# What tools/generate-type-registry writes for the fixture: the FenrirTypes tests compile and exercise it.
+[registration]
+header = "../../../../packages/FenrirTypes/Tests/Generated/FixtureTypes.hpp"
+source = "../../../../packages/FenrirTypes/Tests/Generated/FixtureTypes.cpp"
+function = "Fenrir::Generated::RegisterFixtureTypes"
+includes = ["Fixture.hpp"]

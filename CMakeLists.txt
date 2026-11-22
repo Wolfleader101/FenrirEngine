@@ -79,6 +79,10 @@ endif()
 # fenrir_describe_api() and the fenrir-describe-api target, which packages that share types with bindings use (ADR-0042).
 include(cmake/FenrirDescribeApi.cmake)
 add_subdirectory(tools/describe-api)
+# fenrir_generate_type_registry() and the fenrir-generate-type-registry target, which the build never runs: each
+# package's type registration, generated from its description (ADR-0074).
+include(cmake/FenrirGenerateTypeRegistry.cmake)
+add_subdirectory(tools/generate-type-registry)
 
 if(FENRIR_ENABLE_SCRIPTING)
     # iris_generate_binding() adds each binding (ADR-0042) to fenrir-generate-bindings, which the build never runs.
