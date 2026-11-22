@@ -10,6 +10,8 @@
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 using namespace Fenrir::Serialisation;
@@ -32,9 +34,10 @@ namespace
     {
         RecordingLogger logger;
         ReadTreeResult result = ReadText(text, "test.json5", logger);
-        INFO("the text fails with no tree and one diagnostic");
+        INFO("the text fails with no tree and one error diagnostic");
         REQUIRE_FALSE(result.tree.has_value());
         REQUIRE(result.diagnostics.size() == 1);
+        REQUIRE(result.diagnostics.front().severity == DiagnosticSeverity::Error);
         return result.diagnostics.front();
     }
 
@@ -148,24 +151,67 @@ TEST_CASE("Infinity and NaN read as doubles, with a sign", "[serialisation][read
     REQUIRE(ReadNumber("-NaN") == Number(std::numeric_limits<double>::quiet_NaN()));
 }
 
-TEST_CASE("A number keeps the width its text implies", "[serialisation][read]")
+TEST_CASE("An integer that fits std::int64_t reads as signed", "[serialisation][read]")
 {
-    INFO("an integer that fits std::int64_t is signed, at both ends of its range");
+    INFO("zero and both ends of the signed range are signed");
+    REQUIRE(ReadNumber("0") == Number(std::int64_t{0}));
     REQUIRE(ReadNumber("9223372036854775807") == Number(std::numeric_limits<std::int64_t>::max()));
     REQUIRE(ReadNumber("-9223372036854775808") == Number(std::numeric_limits<std::int64_t>::min()));
+}
 
-    INFO("a larger one is unsigned");
+TEST_CASE("An integer above the signed range reads as unsigned", "[serialisation][read]")
+{
+    INFO("from 2^63 up to the largest std::uint64_t it is unsigned");
     REQUIRE(ReadNumber("9223372036854775808") == Number(std::uint64_t{9223372036854775808u}));
     REQUIRE(ReadNumber("18446744073709551615") == Number(std::numeric_limits<std::uint64_t>::max()));
+}
 
-    INFO("one wider than 64 bits, or below the signed range, is a double");
+TEST_CASE("An integer no 64-bit integer holds reads as a double", "[serialisation][read]")
+{
+    INFO("one wider than 64 bits, or below the signed range, is the nearest double");
     REQUIRE(ReadNumber("18446744073709551616") == Number(18446744073709551616.0));
     REQUIRE(ReadNumber("-9223372036854775809") == Number(-9223372036854775809.0));
+}
 
-    INFO("a point or an exponent makes a double even for a whole number");
+TEST_CASE("A number with a point or an exponent reads as a double", "[serialisation][read]")
+{
+    INFO("a whole number written with a point or an exponent is still a double");
     REQUIRE(ReadNumber("1.0") == Number(1.0));
     REQUIRE(ReadNumber("1e2") == Number(100.0));
-    REQUIRE(ReadNumber("0") == Number(std::int64_t{0}));
+}
+
+TEST_CASE("Negative zero reads as a double, keeping its sign", "[serialisation][read]")
+{
+    const Number decimal = ReadNumber("-0");
+    const Number hex = ReadNumber("-0x0");
+
+    INFO("JSON5's -0 is negative zero, which no integer holds, so it is the double -0.0");
+    REQUIRE(decimal.Width() == NumberWidth::Double);
+    REQUIRE(std::signbit(decimal.AsDouble()));
+    REQUIRE(hex.Width() == NumberWidth::Double);
+    REQUIRE(std::signbit(hex.AsDouble()));
+}
+
+TEST_CASE("A decimal too large or too small for a double reads as infinity or zero", "[serialisation][read]")
+{
+    INFO("the magnitude, not the exponent's sign, decides: digits shift it as the exponent does");
+    REQUIRE(ReadNumber("1e400") == Number(std::numeric_limits<double>::infinity()));
+    REQUIRE(ReadNumber("-1e400") == Number(-std::numeric_limits<double>::infinity()));
+    REQUIRE(ReadNumber("1e-400") == Number(0.0));
+    REQUIRE(ReadNumber("0." + std::string(400, '0') + "1") == Number(0.0));
+    REQUIRE(ReadNumber("1" + std::string(400, '0') + "e-10") == Number(std::numeric_limits<double>::infinity()));
+}
+
+TEST_CASE("A lone surrogate escape reads, and its tree writes text that reads back", "[serialisation][read]")
+{
+    const Value value = Read("['\\uD800x']");
+    const std::string written = WriteText(value);
+
+    INFO("the lone surrogate is kept, in its three-byte form, before the x");
+    REQUIRE(value.AsArray().elements[0].value.AsString() == "\xED\xA0\x80x");
+
+    INFO("the written text reads again to the same tree");
+    REQUIRE(Read(written) == value);
 }
 
 TEST_CASE("A leading zero before a digit is a syntax error", "[serialisation][read]")
@@ -210,6 +256,34 @@ TEST_CASE("An identifier key reads as its name", "[serialisation][read]")
     REQUIRE(object.members[5].key == "\xC3\xBCml");
     REQUIRE(object.members[6].key == "quoted key");
     REQUIRE(object.members[7].key == "single");
+}
+
+TEST_CASE("A surrogate pair escaped in a key reads as one code point", "[serialisation][read]")
+{
+    const Value value = Read("{a\\uD83D\\uDE00: 1}");
+
+    INFO("the pair is U+1F600 in four bytes of UTF-8, as it is in a string");
+    REQUIRE(value.AsObject().members[0].key == "a\xF0\x9F\x98\x80");
+}
+
+TEST_CASE("A key escape that is not a character a key may hold is a syntax error", "[serialisation][read]")
+{
+    const Diagnostic lone = Fail("{a\\uD800: 1}");
+    const Diagnostic space = Fail("{a\\u0020b: 1}");
+
+    INFO("a lone surrogate, or a space, escaped in a key is refused at its backslash");
+    REQUIRE(lone.column == 3);
+    REQUIRE(space.column == 3);
+}
+
+TEST_CASE("A control or noncharacter above ASCII is not part of an identifier key", "[serialisation][read]")
+{
+    const Diagnostic control = Fail("{a\xC2\x85: 1}");
+    const Diagnostic nonCharacter = Fail("{a\xEF\xBF\xBE: 1}");
+
+    INFO("U+0085 and U+FFFE end the key, so the colon is missing there");
+    REQUIRE(control.column == 3);
+    REQUIRE(nonCharacter.column == 3);
 }
 
 TEST_CASE("Objects and arrays read their members and elements in order", "[serialisation][read]")

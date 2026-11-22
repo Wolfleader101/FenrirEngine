@@ -2,6 +2,7 @@
 
 #include "FenrirLogger/ILogger.hpp"
 
+#include <algorithm>
 #include <charconv>
 #include <cstdint>
 #include <format>
@@ -39,7 +40,8 @@ namespace Fenrir::Serialisation
             return (byte & 0xC0) == 0x80;
         }
 
-        // One code point of UTF-8 at `offset`, refusing overlong forms, surrogates and anything past U+10FFFF.
+        // One code point of UTF-8 at `offset`, refusing overlong forms and anything past U+10FFFF. A surrogate's
+        // three-byte form is read, since that is how a lone surrogate from a `\u` escape is held and written.
         Decoded Decode(std::string_view text, std::size_t offset)
         {
             if (offset >= text.size())
@@ -82,7 +84,7 @@ namespace Fenrir::Serialisation
                     return {NotUtf8, 1};
                 codePoint = (codePoint << 6) | (byte & 0x3F);
             }
-            if (codePoint < smallest || codePoint > 0x10FFFF || (codePoint >= 0xD800 && codePoint <= 0xDFFF))
+            if (codePoint < smallest || codePoint > 0x10FFFF)
                 return {NotUtf8, 1};
             return {codePoint, length};
         }
@@ -147,12 +149,25 @@ namespace Fenrir::Serialisation
             return c - 'A' + 10;
         }
 
-        // ECMAScript's IdentifierStart in ASCII, and every code point above ASCII that is not whitespace, which
-        // stands in for Unicode's ID_Start and ID_Continue so the reader carries no tables.
+        bool IsSurrogate(char32_t c)
+        {
+            return c >= 0xD800 && c <= 0xDFFF;
+        }
+
+        // A code point Unicode keeps out of text: U+FDD0 to U+FDEF, and the last two of every plane.
+        bool IsNonCharacter(char32_t c)
+        {
+            return (c >= 0xFDD0 && c <= 0xFDEF) || (c & 0xFFFE) == 0xFFFE;
+        }
+
+        // ECMAScript's IdentifierStart in ASCII, and every code point above ASCII that is not whitespace, a C1
+        // control, a surrogate or a noncharacter, which stands in for Unicode's ID_Start and ID_Continue so the
+        // reader carries no tables.
         bool IsIdentifierStart(char32_t c)
         {
-            return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' || c == '$' ||
-                   (c >= 0x80 && c != EndOfText && c != NotUtf8 && !IsWhitespace(c));
+            if (c < 0x80)
+                return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' || c == '$';
+            return c > 0x9F && c <= 0x10FFFF && !IsWhitespace(c) && !IsSurrogate(c) && !IsNonCharacter(c);
         }
 
         bool IsIdentifierPart(char32_t c)
@@ -285,7 +300,7 @@ namespace Fenrir::Serialisation
                                        static_cast<unsigned char>(m_text[m_position.offset]));
                 if (IsLineTerminator(c))
                     return "a line break";
-                if (c < 0x20 || c == 0x7F || IsWhitespace(c))
+                if (c < 0x20 || (c >= 0x7F && c <= 0x9F) || IsWhitespace(c))
                     return std::format("U+{:04X}", static_cast<std::uint32_t>(c));
                 std::string text = "'";
                 AppendUtf8(text, c);
@@ -555,7 +570,7 @@ namespace Fenrir::Serialisation
                         const Position escapeAt = m_position;
                         Advance();
                         Expect('u', "'u' to begin a Unicode escape in a key");
-                        const char32_t escaped = ReadHex(4);
+                        const char32_t escaped = ReadUnicodeEscape();
                         if (first ? !IsIdentifierStart(escaped) : !IsIdentifierPart(escaped))
                             Fail(escapeAt,
                                  std::format("expected an escape of a character a key may hold, found U+{:04X}",
@@ -803,10 +818,13 @@ namespace Fenrir::Serialisation
                 return FromMagnitude(magnitude, negative);
             }
 
-            // The width rule: signed when it fits std::int64_t, unsigned when only std::uint64_t holds it.
+            // The width rule: signed when it fits std::int64_t, unsigned when only std::uint64_t holds it. Negative
+            // zero is JSON5's -0, which no integer holds, so it is a double.
             static Number FromMagnitude(std::uint64_t magnitude, bool negative)
             {
                 constexpr std::uint64_t signedMax = std::numeric_limits<std::int64_t>::max();
+                if (negative && magnitude == 0)
+                    return Number(-0.0);
                 if (!negative)
                     return magnitude <= signedMax ? Number(static_cast<std::int64_t>(magnitude)) : Number(magnitude);
                 if (magnitude <= signedMax)
@@ -838,11 +856,31 @@ namespace Fenrir::Serialisation
                 const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
                 if (error == std::errc::result_out_of_range)
                 {
-                    // from_chars leaves the value alone when out of range: too large is infinity, too small zero.
-                    const bool tiny = !exponent.empty() && exponent.front() == '-';
-                    value = tiny ? 0.0 : std::numeric_limits<double>::infinity();
+                    // from_chars leaves the value alone when out of range, so whether it was too large or too small
+                    // is worked out here: the power of ten of the first significant digit decides.
+                    value = Magnitude(integer, fraction, exponent) > 0 ? std::numeric_limits<double>::infinity() : 0.0;
                 }
                 return Number(negative ? -value : value);
+            }
+
+            // Where the first significant digit sits, as a power of ten plus one: positive when the number is at
+            // least 1, and no more than zero when it is below 1. Only its sign matters, so the sums saturate.
+            static std::int64_t Magnitude(const std::string& integer, const std::string& fraction,
+                                          const std::string& exponent)
+            {
+                constexpr std::int64_t saturated = std::int64_t{1} << 40;
+                std::int64_t power = 0;
+                const bool exponentNegative = !exponent.empty() && exponent.front() == '-';
+                for (const char digit : std::string_view(exponent).substr(exponentNegative ? 1 : 0))
+                    power = std::min(power * 10 + (digit - '0'), saturated);
+                if (exponentNegative)
+                    power = -power;
+
+                const std::size_t integerStart = integer.find_first_not_of('0');
+                if (integerStart != std::string::npos)
+                    return power + static_cast<std::int64_t>(integer.size() - integerStart);
+                const std::size_t fractionStart = fraction.find_first_not_of('0');
+                return power - static_cast<std::int64_t>(fractionStart == std::string::npos ? 0 : fractionStart);
             }
         };
     } // namespace

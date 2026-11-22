@@ -159,6 +159,22 @@ namespace
         root.leadingComments.push_back("// Level 1: the player's start room; entities are written parent-first");
         return root;
     }
+
+    // A golden read with ReadText, then written with WriteText, is the golden file again.
+    void RequireReadThenWrittenIsUnchanged(const char* name)
+    {
+        const std::string golden = ReadFixture(name);
+        SerialisationTest::RecordingLogger logger;
+
+        const ReadTreeResult result = ReadText(golden, name, logger);
+
+        INFO(name << " reads without a diagnostic");
+        REQUIRE(result.tree.has_value());
+        REQUIRE(result.diagnostics.empty());
+
+        INFO("WriteText of the tree read from " << name << " is the golden file, its leading comment kept");
+        REQUIRE(WriteText(*result.tree) == golden);
+    }
 } // namespace
 
 TEST_CASE("The golden fixtures are the research's samples, unchanged", "[serialisation][golden]")
@@ -186,30 +202,10 @@ TEST_CASE("A scene tree built in code writes level1.scene.json5 byte for byte", 
 
 TEST_CASE("sword.asset.json5 read then written gives back its own bytes, comments included", "[serialisation][golden]")
 {
-    const std::string golden = ReadFixture("sword.asset.json5");
-    SerialisationTest::RecordingLogger logger;
-
-    const ReadTreeResult result = ReadText(golden, "sword.asset.json5", logger);
-
-    INFO("the golden reads without a diagnostic");
-    REQUIRE(result.tree.has_value());
-    REQUIRE(result.diagnostics.empty());
-
-    INFO("WriteText of the tree read is the golden file, its leading comment kept");
-    REQUIRE(WriteText(*result.tree) == golden);
+    RequireReadThenWrittenIsUnchanged("sword.asset.json5");
 }
 
 TEST_CASE("level1.scene.json5 read then written gives back its own bytes, comments included", "[serialisation][golden]")
 {
-    const std::string golden = ReadFixture("level1.scene.json5");
-    SerialisationTest::RecordingLogger logger;
-
-    const ReadTreeResult result = ReadText(golden, "level1.scene.json5", logger);
-
-    INFO("the golden reads without a diagnostic");
-    REQUIRE(result.tree.has_value());
-    REQUIRE(result.diagnostics.empty());
-
-    INFO("WriteText of the tree read is the golden file, its leading comment kept");
-    REQUIRE(WriteText(*result.tree) == golden);
+    RequireReadThenWrittenIsUnchanged("level1.scene.json5");
 }
