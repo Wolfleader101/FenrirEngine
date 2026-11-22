@@ -14,6 +14,13 @@
 #include <limits>
 #include <string>
 
+TEST_CASE("Fenrir::AssetsConfig, default-constructed through its registration, has its description's defaults", "[types][defaults]")
+{
+    Fenrir::Testing::CheckDefaults(Fenrir::Describe<Fenrir::AssetsConfig>::Description(), {
+        {"root", std::string("")},
+    });
+}
+
 TEST_CASE("Fenrir::LodSettings, default-constructed through its registration, has its description's defaults", "[types][defaults]")
 {
     Fenrir::Testing::CheckDefaults(Fenrir::Describe<Fenrir::LodSettings>::Description(), {

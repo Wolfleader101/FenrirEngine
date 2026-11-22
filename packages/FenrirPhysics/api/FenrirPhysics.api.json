@@ -506,6 +506,25 @@
       ]
     },
     {
+      "name": "Fenrir::CollisionLayer",
+      "category": "struct",
+      "role": "nested",
+      "doc": "A collision layer's name, and the mask a body in it collides with unless told otherwise.",
+      "fields": [
+        {
+          "name": "name",
+          "kind": "string",
+          "default": ""
+        },
+        {
+          "name": "mask",
+          "kind": "u32",
+          "default": 4294967295,
+          "doc": "The layers a body in this layer collides with by default, one bit per layer."
+        }
+      ]
+    },
+    {
       "name": "Fenrir::Contact",
       "category": "struct",
       "role": "shared-struct",
@@ -1815,6 +1834,63 @@
           "kind": "f32",
           "default": 0,
           "doc": "How far along `normal` the shape must move to stop overlapping the collider: more than 0."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::PhysicsConfig",
+      "category": "struct",
+      "role": "settings",
+      "doc": "How Physics::Install sets physics up for an app.",
+      "fields": [
+        {
+          "name": "gravity",
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec3",
+          "default": {
+            "x": 0,
+            "y": -9.81,
+            "z": 0
+          },
+          "doc": "The gravity each new physics world starts with, in metres per second squared."
+        },
+        {
+          "name": "maxBodies",
+          "kind": "u32",
+          "default": 65536,
+          "doc": "The most bodies each world holds at once. A body beyond it is not made, and that is logged."
+        },
+        {
+          "name": "maxBodyPairs",
+          "kind": "u32",
+          "default": 65536,
+          "doc": "The most pairs of bodies whose bounds overlap that each world tracks in a step. Pairs beyond it are ignored for that step, and that is logged."
+        },
+        {
+          "name": "maxContacts",
+          "kind": "u32",
+          "default": 10240,
+          "doc": "The most contacts each world resolves in a step. Contacts beyond it are ignored for that step, and that is logged."
+        },
+        {
+          "name": "collisionLayers",
+          "kind": "list",
+          "elementKind": "struct",
+          "elementType": "Fenrir::CollisionLayer",
+          "default": [],
+          "doc": "Names for the collision layers, layer `i` named by `collisionLayers[i]` (at most 32), each with a default mask. Optional: CollisionFilter takes plain bits whether or not a layer is named."
+        },
+        {
+          "name": "useWorkerThreads",
+          "kind": "bool",
+          "default": true,
+          "doc": "Whether a step spreads its work over the App's worker threads, or runs on the thread that runs the App alone. Results are the same either way."
+        },
+        {
+          "name": "interpolate",
+          "kind": "bool",
+          "default": true,
+          "doc": "Whether bodies, characters and vehicles' wheels are interpolated between ticks (RigidBody::interpolate, CharacterBody::interpolate). Off: every one is shown at its step poses only."
         }
       ]
     },

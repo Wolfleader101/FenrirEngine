@@ -110,13 +110,16 @@ internal static class DocComment
 
     /// <summary>The doc commands a field takes, in the order SCHEMA.md ("Type and field doc commands") lists them.</summary>
     private static readonly string[] FieldCommandNames =
-        ["formerly", "range", "step", "display", "group", "readonly", "hidden", "multiline", "units"];
+        ["formerly", "range", "step", "display", "group", "readonly", "hidden", "multiline", "units", "transient"];
 
     /// <summary>A type's doc: its text without its doc commands, and what they give.</summary>
     public sealed record TypeDoc(string? Text, TypeCommands Commands);
 
-    /// <summary>A field's doc: its text without its doc commands, its former names and its metadata.</summary>
-    public sealed record FieldDoc(string? Text, IReadOnlyList<string> Formerly, FieldMetadata Metadata);
+    /// <summary>
+    /// A field's doc: its text without its doc commands, its former names, its metadata, and whether <c>@transient</c>
+    /// leaves it out of the description.
+    /// </summary>
+    public sealed record FieldDoc(string? Text, IReadOnlyList<string> Formerly, FieldMetadata Metadata, bool Transient);
 
     /// <summary>
     /// A type's doc comment, split: <c>@version N</c>, <c>@formerly Old::Name</c> (repeatable), <c>@transient</c> and
@@ -167,8 +170,8 @@ internal static class DocComment
 
     /// <summary>
     /// A field's doc comment, split: <c>@formerly oldName</c> (repeatable), <c>@range min max</c>, <c>@step s</c>,
-    /// <c>@display text</c>, <c>@group text</c>, <c>@readonly</c>, <c>@hidden</c>, <c>@multiline</c> and
-    /// <c>@units text</c>, each a line of its own; the rest is the field's text. A type's command, a malformed one or
+    /// <c>@display text</c>, <c>@group text</c>, <c>@readonly</c>, <c>@hidden</c>, <c>@multiline</c>,
+    /// <c>@units text</c> and <c>@transient</c>, each a line of its own; the rest is the field's text. A type's command, a malformed one or
     /// an unknown <c>@</c> word throws <see cref="DocCommandException" />.
     /// </summary>
     public static FieldDoc Field(string? raw)
@@ -176,6 +179,7 @@ internal static class DocComment
         var (text, commands) = Split(raw);
         var formerly = new List<string>();
         var metadata = FieldMetadata.None;
+        var transient = false;
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var (name, argument, line) in commands)
         {
@@ -228,10 +232,13 @@ internal static class DocComment
                 case "units":
                     metadata = metadata with { Units = Words(name, argument, line) };
                     break;
+                case "transient":
+                    transient = Flag(name, argument, line);
+                    break;
             }
         }
 
-        return new FieldDoc(text, formerly, metadata);
+        return new FieldDoc(text, formerly, metadata, transient);
     }
 
     /// <summary>

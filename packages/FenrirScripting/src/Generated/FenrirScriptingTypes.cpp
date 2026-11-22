@@ -4,6 +4,7 @@
 #include "../../include/FenrirScripting/Generated/FenrirScriptingTypes.hpp"
 
 #include "FenrirTypes/FieldInfo.hpp"
+#include "FenrirTypes/FieldVisitor.hpp"
 #include "FenrirTypes/Kind.hpp"
 #include "FenrirTypes/TypeDescription.hpp"
 #include "FenrirTypes/TypeRegistry.hpp"
@@ -56,6 +57,42 @@ namespace Fenrir::Generated::FenrirScriptingTypes
         .enumerators = Fenrir_RegistryError_Enumerators,
         .underlying = Fenrir::Kind::I32,
     };
+
+    // Fenrir::ScriptingConfig
+    constexpr Fenrir::FieldInfo Fenrir_ScriptingConfig_Fields[] = {
+        {.name = "scriptAssembly", .type = {.kind = Fenrir::Kind::Path}, .doc = "The project's one script assembly (`Fenrir::ScriptingConfig.scriptAssembly` in the project's `<name>.project.json5`). Empty means the project has no scripts: Install then does nothing and never starts .NET."},
+        {.name = "bridgeDirectory", .type = {.kind = Fenrir::Kind::Path}, .doc = "The directory holding Iris.Bridge.dll, its .runtimeconfig.json, the scripting contract Fenrir.Scripting.dll and the math contract Fenrir.Math.dll (the build's fenrir_deploy_scripting puts them next to the executable). Empty means the executable's own directory."},
+        {.name = "dotnetRoot", .type = {.kind = Fenrir::Kind::Path}, .doc = "An absolute .NET installation root, or empty for the default search."},
+        {.name = "hotReload", .type = {.kind = Fenrir::Kind::Bool}, .doc = "Whether to watch `scriptAssembly` and reload it, between frames, when a build replaces it. Either way the assembly is loaded from a private copy, so a build can always overwrite the original."},
+        {.name = "reloadDirectory", .type = {.kind = Fenrir::Kind::Path}, .doc = "Where the per-generation copies of the script assembly go. Empty means a directory of its own under the system temporary directory. Each loaded generation has a subdirectory, deleted once that generation is unloaded."},
+        {.name = "reloadInterval", .type = {.kind = Fenrir::Kind::I64}, .doc = "How often the watcher looks at the file, in milliseconds. Zero looks every frame.", .metadata = {.units = "ms"}},
+        {.name = "reloadDebounce", .type = {.kind = Fenrir::Kind::I64}, .doc = "How long the file must stay unchanged, and openable, before it counts as a finished build, in milliseconds.", .metadata = {.units = "ms"}},
+        {.name = "unloadTimeout", .type = {.kind = Fenrir::Kind::I64}, .doc = "How long a reload waits for the old generation to unload, in milliseconds. A generation that has not unloaded by then is kept track of (see Scripting::PendingUnloadCount) and the reload goes on.", .metadata = {.units = "ms"}},
+    };
+    void Fenrir_ScriptingConfig_Visit(void* instance, Fenrir::FieldVisitor& visitor)
+    {
+        auto& value = *static_cast<Fenrir::ScriptingConfig*>(instance);
+        visitor.Field(Fenrir_ScriptingConfig_Fields[0], Fenrir::ValueRef(&value.scriptAssembly, Fenrir_ScriptingConfig_Fields[0].type));
+        visitor.Field(Fenrir_ScriptingConfig_Fields[1], Fenrir::ValueRef(&value.bridgeDirectory, Fenrir_ScriptingConfig_Fields[1].type));
+        visitor.Field(Fenrir_ScriptingConfig_Fields[2], Fenrir::ValueRef(&value.dotnetRoot, Fenrir_ScriptingConfig_Fields[2].type));
+        visitor.Field(Fenrir_ScriptingConfig_Fields[3], Fenrir::ValueRef(&value.hotReload, Fenrir_ScriptingConfig_Fields[3].type));
+        visitor.Field(Fenrir_ScriptingConfig_Fields[4], Fenrir::ValueRef(&value.reloadDirectory, Fenrir_ScriptingConfig_Fields[4].type));
+        visitor.Field(Fenrir_ScriptingConfig_Fields[5], Fenrir::ValueRef(&value.reloadInterval, Fenrir_ScriptingConfig_Fields[5].type));
+        visitor.Field(Fenrir_ScriptingConfig_Fields[6], Fenrir::ValueRef(&value.reloadDebounce, Fenrir_ScriptingConfig_Fields[6].type));
+        visitor.Field(Fenrir_ScriptingConfig_Fields[7], Fenrir::ValueRef(&value.unloadTimeout, Fenrir_ScriptingConfig_Fields[7].type));
+    }
+    constexpr Fenrir::TypeDescription Fenrir_ScriptingConfig{
+        .name = "Fenrir::ScriptingConfig",
+        .package = "FenrirScripting",
+        .role = Fenrir::Role::Settings,
+        .size = sizeof(Fenrir::ScriptingConfig),
+        .alignment = alignof(Fenrir::ScriptingConfig),
+        .construct = &Fenrir::ConstructValue<Fenrir::ScriptingConfig>,
+        .destroy = &Fenrir::DestroyValue<Fenrir::ScriptingConfig>,
+        .doc = "Where scripting finds .NET and the project's script assembly. A settings type (ADR-0084): a project file fills it as `Fenrir::ScriptingConfig` before Install, every field but `extensions`.",
+        .fields = Fenrir_ScriptingConfig_Fields,
+        .visit = &Fenrir_ScriptingConfig_Visit,
+    };
 } // namespace Fenrir::Generated::FenrirScriptingTypes
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::ChangeError>::Description() noexcept
@@ -68,6 +105,11 @@ const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::RegistryError>::Descript
     return Fenrir::Generated::FenrirScriptingTypes::Fenrir_RegistryError;
 }
 
+const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::ScriptingConfig>::Description() noexcept
+{
+    return Fenrir::Generated::FenrirScriptingTypes::Fenrir_ScriptingConfig;
+}
+
 bool Fenrir::Generated::RegisterFenrirScriptingTypes(Fenrir::TypeRegistry& registry)
 {
     bool registered = true;
@@ -78,6 +120,8 @@ bool Fenrir::Generated::RegisterFenrirScriptingTypes(Fenrir::TypeRegistry& regis
         registered = registry.Register(FenrirScriptingTypes::Fenrir_ChangeError) && registered;
     if (registry.Find(FenrirScriptingTypes::Fenrir_RegistryError.name) != &FenrirScriptingTypes::Fenrir_RegistryError)
         registered = registry.Register(FenrirScriptingTypes::Fenrir_RegistryError) && registered;
+    if (registry.Find(FenrirScriptingTypes::Fenrir_ScriptingConfig.name) != &FenrirScriptingTypes::Fenrir_ScriptingConfig)
+        registered = registry.Register(FenrirScriptingTypes::Fenrir_ScriptingConfig) && registered;
     return registered;
 }
 

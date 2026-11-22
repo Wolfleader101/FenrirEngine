@@ -148,5 +148,6 @@ A field's comment (a struct's member, or a tagged union's tag) takes:
 | `@hidden` | `metadata.hidden`: `true`; an inspector does not show it. |
 | `@multiline` | `metadata.multiline`: `true`; an inspector edits its text over several lines. |
 | `@units text` | `metadata.units`: the units an inspector shows beside the value (`m/s`, `percent`). |
+| `@transient` | Nothing: the field is left out of `fields` and its type is never read. It is code wiring (a list of callbacks, say) that a `data-asset` or `settings` type holds and no file does. Those two are reached by member, so a field left out costs nothing; in any other role, or on a tagged union's tag, it fails the tool, since there the fields are the layout a binding mirrors. |
 
 A number is written as JSON's, the shortest that reads back as the same value. A text command's text is the rest of its line; a flag takes nothing after it. Every command but `@formerly` is given at most once. A type's command on a field, a field's on a type, any command on an enumerator or a tagged union's kind, a malformed one (`@version 0`, `@range 10`, `@formerly` with no name) or a second of one fails the tool, naming the type, member and command. Nothing checks a command against the member's kind: `@multiline` on a number is recorded as written.

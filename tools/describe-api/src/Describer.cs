@@ -381,6 +381,11 @@ internal sealed class Describer
         {
             try
             {
+                if (IsTransientField(name, field, pending.Role))
+                {
+                    continue;
+                }
+
                 described.Add(DescribeField(name, field));
             }
             catch (DescribeException exception)
@@ -502,6 +507,31 @@ internal sealed class Describer
         fields.Count == 2 && fields[0].Type.CanonicalType.Handle.kind == CXTypeKind.CXType_Enum &&
         fields[1].IsAnonymousStructOrUnion && fields[1].Type.CanonicalType.AsCXXRecordDecl is { IsUnion: true };
 
+    /// <summary>
+    /// Whether a field is marked <c>@transient</c>: code wiring (a list of callbacks, say) that a data asset or settings
+    /// type holds and no file does, left out of the description with its type never read. Those two roles are reached
+    /// by member, so a field left out costs nothing; every other role's fields are its layout, which a binding mirrors
+    /// whole, and a field marked there fails.
+    /// </summary>
+    private bool IsTransientField(string typeName, FieldDecl field, Role role)
+    {
+        var subject = $"{typeName}::{field.Name}";
+        if (!WithDocCommandDiagnostics(field, subject, () => DocComment.Field(RawDoc(field))).Transient)
+        {
+            return false;
+        }
+
+        if (role is Role.DataAsset or Role.Settings)
+        {
+            return true;
+        }
+
+        var phrase = Roles.Phrase(role);
+        throw Error(field, subject,
+                    $"@transient on a field, which {phrase} cannot leave out: a field marked @transient is code wiring " +
+                    $"a data asset or settings type holds, and {phrase}'s fields are its layout");
+    }
+
     private FieldDescription DescribeField(string typeName, FieldDecl field)
     {
         if (field.IsAnonymousStructOrUnion)
@@ -540,6 +570,12 @@ internal sealed class Describer
     private FieldDescription Field(FieldDecl field, string subject, FieldType type, DefaultValue value)
     {
         var doc = WithDocCommandDiagnostics(field, subject, () => DocComment.Field(RawDoc(field)));
+        if (doc.Transient)
+        {
+            // A struct's transient fields never reach here (IsTransientField leaves them out): this is a tag.
+            throw Error(field, subject, "@transient on a tagged union's tag, which the union cannot leave out");
+        }
+
         return new FieldDescription(field.Name, type.IsOwning ? null : Offset(field), type, value, doc.Text)
         {
             Formerly = doc.Formerly,

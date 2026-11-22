@@ -184,6 +184,20 @@
       ]
     },
     {
+      "name": "Fenrir::AssetsConfig",
+      "category": "struct",
+      "role": "settings",
+      "doc": "How Assets::Install sets the asset store up.",
+      "fields": [
+        {
+          "name": "root",
+          "kind": "path",
+          "default": "",
+          "doc": "The asset root: the directory relative asset paths resolve against. Empty means `assets/` beside the executable. A relative root is taken relative to the working directory when the store is made."
+        }
+      ]
+    },
+    {
       "name": "Fenrir::LodSettings",
       "category": "struct",
       "role": "shared-struct",

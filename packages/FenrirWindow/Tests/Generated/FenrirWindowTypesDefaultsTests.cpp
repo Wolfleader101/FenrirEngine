@@ -29,6 +29,20 @@ TEST_CASE("Fenrir::WindowSize, default-constructed through its registration, has
     });
 }
 
+TEST_CASE("Fenrir::WindowConfig, default-constructed through its registration, has its description's defaults", "[types][defaults]")
+{
+    Fenrir::Testing::CheckDefaults(Fenrir::Describe<Fenrir::WindowConfig>::Description(), {
+        {"title", std::string("Fenrir")},
+        {"logicalSize.width", std::int64_t{1280}},
+        {"logicalSize.height", std::int64_t{720}},
+        {"visible", true},
+        {"stopOnMainWindowClose", true},
+        {"minimisedFrameSleep", 0.007},
+        {"unfocusedFrameSleep", 0.0},
+        {"textInputByDefault", true},
+    });
+}
+
 TEST_CASE("Fenrir::WindowResizedEvent, default-constructed through its registration, has its description's defaults", "[types][defaults]")
 {
     Fenrir::Testing::CheckDefaults(Fenrir::Describe<Fenrir::WindowResizedEvent>::Description(), {

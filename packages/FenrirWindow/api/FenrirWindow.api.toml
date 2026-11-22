@@ -7,6 +7,8 @@ headers = ["../include/FenrirWindow/WindowEvents.hpp", "../include/FenrirWindow/
 "Fenrir::WindowResizedEvent" = "event"
 "Fenrir::WindowCloseRequestedEvent" = "event"
 "Fenrir::WindowSize" = "shared-struct"
+# Window::Install's config, which a project file fills (ADR-0084).
+"Fenrir::WindowConfig" = "settings"
 # Held by no field, but taken by the natives: described all the same.
 "Fenrir::CursorMode" = "enum"
 "Fenrir::CursorShape" = "enum"

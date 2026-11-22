@@ -24,6 +24,8 @@ private-members = ["Fenrir::Math::Frustum"]
 "Fenrir::Sky" = "scene-resource"
 "Fenrir::SkyLight" = "scene-resource"
 "Fenrir::RendererStats" = "shared-struct"
+# Renderer::Install's config, which a project file fills (ADR-0084).
+"Fenrir::RendererConfig" = "settings"
 
 # FenrirMath's ray, box and frustum, which the natives fill through pointers: selected with the math description's role,
 # so this binding names them as the math binding's Ray, Bounds and Frustum (whose planes are private there too).

@@ -62,6 +62,71 @@
           "doc": "The name is registered for a different C# type than the one asking, so the layout check would be skipped."
         }
       ]
+    },
+    {
+      "name": "Fenrir::ScriptingConfig",
+      "category": "struct",
+      "role": "settings",
+      "doc": "Where scripting finds .NET and the project's script assembly. A settings type (ADR-0084): a project file fills it as `Fenrir::ScriptingConfig` before Install, every field but `extensions`.",
+      "fields": [
+        {
+          "name": "scriptAssembly",
+          "kind": "path",
+          "default": "",
+          "doc": "The project's one script assembly (`Fenrir::ScriptingConfig.scriptAssembly` in the project's `<name>.project.json5`). Empty means the project has no scripts: Install then does nothing and never starts .NET."
+        },
+        {
+          "name": "bridgeDirectory",
+          "kind": "path",
+          "default": "",
+          "doc": "The directory holding Iris.Bridge.dll, its .runtimeconfig.json, the scripting contract Fenrir.Scripting.dll and the math contract Fenrir.Math.dll (the build's fenrir_deploy_scripting puts them next to the executable). Empty means the executable's own directory."
+        },
+        {
+          "name": "dotnetRoot",
+          "kind": "path",
+          "default": "",
+          "doc": "An absolute .NET installation root, or empty for the default search."
+        },
+        {
+          "name": "hotReload",
+          "kind": "bool",
+          "default": true,
+          "doc": "Whether to watch `scriptAssembly` and reload it, between frames, when a build replaces it. Either way the assembly is loaded from a private copy, so a build can always overwrite the original."
+        },
+        {
+          "name": "reloadDirectory",
+          "kind": "path",
+          "default": "",
+          "doc": "Where the per-generation copies of the script assembly go. Empty means a directory of its own under the system temporary directory. Each loaded generation has a subdirectory, deleted once that generation is unloaded."
+        },
+        {
+          "name": "reloadInterval",
+          "kind": "i64",
+          "default": 250,
+          "doc": "How often the watcher looks at the file, in milliseconds. Zero looks every frame.",
+          "metadata": {
+            "units": "ms"
+          }
+        },
+        {
+          "name": "reloadDebounce",
+          "kind": "i64",
+          "default": 400,
+          "doc": "How long the file must stay unchanged, and openable, before it counts as a finished build, in milliseconds.",
+          "metadata": {
+            "units": "ms"
+          }
+        },
+        {
+          "name": "unloadTimeout",
+          "kind": "i64",
+          "default": 2000,
+          "doc": "How long a reload waits for the old generation to unload, in milliseconds. A generation that has not unloaded by then is kept track of (see Scripting::PendingUnloadCount) and the reload goes on.",
+          "metadata": {
+            "units": "ms"
+          }
+        }
+      ]
     }
   ]
 }

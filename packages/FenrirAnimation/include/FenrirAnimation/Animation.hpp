@@ -22,7 +22,10 @@ namespace Fenrir
         struct AnimationState;
     } // namespace Detail
 
-    /** @brief How `Animation::Install` sets FenrirAnimation up. */
+    /**
+     * @brief How `Animation::Install` sets FenrirAnimation up.
+     * @version 1
+     */
     struct AnimationConfig
     {
         /**

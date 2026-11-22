@@ -50,7 +50,10 @@ namespace Fenrir
         true;
 #endif
 
-    /** @brief How Renderer::Install sets the renderer up. There are no tuning settings and no native escape hatch. */
+    /**
+     * @brief How Renderer::Install sets the renderer up. There are no tuning settings and no native escape hatch.
+     * @version 1
+     */
     struct RendererConfig
     {
         /** @brief The backend; one that cannot start fails Install, never falling back to another. */

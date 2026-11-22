@@ -74,7 +74,9 @@ public sealed class DescribeTests
     [InlineData("UnknownCommand",
                 "Failing::UnknownCommand::value: @colour is not a doc command (a type takes @version, @formerly, " +
                 "@transient and @editor-only; a field @formerly, @range, @step, @display, @group, @readonly, @hidden, " +
-                "@multiline and @units)")]
+                "@multiline, @units and @transient)")]
+    [InlineData("TransientTag",
+                "Failing::TransientTag::kind: @transient on a tagged union's tag, which the union cannot leave out")]
     [InlineData("EnumeratorCommand",
                 "Failing::Tinted::Red: @hidden: an enumerator takes no doc command " +
                 "(reached through Failing::EnumeratorCommand::tint)")]
@@ -156,6 +158,10 @@ public sealed class DescribeTests
     [InlineData("\"Failing::ComputedName\" = \"data-asset\"",
                 "Failing::ComputedName::name: the default 'std::string(3, 'a')' is not one a string records: a string " +
                 "literal, or {} or no initialiser for the empty string")]
+    [InlineData("\"Failing::TransientField\" = \"component\"",
+                "Failing::TransientField::value: @transient on a field, which a component cannot leave out: a field " +
+                "marked @transient is code wiring a data asset or settings type holds, and a component's fields are its " +
+                "layout")]
     [InlineData("\"Failing::ArrayOfStrings\" = \"data-asset\"",
                 "Failing::ArrayOfStrings::names: an array of strings, which the kinds cannot express: hold a list")]
     public void EachRoleRefusesWhatItCannotHoldNamingTheTypeMemberAndRole(string types, string diagnostic)

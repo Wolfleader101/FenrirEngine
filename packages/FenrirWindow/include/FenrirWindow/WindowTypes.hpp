@@ -20,7 +20,10 @@ namespace Fenrir
         friend constexpr bool operator==(WindowSize a, WindowSize b) noexcept = default;
     };
 
-    /** @brief How Window::Install sets up FenrirWindow and the main window it will make. */
+    /**
+     * @brief How Window::Install sets up FenrirWindow and the main window it will make.
+     * @version 1
+     */
     struct WindowConfig
     {
         /** @brief The main window's title. */

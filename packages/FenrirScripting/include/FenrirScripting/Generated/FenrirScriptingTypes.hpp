@@ -6,6 +6,7 @@
 #pragma once
 
 #include "FenrirScripting/Errors.hpp"
+#include "FenrirScripting/Scripting.hpp"
 
 #include "FenrirTypes/Describe.hpp"
 #include "FenrirTypes/TypeDescription.hpp"
@@ -31,6 +32,7 @@ namespace Fenrir::Generated::FenrirScriptingTypes
 {
     extern const Fenrir::TypeDescription Fenrir_ChangeError;
     extern const Fenrir::TypeDescription Fenrir_RegistryError;
+    extern const Fenrir::TypeDescription Fenrir_ScriptingConfig;
 } // namespace Fenrir::Generated::FenrirScriptingTypes
 
 /** @brief The description of Fenrir::ChangeError that RegisterFenrirScriptingTypes adds. */
@@ -43,6 +45,13 @@ struct Fenrir::Describe<Fenrir::ChangeError>
 /** @brief The description of Fenrir::RegistryError that RegisterFenrirScriptingTypes adds. */
 template <>
 struct Fenrir::Describe<Fenrir::RegistryError>
+{
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of Fenrir::ScriptingConfig that RegisterFenrirScriptingTypes adds. */
+template <>
+struct Fenrir::Describe<Fenrir::ScriptingConfig>
 {
     static const Fenrir::TypeDescription& Description() noexcept;
 };

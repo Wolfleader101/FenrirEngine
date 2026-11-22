@@ -49,6 +49,7 @@ namespace Fenrir::Generated
 namespace Fenrir::Generated::FenrirAnimationTypes
 {
     extern const Fenrir::TypeDescription Fenrir_AdditiveReference;
+    extern const Fenrir::TypeDescription Fenrir_AnimationConfig;
     extern const Fenrir::TypeDescription Fenrir_ClipEventId;
     extern const Fenrir::TypeDescription Fenrir_AnimationEvent;
     extern const Fenrir::TypeDescription Fenrir_AnimationEventsDropped;
@@ -65,6 +66,13 @@ namespace Fenrir::Generated::FenrirAnimationTypes
 /** @brief The description of Fenrir::AdditiveReference that RegisterFenrirAnimationTypes adds. */
 template <>
 struct Fenrir::Describe<Fenrir::AdditiveReference>
+{
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of Fenrir::AnimationConfig that RegisterFenrirAnimationTypes adds. */
+template <>
+struct Fenrir::Describe<Fenrir::AnimationConfig>
 {
     static const Fenrir::TypeDescription& Description() noexcept;
 };

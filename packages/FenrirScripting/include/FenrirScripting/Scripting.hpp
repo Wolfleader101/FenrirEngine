@@ -1,7 +1,7 @@
 #pragma once
 
-#include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -17,13 +17,16 @@
 namespace Fenrir
 {
     /**
-     * @brief Where scripting finds .NET and the project's script assembly.
+     * @brief Where scripting finds .NET and the project's script assembly. A settings type (ADR-0084): a project file
+     * fills it as `Fenrir::ScriptingConfig` before Install, every field but `extensions`.
+     * @version 1
      */
     struct ScriptingConfig
     {
         /**
-         * @brief The project's one script assembly (the `scriptAssembly` field of the .feproj). Empty means the
-         * project has no scripts: Install then does nothing and never starts .NET.
+         * @brief The project's one script assembly (`Fenrir::ScriptingConfig.scriptAssembly` in the project's
+         * `<name>.project.json5`). Empty means the project has no scripts: Install then does nothing and never starts
+         * .NET.
          */
         std::filesystem::path scriptAssembly;
 
@@ -44,7 +47,9 @@ namespace Fenrir
          * functions, native components, C++ events and their C# contracts), and what the app gives, as an extension of
          * its own. A package left out here is simply not scriptable. The components and events are registered before
          * the script assembly loads and checked against it as it does; events only C# defines need nothing here. Two
-         * extensions declaring one native function, component or event name fail Install.
+         * extensions declaring one native function, component or event name fail Install. Code wiring, which no file
+         * holds.
+         * @transient
          */
         std::vector<ScriptingExtension> extensions;
 
@@ -61,19 +66,25 @@ namespace Fenrir
          */
         std::filesystem::path reloadDirectory;
 
-        /** @brief How often the watcher looks at the file. Zero looks every frame. */
-        std::chrono::milliseconds reloadInterval{250};
+        /**
+         * @brief How often the watcher looks at the file, in milliseconds. Zero looks every frame.
+         * @units ms
+         */
+        std::int64_t reloadInterval = 250;
 
         /**
-         * @brief How long the file must stay unchanged, and openable, before it counts as a finished build.
+         * @brief How long the file must stay unchanged, and openable, before it counts as a finished build, in
+         * milliseconds.
+         * @units ms
          */
-        std::chrono::milliseconds reloadDebounce{400};
+        std::int64_t reloadDebounce = 400;
 
         /**
-         * @brief How long a reload waits for the old generation to unload. A generation that has not unloaded by then
-         * is kept track of (see Scripting::PendingUnloadCount) and the reload goes on.
+         * @brief How long a reload waits for the old generation to unload, in milliseconds. A generation that has not
+         * unloaded by then is kept track of (see Scripting::PendingUnloadCount) and the reload goes on.
+         * @units ms
          */
-        std::chrono::milliseconds unloadTimeout{2000};
+        std::int64_t unloadTimeout = 2000;
     };
 
     struct ScriptingProbe;

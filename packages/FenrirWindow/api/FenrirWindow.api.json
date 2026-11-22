@@ -137,6 +137,60 @@
       ]
     },
     {
+      "name": "Fenrir::WindowConfig",
+      "category": "struct",
+      "role": "settings",
+      "doc": "How Window::Install sets up FenrirWindow and the main window it will make.",
+      "fields": [
+        {
+          "name": "title",
+          "kind": "string",
+          "default": "Fenrir",
+          "doc": "The main window's title."
+        },
+        {
+          "name": "logicalSize",
+          "kind": "struct",
+          "type": "Fenrir::WindowSize",
+          "default": {
+            "width": 1280,
+            "height": 720
+          },
+          "doc": "The main window's size in logical units; its pixel size is this times the content scale."
+        },
+        {
+          "name": "visible",
+          "kind": "bool",
+          "default": true,
+          "doc": "False makes the main window hidden: for GL tests and offscreen tools. Present on it does nothing."
+        },
+        {
+          "name": "stopOnMainWindowClose",
+          "kind": "bool",
+          "default": true,
+          "doc": "True stops the app (App::Stop) when the main window's close is requested. False leaves it to game code, which reads WindowCloseRequestedEvent (to ask \"save before quitting?\", say)."
+        },
+        {
+          "name": "minimisedFrameSleep",
+          "kind": "f64",
+          "default": 0.007,
+          "doc": "Seconds slept at the end of PreUpdate while no window can be drawn (all minimised)."
+        },
+        {
+          "name": "unfocusedFrameSleep",
+          "kind": "f64",
+          "default": 0,
+          "doc": "Seconds slept at the end of PreUpdate while no window has the input focus; 0 never sleeps."
+        },
+        {
+          "name": "textInputByDefault",
+          "kind": "bool",
+          "default": true,
+          "doc": "True keeps SDL's text input on in each window, so typing sends TextEvent. A window where an input router claims textInput (ADR-0027) has it on, with the claim's caret, either way; a UI app sets this false."
+        }
+      ]
+    },
+    {
       "name": "Fenrir::WindowResizedEvent",
       "category": "struct",
       "role": "event",

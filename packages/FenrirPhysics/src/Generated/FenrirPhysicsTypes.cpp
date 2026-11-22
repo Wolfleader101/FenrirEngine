@@ -4,6 +4,7 @@
 #include "../../include/FenrirPhysics/Generated/FenrirPhysicsTypes.hpp"
 
 #include "FenrirTypes/FieldInfo.hpp"
+#include "FenrirTypes/FieldVisitor.hpp"
 #include "FenrirTypes/Kind.hpp"
 #include "FenrirTypes/TypeDescription.hpp"
 #include "FenrirTypes/TypeRegistry.hpp"
@@ -297,6 +298,30 @@ namespace Fenrir::Generated::FenrirPhysicsTypes
         .destroy = &Fenrir::DestroyValue<Fenrir::CollisionFilter>,
         .doc = "Which of the 32 collision layers a body is in, and which layers it collides with. Optional: a body without one is in layer 0 and collides with every layer.\n\nTwo bodies collide when each one's mask includes a layer of the other: `(a.layers & b.mask) != 0 && (b.layers & a.mask) != 0`. It is read from the body's entity and applies to all the body's colliders; one on a child collider of a compound body is ignored, with a warning. Edits take effect on the next tick. Layers can be given names in PhysicsConfig, and looked up through CollisionLayers.",
         .fields = Fenrir_CollisionFilter_Fields,
+    };
+
+    // Fenrir::CollisionLayer
+    constexpr Fenrir::FieldInfo Fenrir_CollisionLayer_Fields[] = {
+        {.name = "name", .type = {.kind = Fenrir::Kind::String}},
+        {.name = "mask", .type = {.kind = Fenrir::Kind::U32}, .doc = "The layers a body in this layer collides with by default, one bit per layer."},
+    };
+    void Fenrir_CollisionLayer_Visit(void* instance, Fenrir::FieldVisitor& visitor)
+    {
+        auto& value = *static_cast<Fenrir::CollisionLayer*>(instance);
+        visitor.Field(Fenrir_CollisionLayer_Fields[0], Fenrir::ValueRef(&value.name, Fenrir_CollisionLayer_Fields[0].type));
+        visitor.Field(Fenrir_CollisionLayer_Fields[1], Fenrir::ValueRef(&value.mask, Fenrir_CollisionLayer_Fields[1].type));
+    }
+    constexpr Fenrir::TypeDescription Fenrir_CollisionLayer{
+        .name = "Fenrir::CollisionLayer",
+        .package = "FenrirPhysics",
+        .role = Fenrir::Role::Nested,
+        .size = sizeof(Fenrir::CollisionLayer),
+        .alignment = alignof(Fenrir::CollisionLayer),
+        .construct = &Fenrir::ConstructValue<Fenrir::CollisionLayer>,
+        .destroy = &Fenrir::DestroyValue<Fenrir::CollisionLayer>,
+        .doc = "A collision layer's name, and the mask a body in it collides with unless told otherwise.",
+        .fields = Fenrir_CollisionLayer_Fields,
+        .visit = &Fenrir_CollisionLayer_Visit,
     };
 
     // Fenrir::Contact
@@ -942,6 +967,41 @@ namespace Fenrir::Generated::FenrirPhysicsTypes
         .fields = Fenrir_PenetrationHit_Fields,
     };
 
+    // Fenrir::PhysicsConfig
+    constexpr Fenrir::ValueType Fenrir_PhysicsConfig_collisionLayers_Element{.kind = Fenrir::Kind::Struct, .type = &Fenrir_CollisionLayer};
+    constexpr Fenrir::FieldInfo Fenrir_PhysicsConfig_Fields[] = {
+        {.name = "gravity", .type = {.kind = Fenrir::Kind::Struct, .type = &Fenrir::Generated::FenrirMathTypes::Fenrir_Math_Vec3}, .doc = "The gravity each new physics world starts with, in metres per second squared."},
+        {.name = "maxBodies", .type = {.kind = Fenrir::Kind::U32}, .doc = "The most bodies each world holds at once. A body beyond it is not made, and that is logged."},
+        {.name = "maxBodyPairs", .type = {.kind = Fenrir::Kind::U32}, .doc = "The most pairs of bodies whose bounds overlap that each world tracks in a step. Pairs beyond it are ignored for that step, and that is logged."},
+        {.name = "maxContacts", .type = {.kind = Fenrir::Kind::U32}, .doc = "The most contacts each world resolves in a step. Contacts beyond it are ignored for that step, and that is logged."},
+        {.name = "collisionLayers", .type = {.kind = Fenrir::Kind::List, .element = &Fenrir_PhysicsConfig_collisionLayers_Element, .list = &Fenrir::ListOperationsOf<decltype(Fenrir::PhysicsConfig::collisionLayers)::value_type>}, .doc = "Names for the collision layers, layer `i` named by `collisionLayers[i]` (at most 32), each with a default mask. Optional: CollisionFilter takes plain bits whether or not a layer is named."},
+        {.name = "useWorkerThreads", .type = {.kind = Fenrir::Kind::Bool}, .doc = "Whether a step spreads its work over the App's worker threads, or runs on the thread that runs the App alone. Results are the same either way."},
+        {.name = "interpolate", .type = {.kind = Fenrir::Kind::Bool}, .doc = "Whether bodies, characters and vehicles' wheels are interpolated between ticks (RigidBody::interpolate, CharacterBody::interpolate). Off: every one is shown at its step poses only."},
+    };
+    void Fenrir_PhysicsConfig_Visit(void* instance, Fenrir::FieldVisitor& visitor)
+    {
+        auto& value = *static_cast<Fenrir::PhysicsConfig*>(instance);
+        visitor.Field(Fenrir_PhysicsConfig_Fields[0], Fenrir::ValueRef(&value.gravity, Fenrir_PhysicsConfig_Fields[0].type));
+        visitor.Field(Fenrir_PhysicsConfig_Fields[1], Fenrir::ValueRef(&value.maxBodies, Fenrir_PhysicsConfig_Fields[1].type));
+        visitor.Field(Fenrir_PhysicsConfig_Fields[2], Fenrir::ValueRef(&value.maxBodyPairs, Fenrir_PhysicsConfig_Fields[2].type));
+        visitor.Field(Fenrir_PhysicsConfig_Fields[3], Fenrir::ValueRef(&value.maxContacts, Fenrir_PhysicsConfig_Fields[3].type));
+        visitor.Field(Fenrir_PhysicsConfig_Fields[4], Fenrir::ValueRef(&value.collisionLayers, Fenrir_PhysicsConfig_Fields[4].type));
+        visitor.Field(Fenrir_PhysicsConfig_Fields[5], Fenrir::ValueRef(&value.useWorkerThreads, Fenrir_PhysicsConfig_Fields[5].type));
+        visitor.Field(Fenrir_PhysicsConfig_Fields[6], Fenrir::ValueRef(&value.interpolate, Fenrir_PhysicsConfig_Fields[6].type));
+    }
+    constexpr Fenrir::TypeDescription Fenrir_PhysicsConfig{
+        .name = "Fenrir::PhysicsConfig",
+        .package = "FenrirPhysics",
+        .role = Fenrir::Role::Settings,
+        .size = sizeof(Fenrir::PhysicsConfig),
+        .alignment = alignof(Fenrir::PhysicsConfig),
+        .construct = &Fenrir::ConstructValue<Fenrir::PhysicsConfig>,
+        .destroy = &Fenrir::DestroyValue<Fenrir::PhysicsConfig>,
+        .doc = "How Physics::Install sets physics up for an app.",
+        .fields = Fenrir_PhysicsConfig_Fields,
+        .visit = &Fenrir_PhysicsConfig_Visit,
+    };
+
     // Fenrir::PhysicsMaterial
     static_assert(sizeof(Fenrir::PhysicsMaterial) == 8 && alignof(Fenrir::PhysicsMaterial) == 4,
                   "Fenrir::PhysicsMaterial is not the layout FenrirPhysics.api.json describes: regenerate the description, then this registration");
@@ -1566,6 +1626,11 @@ const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::CollisionFilter>::Descri
     return Fenrir::Generated::FenrirPhysicsTypes::Fenrir_CollisionFilter;
 }
 
+const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::CollisionLayer>::Description() noexcept
+{
+    return Fenrir::Generated::FenrirPhysicsTypes::Fenrir_CollisionLayer;
+}
+
 const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::Contact>::Description() noexcept
 {
     return Fenrir::Generated::FenrirPhysicsTypes::Fenrir_Contact;
@@ -1714,6 +1779,11 @@ const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::OverlapHit>::Description
 const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::PenetrationHit>::Description() noexcept
 {
     return Fenrir::Generated::FenrirPhysicsTypes::Fenrir_PenetrationHit;
+}
+
+const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::PhysicsConfig>::Description() noexcept
+{
+    return Fenrir::Generated::FenrirPhysicsTypes::Fenrir_PhysicsConfig;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::PhysicsMaterial>::Description() noexcept
@@ -1877,6 +1947,8 @@ bool Fenrir::Generated::RegisterFenrirPhysicsTypes(Fenrir::TypeRegistry& registr
         registered = registry.Register(FenrirPhysicsTypes::Fenrir_Collider) && Fenrir::AttachComponent<Fenrir::Collider>(registry, FenrirPhysicsTypes::Fenrir_Collider) && registered;
     if (registry.Find(FenrirPhysicsTypes::Fenrir_CollisionFilter.name) != &FenrirPhysicsTypes::Fenrir_CollisionFilter)
         registered = registry.Register(FenrirPhysicsTypes::Fenrir_CollisionFilter) && Fenrir::AttachComponent<Fenrir::CollisionFilter>(registry, FenrirPhysicsTypes::Fenrir_CollisionFilter) && registered;
+    if (registry.Find(FenrirPhysicsTypes::Fenrir_CollisionLayer.name) != &FenrirPhysicsTypes::Fenrir_CollisionLayer)
+        registered = registry.Register(FenrirPhysicsTypes::Fenrir_CollisionLayer) && registered;
     if (registry.Find(FenrirPhysicsTypes::Fenrir_Contact.name) != &FenrirPhysicsTypes::Fenrir_Contact)
         registered = registry.Register(FenrirPhysicsTypes::Fenrir_Contact) && registered;
     if (registry.Find(FenrirPhysicsTypes::Fenrir_ContactBegin.name) != &FenrirPhysicsTypes::Fenrir_ContactBegin)
@@ -1937,6 +2009,8 @@ bool Fenrir::Generated::RegisterFenrirPhysicsTypes(Fenrir::TypeRegistry& registr
         registered = registry.Register(FenrirPhysicsTypes::Fenrir_OverlapHit) && registered;
     if (registry.Find(FenrirPhysicsTypes::Fenrir_PenetrationHit.name) != &FenrirPhysicsTypes::Fenrir_PenetrationHit)
         registered = registry.Register(FenrirPhysicsTypes::Fenrir_PenetrationHit) && registered;
+    if (registry.Find(FenrirPhysicsTypes::Fenrir_PhysicsConfig.name) != &FenrirPhysicsTypes::Fenrir_PhysicsConfig)
+        registered = registry.Register(FenrirPhysicsTypes::Fenrir_PhysicsConfig) && registered;
     if (registry.Find(FenrirPhysicsTypes::Fenrir_PhysicsMaterial.name) != &FenrirPhysicsTypes::Fenrir_PhysicsMaterial)
         registered = registry.Register(FenrirPhysicsTypes::Fenrir_PhysicsMaterial) && Fenrir::AttachComponent<Fenrir::PhysicsMaterial>(registry, FenrirPhysicsTypes::Fenrir_PhysicsMaterial) && registered;
     if (registry.Find(FenrirPhysicsTypes::Fenrir_QueryFilter.name) != &FenrirPhysicsTypes::Fenrir_QueryFilter)

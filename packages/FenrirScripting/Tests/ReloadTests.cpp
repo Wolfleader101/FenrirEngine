@@ -525,8 +525,8 @@ namespace
                                      generationAtExit = installed->Generation();
                                  }});
         ScriptingConfig config = build.Config(true);
-        config.reloadInterval = std::chrono::milliseconds(0);
-        config.reloadDebounce = std::chrono::milliseconds(60);
+        config.reloadInterval = 0;
+        config.reloadDebounce = 60;
         auto scripting = Scripting::Install(app, config);
         installed = &scripting;
 
@@ -583,8 +583,8 @@ namespace
                                  }});
         // The watcher would look every frame and settle within 20ms, were it on.
         ScriptingConfig config = build.Config(false);
-        config.reloadInterval = std::chrono::milliseconds(0);
-        config.reloadDebounce = std::chrono::milliseconds(20);
+        config.reloadInterval = 0;
+        config.reloadDebounce = 20;
         auto scripting = Scripting::Install(app, config);
         installed = &scripting;
 

@@ -2,11 +2,13 @@
 # return, which no shared struct holds. The built-in binding (FenrirScripting.binding.toml) binds these beside
 # FenrirECS's description (whose Fenrir::Entity is C#'s Entity), so C# switches on the enums' names and no code is
 # spelled by hand on either side.
-headers = ["../include/FenrirScripting/Errors.hpp"]
+headers = ["../include/FenrirScripting/Errors.hpp", "../include/FenrirScripting/Scripting.hpp"]
 
 [types]
 "Fenrir::RegistryError" = "enum"
 "Fenrir::ChangeError" = "enum"
+# Scripting::Install's config, which a project file fills (ADR-0084); its extensions are code wiring, left out.
+"Fenrir::ScriptingConfig" = "settings"
 
 # What tools/generate-type-registry writes for the package (ADR-0074): its types' descriptions, the function registering
 # them, compiled into FenrirScripting, and the test that their registered descriptions construct the defaults the
@@ -16,4 +18,4 @@ header = "../include/FenrirScripting/Generated/FenrirScriptingTypes.hpp"
 source = "../src/Generated/FenrirScriptingTypes.cpp"
 test = "../Tests/Generated/FenrirScriptingTypesDefaultsTests.cpp"
 function = "Fenrir::Generated::RegisterFenrirScriptingTypes"
-includes = ["FenrirScripting/Errors.hpp"]
+includes = ["FenrirScripting/Errors.hpp", "FenrirScripting/Scripting.hpp"]
