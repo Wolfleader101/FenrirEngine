@@ -12,10 +12,20 @@
 
 **Touches:** `packages/FenrirWindow/` (`include/FenrirWindow/WindowTypes.hpp`, `api/`), `packages/FenrirRenderer/` (`include/FenrirRenderer/Renderer.hpp`, `api/`), `packages/FenrirPhysics/` (`include/FenrirPhysics/Physics.hpp`, `api/`), `packages/FenrirAnimation/` (`include/FenrirAnimation/Animation.hpp`, `api/`), `packages/FenrirAssets/` (`include/FenrirAssets/AssetStore.hpp`, `api/`), `packages/FenrirScripting/` (`include/FenrirScripting/Scripting.hpp`, `api/`), each package's generated `Types.hpp` and `Types.cpp`, `tools/describe-api/src/` (only if the field-level `@transient` rule or the duration alias needs adding)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Each of the six descriptions records its config with role `settings`, `version` 1, every field with the kind the header implies (`path`, `string`, `list`, nested, `i64` for durations), and no `extensions` field.
-- [ ] `Describe<RendererConfig>()`, `Describe<PhysicsConfig>()` and `Describe<AssetsConfig>()` yield descriptions whose visitor over a default-constructed config reads the header's defaults, in a test that constructs no `App`.
-- [ ] A recording visitor over a `PhysicsConfig` with two collision layers sees the `list` with two nested `CollisionLayer` values and their `string` names.
-- [ ] `fenrir-describe-api`, `fenrir-generate-bindings` and `fenrir-generate-type-registry` regenerate byte-identical; Iris.Bindings skips the six types.
-- [ ] The `.feproj` no longer appears anywhere in the tree.
+- [x] Each of the six descriptions records its config with role `settings`, `version` 1, every field with the kind the header implies (`path`, `string`, `list`, nested, `i64` for durations), and no `extensions` field.
+- [x] `Describe<RendererConfig>()`, `Describe<PhysicsConfig>()` and `Describe<AssetsConfig>()` yield descriptions whose visitor over a default-constructed config reads the header's defaults, in a test that constructs no `App`.
+- [x] A recording visitor over a `PhysicsConfig` with two collision layers sees the `list` with two nested `CollisionLayer` values and their `string` names.
+- [x] `fenrir-describe-api`, `fenrir-generate-bindings` and `fenrir-generate-type-registry` regenerate byte-identical; Iris.Bindings skips the six types.
+- [x] The `.feproj` no longer appears anywhere in the tree.
+
+## Comments
+
+- Built in `claude/ser-types-09-settings-configs`. describe-api took `@transient` only on a type, so the field rule is added here: a `data-asset` or `settings` field marked `@transient` is left out of the description and its type is never read. On a field of any other role, or on a tagged union's tag, it fails, because there the fields are the layout a binding mirrors. SCHEMA.md, the README, Iris's copy of the schema and GLOSSARY's Transient say so. The fixture's `Fixture::Paths` gains a `@transient` list of `std::function`s, and its `Fixture.api.json` is unchanged.
+- The durations take the smaller option: `ScriptingConfig::reloadInterval`, `reloadDebounce` and `unloadTimeout` are `std::int64_t` milliseconds with `@units ms`, and `Install` converts them to `std::chrono::milliseconds`. Recognising `std::chrono::duration` would have needed a new alias in the tool and a way for `ValueRef` to reach a duration's count.
+- `RendererConfig::debugValidation` is a `std::optional<bool>` (the user's choice). As written, `= DebugValidationByDefault` recorded the Debug build's `true`, and the generated defaults test then failed in the Release build CI runs. Empty now means `DebugValidationByDefault`, `Install` reads `value_or` of it, and the description records `null`. The spec's Defaults line and gap note say so. Ticket 02's text still names it as the example and is left as history.
+- The ticket's "test that constructs no App" is each package's generated defaults test, which visits the config through `Describe<T>`. FenrirPhysics's `ConfigDescription.cpp` covers the two collision layers. FenrirApp's `InstalledTypes.cpp` checks that `Describe<RendererConfig>` is the description `Renderer::Install` registers (the spec's Testing line).
+- `.feproj` is gone from code, comments and `.gitattributes` (its line became `*.json5`). It stays in the ADRs, the planning notes and GLOSSARY's "Avoid" list, which keep it on purpose.
+- Outside the Touches: `packages/FenrirScripting/src/Scripting.cpp`, `Tests/ReloadTests.cpp` and README; `packages/FenrirRenderer/src/Facade/Renderer.cpp` and README; `packages/FenrirApp/Tests/InstalledTypes.cpp`; the FenrirPhysics tests' CMake file; describe-api's tests, SCHEMA.md and README; `packages/Iris/docs/api-description.md`; `GLOSSARY.md`; `.gitattributes`; the spec.
+- The full msvc-x64-debug CTest run with the renderer on passed 154 of 154 before the review fixes, and the affected suites passed again after them. generate-type-registry's, Iris.Bindings' and Fenrir.UI.Razor's .NET tests pass. Running the three generators again leaves the tree clean, and the bindings did not move.
