@@ -2,7 +2,7 @@
 # no libs/ directory and links FenrirTypes and FenrirLogger alone (ADR-0079 §1, ADR-0010).
 add_library(FenrirSerialisation STATIC
     src/Value.cpp
-    src/WriteText.cpp
+    src/Text.cpp
     include/FenrirSerialisation/Text.hpp
     include/FenrirSerialisation/Value.hpp
 )

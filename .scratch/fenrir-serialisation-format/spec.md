@@ -48,7 +48,7 @@ All in a new package `FenrirSerialisation` (`packages/FenrirSerialisation/`), a 
 - **A `Number`** is one of a signed integer, an unsigned integer, a single-precision and a double-precision float, so the writer prints each in its own shortest form and a 64-bit integer does not pass through a `double`.
 - **Every node carries a `Location`** (`line`, `column`, both 1-based) when it came from text, and none when built in code.
 - **Trivia:** each member and element has `leadingComments` (the comment lines above it), an optional `trailingComment` (on the same line after its value), and each container has `closingComments` (before its closing bracket); the root value has leading comments too. Comments are kept verbatim with their `//` or `/* */` delimiters. Blank lines are not trivia and are not kept.
-- **Equality** compares values and ignores locations; `Equals(a, b, Trivia::Compare)` compares trivia too.
+- **Equality** compares values and ignores locations; `Equals(a, b, Trivia::Keep)` compares trivia too.
 
 ### The JSON5 reader
 
@@ -120,6 +120,8 @@ The types spec: the registry, the visitor, the kinds, `@version`, `@formerly`, t
 
 - **Syntax errors are not tolerated; fields are.** ADR-0077 §7's "partly broken file loads the parts that read" is met at the bridge (a bad field takes its default, one diagnostic, counted), not by recovering from broken syntax, which the research found no format or library does. A duplicate key is a warning with the first value kept, not a refusal.
 - **The flow-style rule is sharpened to match the goldens:** flow for an array of scalars, and for an all-scalar object that is an array element or has one member; ADR-0077's "single-field objects" alone would write `sub: {sparks: {...}}` and the sword's table rows differently from the samples the ADR names as goldens.
+- **A comment keeps its container in block style.** An array or object that would be flow style but holds a comment on a member or element, or before its closing bracket, is written in block style, so every comment has a line and is re-emitted. An empty object or array with no closing comments is written `{}` or `[]` wherever it is (ticket 01).
+- **Keys outside ASCII are quoted.** The writer writes a key bare when it is an ASCII `IdentifierName` and quotes every other, so it carries no Unicode `ID_Start` tables; a quoted key is valid JSON5 either way (ticket 01).
 - **A `Number` has four widths** (signed, unsigned, single, double) so `std::to_chars(float)` reproduces `0.7071068` and a 64-bit integer survives; the bridge sets the width from the field's kind.
 - **Trivia is leading comments, one trailing comment and closing comments**, kept with delimiters, blank lines dropped; a value rewrite keeps comments by key path through `ToTree`'s `prior` tree, since a struct holds none.
 - **Tree forms nobody decided:** a tagged union is an object whose first member is `kind`; a bound type uses the shape the types spec registers (an array of N scalars); a disengaged `optional` is omitted and `null` reads as disengaged; `null` in any other field is a diagnostic and the default, except `reference` and `entity`, whose `null` is "none" (ADR-0078 §3).

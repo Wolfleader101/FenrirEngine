@@ -125,55 +125,79 @@ TEST_CASE("Equality ignores where the nodes were read from", "[serialisation][va
 {
     INFO("the same tree read at different lines is equal");
     REQUIRE(LocatedSword(1) == LocatedSword(40));
+}
 
+TEST_CASE("Trivia::Keep ignores where the nodes were read from", "[serialisation][value]")
+{
     Object built;
     built.Add("damage", 12.5f);
 
     INFO("a located tree equals the same tree built in code, comments compared too");
-    REQUIRE(Equals(LocatedSword(1), Value(std::move(built)), Trivia::Compare));
+    REQUIRE(Equals(LocatedSword(1), Value(std::move(built)), Trivia::Keep));
 }
 
-TEST_CASE("Equality ignores comments, and Trivia::Compare does not", "[serialisation][value]")
+namespace
 {
-    const Value a = CommentedSword("// tuned for the first level");
-    const Value b = CommentedSword("// tuned for the boss");
+    struct CommentedArrays
+    {
+        Value bare;
+        Value trailing;
+        Value closing;
+        Value rootComment;
+    };
 
-    INFO("trees differing only in a comment are equal");
-    REQUIRE(a == b);
+    /** @brief One array of tags, and three copies differing from it only by a comment, each in a different place. */
+    CommentedArrays TagArrays()
+    {
+        Array bare;
+        bare.Add("melee");
 
-    INFO("Trivia::Compare sees the different comment");
-    REQUIRE_FALSE(Equals(a, b, Trivia::Compare));
+        Array trailing = bare;
+        trailing.elements[0].trailingComment = "// first";
 
-    INFO("Trivia::Compare finds a tree equal to its own copy");
-    REQUIRE(Equals(a, CommentedSword("// tuned for the first level"), Trivia::Compare));
+        Array closing = bare;
+        closing.closingComments.push_back("// more to come");
+
+        Value rootComment(bare);
+        rootComment.leadingComments.push_back("// tags");
+
+        return {Value(bare), Value(trailing), Value(closing), rootComment};
+    }
+} // namespace
+
+TEST_CASE("Equality ignores comments", "[serialisation][value]")
+{
+    const CommentedArrays arrays = TagArrays();
+
+    INFO("trees differing only in a leading comment on a member are equal");
+    REQUIRE(CommentedSword("// tuned for the first level") == CommentedSword("// tuned for the boss"));
+
+    INFO("trees differing only in a trailing, a closing or a root comment are equal");
+    REQUIRE(arrays.bare == arrays.trailing);
+    REQUIRE(arrays.bare == arrays.closing);
+    REQUIRE(arrays.bare == arrays.rootComment);
 }
 
-TEST_CASE("Trivia::Compare sees trailing, closing and root comments", "[serialisation][value]")
+TEST_CASE("Trivia::Keep finds a tree equal to its copy, comments and all", "[serialisation][value]")
 {
-    Array bare;
-    bare.Add("melee");
-    Value root(bare);
+    INFO("the same comment in the same place compares equal");
+    REQUIRE(Equals(CommentedSword("// tuned"), CommentedSword("// tuned"), Trivia::Keep));
+}
 
-    Array trailing = bare;
-    trailing.elements[0].trailingComment = "// first";
+TEST_CASE("Trivia::Keep sees a comment wherever it is", "[serialisation][value]")
+{
+    const CommentedArrays arrays = TagArrays();
 
-    Array closing = bare;
-    closing.closingComments.push_back("// more to come");
+    INFO("a different leading comment on a member is seen");
+    REQUIRE_FALSE(
+        Equals(CommentedSword("// tuned for the first level"), CommentedSword("// tuned for the boss"), Trivia::Keep));
 
-    Value withRootComment(bare);
-    withRootComment.leadingComments.push_back("// tags");
+    INFO("a trailing comment is seen");
+    REQUIRE_FALSE(Equals(arrays.bare, arrays.trailing, Trivia::Keep));
 
-    INFO("a trailing comment is trivia");
-    REQUIRE_FALSE(Equals(root, Value(trailing), Trivia::Compare));
+    INFO("a closing comment is seen");
+    REQUIRE_FALSE(Equals(arrays.bare, arrays.closing, Trivia::Keep));
 
-    INFO("a closing comment is trivia");
-    REQUIRE_FALSE(Equals(root, Value(closing), Trivia::Compare));
-
-    INFO("the root's leading comment is trivia");
-    REQUIRE_FALSE(Equals(root, withRootComment, Trivia::Compare));
-
-    INFO("none of them changes plain equality");
-    REQUIRE(root == Value(trailing));
-    REQUIRE(root == Value(closing));
-    REQUIRE(root == withRootComment);
+    INFO("the root's leading comment is seen");
+    REQUIRE_FALSE(Equals(arrays.bare, arrays.rootComment, Trivia::Keep));
 }

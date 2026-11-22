@@ -26,11 +26,14 @@ namespace Fenrir::Serialisation
         Null,
     };
 
-    /** @brief Whether a comparison of two value trees looks at their comments as well as their values. */
+    /**
+     * @brief Whether an operation on a value tree takes its comments along: `Equals` compares them, and the tree
+     * encoding carries them, with `Keep`; with `Drop` both pass them by.
+     */
     enum class Trivia
     {
-        Ignore,
-        Compare,
+        Drop,
+        Keep,
     };
 
     /** @brief Where a node began in the text it was read from: both 1-based. */
@@ -196,7 +199,11 @@ namespace Fenrir::Serialisation
 
         /** @brief For a node read from text, where it began; empty for a node built in code. */
         std::optional<Location> location;
-        /** @brief For the root of a tree: the comment lines above it, verbatim with their delimiters. */
+        /**
+         * @brief For the root of a tree only: the comment lines above it, verbatim with their delimiters. A member's or
+         * an element's comments are on its `Member` or `Element`; this field on any other node is not written or
+         * compared.
+         */
         std::vector<std::string> leadingComments;
 
         /** @brief Equal values, ignoring locations and comments. */
@@ -215,7 +222,7 @@ namespace Fenrir::Serialisation
         Value value;
         /** @brief The comment lines above the member, verbatim with their delimiters. */
         std::vector<std::string> leadingComments;
-        /** @brief A comment after the member on its own line, verbatim with its delimiters. */
+        /** @brief A comment on the member's line, after its comma, verbatim with its delimiters. */
         std::optional<std::string> trailingComment;
     };
 
@@ -226,13 +233,13 @@ namespace Fenrir::Serialisation
         Value value;
         /** @brief The comment lines above the element, verbatim with their delimiters. */
         std::vector<std::string> leadingComments;
-        /** @brief A comment after the element on its own line, verbatim with its delimiters. */
+        /** @brief A comment on the element's line, after its comma, verbatim with its delimiters. */
         std::optional<std::string> trailingComment;
     };
 
     /**
-     * @brief Whether two trees hold equal values, ignoring locations; with `Trivia::Compare` their comments must be
+     * @brief Whether two trees hold equal values, ignoring locations; with `Trivia::Keep` their comments must be
      * equal too, each in the same place.
      */
-    [[nodiscard]] bool Equals(const Value& a, const Value& b, Trivia trivia = Trivia::Ignore);
+    [[nodiscard]] bool Equals(const Value& a, const Value& b, Trivia trivia = Trivia::Drop);
 } // namespace Fenrir::Serialisation

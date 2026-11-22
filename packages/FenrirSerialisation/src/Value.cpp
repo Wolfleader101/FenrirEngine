@@ -2,13 +2,25 @@
 
 #include <cassert>
 #include <cmath>
+#include <type_traits>
 #include <utility>
 
 namespace Fenrir::Serialisation
 {
     NumberWidth Number::Width() const noexcept
     {
-        return static_cast<NumberWidth>(m_value.index());
+        return std::visit(
+            []<typename T>(const T&) {
+                if constexpr (std::is_same_v<T, std::int64_t>)
+                    return NumberWidth::Signed;
+                else if constexpr (std::is_same_v<T, std::uint64_t>)
+                    return NumberWidth::Unsigned;
+                else if constexpr (std::is_same_v<T, float>)
+                    return NumberWidth::Single;
+                else
+                    return NumberWidth::Double;
+            },
+            m_value);
     }
 
     std::int64_t Number::AsSigned() const
@@ -109,21 +121,22 @@ namespace Fenrir::Serialisation
 
     ValueKind Value::Kind() const noexcept
     {
-        switch (m_value.index())
-        {
-        case 1:
-            return ValueKind::Object;
-        case 2:
-            return ValueKind::Array;
-        case 3:
-            return ValueKind::String;
-        case 4:
-            return ValueKind::Number;
-        case 5:
-            return ValueKind::Bool;
-        default:
-            return ValueKind::Null;
-        }
+        return std::visit(
+            []<typename T>(const T&) {
+                if constexpr (std::is_same_v<T, Object>)
+                    return ValueKind::Object;
+                else if constexpr (std::is_same_v<T, Array>)
+                    return ValueKind::Array;
+                else if constexpr (std::is_same_v<T, std::string>)
+                    return ValueKind::String;
+                else if constexpr (std::is_same_v<T, Number>)
+                    return ValueKind::Number;
+                else if constexpr (std::is_same_v<T, bool>)
+                    return ValueKind::Bool;
+                else
+                    return ValueKind::Null;
+            },
+            m_value);
     }
 
     Object& Value::AsObject()
@@ -174,7 +187,7 @@ namespace Fenrir::Serialisation
 
         bool EqualComments(const auto& a, const auto& b, Trivia trivia)
         {
-            return trivia == Trivia::Ignore || a == b;
+            return trivia == Trivia::Drop || a == b;
         }
 
         bool EqualNodes(const Value& a, const Value& b, Trivia trivia)
@@ -232,7 +245,7 @@ namespace Fenrir::Serialisation
 
     bool operator==(const Value& a, const Value& b)
     {
-        return EqualNodes(a, b, Trivia::Ignore);
+        return EqualNodes(a, b, Trivia::Drop);
     }
 
     bool Equals(const Value& a, const Value& b, Trivia trivia)
