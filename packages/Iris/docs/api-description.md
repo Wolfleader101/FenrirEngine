@@ -66,7 +66,7 @@ A class whose only non-static data members are an enum tag followed by one anony
 
 ### `bound-type`
 
-A type every binding has its own of (a vector, a quaternion, an entity handle). Its `size` and `alignment` are recorded, and it need not be plain data. When every value it holds is a scalar, `components` lists them in storage order, each with `name`, `offset` and `kind` (a number kind, `bool` or `char16`): a member of an anonymous union is its first member's, and a nested struct's members and an array's elements (a `std::array`'s as its C array's) are named by path (`value[0].x`), so a vector is its three `f32` and a 4x4 matrix its sixteen. A bound type holding anything else (a pointer, an enum) has no `components`. A binding's mirror is its own, so Iris.Bindings does not read them.
+A type every binding has its own of (a vector, a quaternion, an entity handle). Its `size` and `alignment` are recorded, and it need not be plain data. When every value it holds is a scalar, `components` lists them in storage order, or in the order the header reader was told to visit them in (`Quat` as `x, y, z, w` where glm stores `w` first), each with `name`, `offset` and `kind`; the offset is the component's own in either order (a number kind, `bool` or `char16`): a member of an anonymous union is its first member's, and a nested struct's members and an array's elements (a `std::array`'s as its C array's) are named by path (`value[0].x`), so a vector is its three `f32` and a 4x4 matrix its sixteen. A bound type holding anything else (a pointer, an enum) has no `components`. A binding's mirror is its own, so Iris.Bindings does not read them.
 
 ### `enum`
 

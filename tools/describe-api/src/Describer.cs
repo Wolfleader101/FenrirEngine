@@ -347,6 +347,11 @@ internal sealed class Describer
         if (pending.Role == Role.BoundType)
         {
             var components = type.AsCXXRecordDecl?.Definition is CXXRecordDecl boundRecord ? BoundComponents(boundRecord) : null;
+            if (m_selection.ComponentOrders.TryGetValue(name, out var order))
+            {
+                components = InOrder(components, order, pending.Decl, name);
+            }
+
             return new BoundTypeDescription(name, size, alignment, typeDoc.Text, components) { Commands = typeDoc.Commands };
         }
 
@@ -1355,6 +1360,45 @@ internal sealed class Describer
             CXTypeKind.CXType_Bool => "bool",
             _ => IntegerKind(type) ?? "struct",
         })];
+    }
+
+    /// <summary>
+    /// A bound type's components in the order its selection's [components] names them, each keeping its offset; fails
+    /// on a name that is not a component, a component left out or named twice, and a bound type with no components.
+    /// </summary>
+    private List<BoundComponent> InOrder(List<BoundComponent>? components, IReadOnlyList<string> order, Cursor at,
+                                         string typeName)
+    {
+        if (components is null)
+        {
+            throw Error(at, typeName,
+                        "[components] names an order, but it holds something other than scalars, so it has no components");
+        }
+
+        var failures = new List<string>();
+        foreach (var name in order.Where(name => components.All(component => component.Name != name)).Distinct())
+        {
+            failures.Add(Error(at, typeName,
+                               $"[components] names '{name}', which is not one of its components " +
+                               $"({string.Join(", ", components.Select(component => component.Name))})").Message);
+        }
+
+        foreach (var name in order.Where(name => order.Count(other => other == name) > 1).Distinct())
+        {
+            failures.Add(Error(at, typeName, $"[components] names '{name}' twice").Message);
+        }
+
+        foreach (var component in components.Where(component => !order.Contains(component.Name)))
+        {
+            failures.Add(Error(at, typeName, $"[components] leaves out its component '{component.Name}'").Message);
+        }
+
+        if (failures.Count > 0)
+        {
+            throw new DescribeException(string.Join("\n", failures));
+        }
+
+        return order.Select(name => components.Single(component => component.Name == name)).ToList();
     }
 
     /// <summary>

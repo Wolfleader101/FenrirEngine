@@ -5,11 +5,14 @@ namespace DescribeApi;
 
 /// <summary>
 /// A package's selection (<c>&lt;Package&gt;.api.toml</c>): the headers to read and the types to share, each with its
-/// role, and the types whose private data members are shared all the same (selected ones, or nested ones a selected
-/// type holds: the describer checks that each is reached). Header paths are relative to the selection's own directory.
+/// role, the types whose private data members are shared all the same (selected ones, or nested ones a selected
+/// type holds: the describer checks that each is reached), and the order a selected bound type's components visit in,
+/// when it is not storage order (the describer checks that each order names every component once). Header paths are
+/// relative to the selection's own directory.
 /// </summary>
 internal sealed record Selection(string Path, string Package, IReadOnlyList<string> Headers,
-                                 IReadOnlyList<KeyValuePair<string, Role>> Types, IReadOnlySet<string> PrivateMembers)
+                                 IReadOnlyList<KeyValuePair<string, Role>> Types, IReadOnlySet<string> PrivateMembers,
+                                 IReadOnlyDictionary<string, IReadOnlyList<string>> ComponentOrders)
 {
     public const string Extension = ".api.toml";
 
@@ -40,10 +43,10 @@ internal sealed record Selection(string Path, string Package, IReadOnlyList<stri
 
         foreach (var key in table.Keys)
         {
-            if (key is not ("headers" or "types" or "private-members" or "registration"))
+            if (key is not ("headers" or "types" or "private-members" or "components" or "registration"))
             {
                 throw new DescribeException(
-                    $"{path}: unknown key '{key}' (a selection has 'headers', 'types', 'private-members' and 'registration')");
+                    $"{path}: unknown key '{key}' (a selection has 'headers', 'types', 'private-members', 'components' and 'registration')");
             }
         }
 
@@ -110,6 +113,47 @@ internal sealed record Selection(string Path, string Package, IReadOnlyList<stri
             }
         }
 
-        return new Selection(path, package, headers, types, privateMembers);
+        return new Selection(path, package, headers, types, privateMembers, ComponentOrdersOf(path, table, types));
+    }
+
+    // [components]: a selected bound type's component names in the order its components visit, which files use.
+    private static Dictionary<string, IReadOnlyList<string>> ComponentOrdersOf(
+        string path, TomlTable table, IReadOnlyList<KeyValuePair<string, Role>> types)
+    {
+        var orders = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+        if (!table.TryGetValue("components", out var componentsValue))
+        {
+            return orders;
+        }
+
+        if (componentsValue is not TomlTable componentTable)
+        {
+            throw new DescribeException(
+                $"{path}: 'components' is a table of bound types' qualified names, each set to its component names in order");
+        }
+
+        foreach (var (name, orderValue) in componentTable)
+        {
+            if (types.All(type => type.Key != name))
+            {
+                throw new DescribeException($"{path}: [components] names {name}, which [types] does not select");
+            }
+
+            if (types.First(type => type.Key == name).Value is var role && role != Role.BoundType)
+            {
+                throw new DescribeException(
+                    $"{path}: [components] names {name}, which [types] selects as {Roles.Phrase(role)}, not a bound type");
+            }
+
+            if (orderValue is not TomlArray orderArray || orderArray.Any(item => item is not string))
+            {
+                throw new DescribeException(
+                    $"{path}: [components] gives {name} '{orderValue}'; an order is a list of its component names");
+            }
+
+            orders[name] = orderArray.Cast<string>().ToList();
+        }
+
+        return orders;
     }
 }

@@ -19,6 +19,11 @@ private-members = ["Fenrir::Math::Frustum"]
 "Fenrir::Math::Quat" = "bound-type"
 "Fenrir::Math::Mat4" = "bound-type"
 
+# The order a bound type's components visit in, and files write them, when it is not storage order. glm stores the
+# quaternion w first; the format's goldens, glTF and C#'s Quaternion write it x first.
+[components]
+"Fenrir::Math::Quat" = ["x", "y", "z", "w"]
+
 # What tools/generate-type-registry writes for the package (ADR-0074): its types' descriptions, the function registering
 # them, compiled into FenrirMath, and the test that their registered descriptions construct the defaults the description
 # records.
