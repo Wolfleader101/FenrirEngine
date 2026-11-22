@@ -27,7 +27,7 @@ CMakeLists.txt text eol=lf
 *.targets text eol=lf
 *.json text eol=lf
 *.toml text eol=lf
-*.feproj text eol=lf
+*.json5 text eol=lf
 *.sh text eol=lf
 *.py text eol=lf
 

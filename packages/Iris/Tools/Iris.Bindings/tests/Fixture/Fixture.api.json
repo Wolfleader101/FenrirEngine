@@ -234,7 +234,29 @@
       "role": "bound-type",
       "size": 16,
       "alignment": 4,
-      "doc": "A bound type whose constructor takes its components in another order than it stores them, under parameter names with a leading underscore, and stores them in an anonymous struct inside an anonymous union."
+      "doc": "A bound type whose constructor takes its components in another order than it stores them, under parameter names with a leading underscore, and stores them in an anonymous struct inside an anonymous union.",
+      "components": [
+        {
+          "name": "x",
+          "offset": 0,
+          "kind": "f32"
+        },
+        {
+          "name": "y",
+          "offset": 4,
+          "kind": "f32"
+        },
+        {
+          "name": "z",
+          "offset": 8,
+          "kind": "f32"
+        },
+        {
+          "name": "w",
+          "offset": 12,
+          "kind": "f32"
+        }
+      ]
     },
     {
       "name": "Fixture::Spring",
@@ -264,7 +286,24 @@
       "role": "bound-type",
       "size": 12,
       "alignment": 4,
-      "doc": "A bound type built like a maths library's vector: each component in an anonymous union of names."
+      "doc": "A bound type built like a maths library's vector: each component in an anonymous union of names.",
+      "components": [
+        {
+          "name": "x",
+          "offset": 0,
+          "kind": "f32"
+        },
+        {
+          "name": "y",
+          "offset": 4,
+          "kind": "f32"
+        },
+        {
+          "name": "z",
+          "offset": 8,
+          "kind": "f32"
+        }
+      ]
     },
     {
       "name": "Fixture::Body",
@@ -653,7 +692,43 @@
       "role": "bound-type",
       "size": 16,
       "alignment": 8,
-      "doc": "A pair of values, as a class template."
+      "doc": "A pair of values, as a class template.",
+      "components": [
+        {
+          "name": "first",
+          "offset": 0,
+          "kind": "f64"
+        },
+        {
+          "name": "second",
+          "offset": 8,
+          "kind": "f64"
+        }
+      ]
+    },
+    {
+      "name": "Fixture::Paths",
+      "category": "struct",
+      "role": "settings",
+      "doc": "A settings type holding a path and a list of strings.",
+      "fields": [
+        {
+          "name": "root",
+          "kind": "path",
+          "default": "assets"
+        },
+        {
+          "name": "extensions",
+          "kind": "list",
+          "elementKind": "string",
+          "default": []
+        },
+        {
+          "name": "threads",
+          "kind": "u32",
+          "default": 4
+        }
+      ]
     },
     {
       "name": "Fixture::Size",
@@ -661,7 +736,19 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "A bound type that is a template's specialisation nothing here instantiates: the tool instantiates it."
+      "doc": "A bound type that is a template's specialisation nothing here instantiates: the tool instantiates it.",
+      "components": [
+        {
+          "name": "first",
+          "offset": 0,
+          "kind": "f32"
+        },
+        {
+          "name": "second",
+          "offset": 4,
+          "kind": "f32"
+        }
+      ]
     },
     {
       "name": "Fixture::Sky",
@@ -695,6 +782,79 @@
       "defaultKind": "m_box"
     },
     {
+      "name": "Fixture::Stat",
+      "category": "struct",
+      "role": "nested",
+      "doc": "A row of a data asset's table, which only data assets hold.",
+      "fields": [
+        {
+          "name": "name",
+          "kind": "string",
+          "default": ""
+        },
+        {
+          "name": "value",
+          "kind": "f32",
+          "default": 1
+        }
+      ]
+    },
+    {
+      "name": "Fixture::WeaponData",
+      "category": "struct",
+      "role": "data-asset",
+      "doc": "A data asset holding a string, a list of nested structs and an optional number.",
+      "fields": [
+        {
+          "name": "displayName",
+          "kind": "string",
+          "default": "Weapon"
+        },
+        {
+          "name": "stats",
+          "kind": "list",
+          "elementKind": "struct",
+          "elementType": "Fixture::Stat",
+          "default": []
+        },
+        {
+          "name": "cooldown",
+          "kind": "optional",
+          "elementKind": "f32",
+          "default": null
+        },
+        {
+          "name": "damage",
+          "kind": "f32",
+          "default": 10
+        }
+      ]
+    },
+    {
+      "name": "Fixture::Sword",
+      "category": "struct",
+      "role": "data-asset",
+      "base": "Fixture::WeaponData",
+      "doc": "A data asset extending another, with a list of lists of its own.",
+      "fields": [
+        {
+          "name": "reach",
+          "kind": "f32",
+          "default": 1.5
+        },
+        {
+          "name": "combos",
+          "kind": "list",
+          "elementKind": "list",
+          "element": {
+            "kind": "list",
+            "elementKind": "i32"
+          },
+          "default": []
+        }
+      ]
+    },
+    {
       "name": "Fixture::Tag",
       "category": "struct",
       "role": "shared-struct",
@@ -718,15 +878,9 @@
         {
           "name": "m_label",
           "offset": 16,
-          "kind": "array",
-          "elementKind": "u8",
+          "kind": "fixed-string",
           "length": 4,
-          "default": [
-            97,
-            0,
-            0,
-            0
-          ],
+          "default": "a",
           "doc": "Characters: bytes, on every target."
         }
       ]
@@ -737,7 +891,14 @@
       "role": "bound-type",
       "size": 4,
       "alignment": 4,
-      "doc": "A bound type of one member, which a binding may pass to a native by value as that member."
+      "doc": "A bound type of one member, which a binding may pass to a native by value as that member.",
+      "components": [
+        {
+          "name": "m_number",
+          "offset": 0,
+          "kind": "u32"
+        }
+      ]
     },
     {
       "name": "Fixture::Touched",

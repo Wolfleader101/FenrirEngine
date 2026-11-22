@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Text;
 using ClangSharp;
 using ClangSharp.Interop;
 using Type = ClangSharp.Type;
@@ -39,6 +40,15 @@ internal sealed class Describer
     }
 
     private sealed record Pending(Type Type, string Name, Role Role, Decl Decl, string? ReachedFrom);
+
+    // Which type each described type's field holds by value (the field's subject, `Ns::Type::member`), in the order met,
+    // and each described type's fields of an owning kind: what the owning-kind check walks once every type is described.
+    private readonly List<(string From, string Subject, string To)> m_holds = [];
+    private readonly Dictionary<string, List<(FieldDecl At, string Subject, string Kind)>> m_owningFields =
+        new(StringComparer.Ordinal);
+
+    // The type being described, which a field's type is held by.
+    private string? m_describing;
 
     /// <summary>Describes the selection, or throws <see cref="DescribeException" /> with every diagnostic.</summary>
     public static Description Describe(Selection selection, IReadOnlyList<string> compileArguments)
@@ -108,6 +118,7 @@ internal sealed class Describer
         while (m_pending.Count > 0)
         {
             var pending = m_pending.Dequeue();
+            m_describing = pending.Name;
             try
             {
                 m_described[pending.Name] = DescribeType(pending);
@@ -119,6 +130,10 @@ internal sealed class Describer
                                  : $"{exception.Message} (reached through {pending.ReachedFrom})");
             }
         }
+
+        m_describing = null;
+        CheckOwningKinds();
+        MarkByMember();
 
         // A private-members name the selection does not select is a nested type some selected type holds, or nothing.
         foreach (var name in m_selection.PrivateMembers.Where(name => m_selection.Types.All(type => type.Key != name) &&
@@ -321,16 +336,26 @@ internal sealed class Describer
             throw Error(pending.Decl, name, "an incomplete type: only declared in the selected headers");
         }
 
-        var doc = Doc(m_aliasDocs.GetValueOrDefault(name) ?? pending.Decl);
+        var docDecl = m_aliasDocs.GetValueOrDefault(name) ?? pending.Decl;
+        if (pending.Role == Role.BoundType && RawDoc(docDecl) is null && type.AsTagDecl is { } tagDecl)
+        {
+            // A bound type named through an alias with no comment of its own is documented by the type it names.
+            docDecl = tagDecl;
+        }
+
+        var typeDoc = TypeDoc(docDecl, name);
         if (pending.Role == Role.BoundType)
         {
-            return new BoundTypeDescription(name, size, alignment, doc ?? Doc(type.AsTagDecl));
+            var components = type.AsCXXRecordDecl?.Definition is CXXRecordDecl boundRecord ? BoundComponents(boundRecord) : null;
+            return new BoundTypeDescription(name, size, alignment, typeDoc.Text, components) { Commands = typeDoc.Commands };
         }
 
         if (type.AsTagDecl?.Definition is EnumDecl enumDecl)
         {
-            return DescribeEnum(enumDecl, name, size, alignment);
+            return DescribeEnum(enumDecl, name, size, alignment, typeDoc);
         }
+
+        var doc = typeDoc.Text;
 
         if (type.AsCXXRecordDecl?.Definition is not CXXRecordDecl record)
         {
@@ -342,11 +367,12 @@ internal sealed class Describer
             throw Error(record, name, $"a union outside the tagged-union shape ({TaggedUnionShape})");
         }
 
-        CheckPlainData(record, name);
+        CheckPlainData(record, name, pending.Role);
+        var baseName = pending.Role == Role.DataAsset ? DataAssetBase(record, name) : null;
         var fields = record.Fields;
         if (IsTaggedUnionShape(fields))
         {
-            return DescribeTaggedUnion(record, name, pending.Role, size, alignment, doc);
+            return DescribeTaggedUnion(record, name, pending.Role, size, alignment, doc) with { Commands = typeDoc.Commands };
         }
 
         var described = new List<FieldDescription>();
@@ -355,7 +381,13 @@ internal sealed class Describer
         {
             try
             {
-                described.Add(DescribeField(name, field));
+                var fieldDoc = FieldDoc(field, $"{name}::{field.Name}");
+                if (LeavesOutAsTransient(name, field, fieldDoc, pending.Role))
+                {
+                    continue;
+                }
+
+                described.Add(DescribeField(name, field, fieldDoc));
             }
             catch (DescribeException exception)
             {
@@ -368,10 +400,15 @@ internal sealed class Describer
             throw new DescribeException(string.Join("\n", failures));
         }
 
-        return new StructDescription(name, size, alignment, doc, pending.Role, described);
+        return new StructDescription(name, size, alignment, doc, pending.Role, described)
+        {
+            Commands = typeDoc.Commands,
+            Base = baseName,
+        };
     }
 
-    private EnumDescription DescribeEnum(EnumDecl enumDecl, string name, long size, long alignment)
+    private EnumDescription DescribeEnum(EnumDecl enumDecl, string name, long size, long alignment,
+                                         DocComment.TypeDoc doc)
     {
         var underlying = IntegerKind(enumDecl.IntegerType.CanonicalType) ??
                          throw Error(enumDecl, name, $"an underlying type '{enumDecl.IntegerType.AsString}' that is not an integer kind");
@@ -381,35 +418,81 @@ internal sealed class Describer
                                      enumerator.Name,
                                      unsigned ? enumerator.UnsignedInitVal.ToString(CultureInfo.InvariantCulture)
                                               : enumerator.InitVal.ToString(CultureInfo.InvariantCulture),
-                                     Doc(enumerator, enumDecl.Enumerators.TakeWhile(e => e != enumerator).LastOrDefault())))
+                                     PlainDoc(enumerator, $"{name}::{enumerator.Name}", "an enumerator",
+                                              enumDecl.Enumerators.TakeWhile(e => e != enumerator).LastOrDefault())))
                          .ToList();
-        return new EnumDescription(name, size, alignment, Doc(enumDecl), underlying, values);
+        return new EnumDescription(name, size, alignment, doc.Text, underlying, values) { Commands = doc.Commands };
     }
 
-    private void CheckPlainData(CXXRecordDecl record, string name)
+    // The rules every role keeps, and those only the owning roles lift: a data asset's base is checked by
+    // DataAssetBase, and a data asset or settings type may declare its own copy, move, assignment or destructor (a
+    // generated visitor reaches it by member; nothing copies its bytes).
+    private void CheckPlainData(CXXRecordDecl record, string name, Role role)
     {
         foreach (var method in record.Methods.Where(method => method.IsVirtual))
         {
-            throw Error(method, $"{name}::{method.Name}", "a virtual function: a shared type is plain data");
+            throw Error(method, $"{name}::{method.Name}", $"a virtual function: {Roles.Phrase(role)} is plain data");
         }
 
-        foreach (var baseSpecifier in record.Bases)
+        if (role != Role.DataAsset)
         {
-            var baseRecord = baseSpecifier.Type.CanonicalType.AsCXXRecordDecl?.Definition as CXXRecordDecl;
-            if (baseSpecifier.IsVirtual || baseRecord is null || HasData(baseRecord) || IsPolymorphic(baseRecord))
+            foreach (var baseSpecifier in record.Bases)
             {
-                throw Error(record, name,
-                            $"its base class {baseSpecifier.Type.AsString} has data members or virtual functions");
+                var baseRecord = baseSpecifier.Type.CanonicalType.AsCXXRecordDecl?.Definition as CXXRecordDecl;
+                if (baseSpecifier.IsVirtual || baseRecord is null || HasData(baseRecord) || IsPolymorphic(baseRecord))
+                {
+                    throw Error(record, name,
+                                $"its base class {baseSpecifier.Type.AsString} has data members or virtual functions, " +
+                                $"which {Roles.Phrase(role)}'s base may not have (only a data asset extends a type with " +
+                                "data members)");
+                }
             }
         }
 
-        if (record.HasUserDeclaredCopyConstructor || record.HasUserDeclaredMoveConstructor ||
-            record.HasUserDeclaredCopyAssignment || record.HasUserDeclaredMoveAssignment ||
-            record.HasUserDeclaredDestructor)
+        if (!Roles.IsOwning(role) &&
+            (record.HasUserDeclaredCopyConstructor || record.HasUserDeclaredMoveConstructor ||
+             record.HasUserDeclaredCopyAssignment || record.HasUserDeclaredMoveAssignment ||
+             record.HasUserDeclaredDestructor))
         {
             throw Error(record, name,
-                        "not trivially copyable: it declares its own copy, move, assignment or destructor");
+                        "not trivially copyable: it declares its own copy, move, assignment or destructor, which " +
+                        $"{Roles.Phrase(role)} may not (only a data asset or settings type may)");
         }
+    }
+
+    /// <summary>
+    /// The data asset a data asset extends (ADR-0075), or null when it extends none: one base at most, not virtual,
+    /// selected as a data asset, whose fields its own description records.
+    /// </summary>
+    private string? DataAssetBase(CXXRecordDecl record, string name)
+    {
+        if (record.Bases.Count > 1)
+        {
+            throw Error(record, name, $"extends {record.Bases.Count} types: a data asset extends one other data asset at most");
+        }
+
+        if (record.Bases.Count == 0)
+        {
+            return null;
+        }
+
+        var baseSpecifier = record.Bases[0];
+        var canonical = baseSpecifier.Type.CanonicalType;
+        var baseName = m_names.GetValueOrDefault(canonical.AsString);
+        var baseRole = baseName is null ? (Role?)null : m_roles[baseName];
+        if (baseSpecifier.IsVirtual || baseRole != Role.DataAsset)
+        {
+            var what = baseSpecifier.IsVirtual ? "a virtual base"
+                       : baseRole is null || baseRole == Role.Nested ? "not selected"
+                       : Roles.Phrase(baseRole.Value);
+            throw Error(record, name,
+                        $"its base class {baseName ?? canonical.AsString} is {what}: a data asset extends only another " +
+                        "data asset");
+        }
+
+        // Whatever reaches this type reaches its base's fields too.
+        m_holds.Add((name, $"{name}'s base", baseName!));
+        return baseName;
     }
 
     private static bool HasData(CXXRecordDecl record) =>
@@ -425,7 +508,32 @@ internal sealed class Describer
         fields.Count == 2 && fields[0].Type.CanonicalType.Handle.kind == CXTypeKind.CXType_Enum &&
         fields[1].IsAnonymousStructOrUnion && fields[1].Type.CanonicalType.AsCXXRecordDecl is { IsUnion: true };
 
-    private FieldDescription DescribeField(string typeName, FieldDecl field)
+    /// <summary>
+    /// Whether a field is left out because <c>@transient</c> marks it: code wiring (a list of callbacks, say) that a data
+    /// asset or settings type holds and no file does, its type never read. Those two roles are reached by member, so a
+    /// field left out costs nothing; every other role's fields are its layout, which a binding mirrors whole, and a field
+    /// marked there throws.
+    /// </summary>
+    private bool LeavesOutAsTransient(string typeName, FieldDecl field, DocComment.FieldDoc doc, Role role)
+    {
+        var subject = $"{typeName}::{field.Name}";
+        if (!doc.Transient)
+        {
+            return false;
+        }
+
+        if (role is Role.DataAsset or Role.Settings)
+        {
+            return true;
+        }
+
+        var phrase = Roles.Phrase(role);
+        throw Error(field, subject,
+                    $"@transient on a field, which {phrase} cannot leave out: a field marked @transient is code wiring " +
+                    $"a data asset or settings type holds, and {phrase}'s fields are its layout");
+    }
+
+    private FieldDescription DescribeField(string typeName, FieldDecl field, DocComment.FieldDoc doc)
     {
         if (field.IsAnonymousStructOrUnion)
         {
@@ -447,9 +555,31 @@ internal sealed class Describer
         }
 
         var type = Classify(field.Type, field, subject);
+        if (type.IsOwning)
+        {
+            // Whether the type may hold it depends on every type that reaches it: CheckOwningKinds decides.
+            m_owningFields.TryAdd(typeName, []);
+            m_owningFields[typeName].Add((field, subject, type.Kind));
+        }
+
         var value = IsHandle(field.Type) ? HandleDefault(type, field.InClassInitializer, field, subject)
                                          : Default(type, field.InClassInitializer, field, subject);
-        return new FieldDescription(field.Name, Offset(field), type, value, Doc(field));
+        return Field(field, subject, type, value, doc);
+    }
+
+    /// <summary>A field's doc comment, split into its text and doc commands, a malformed command failing naming it.</summary>
+    private DocComment.FieldDoc FieldDoc(FieldDecl field, string subject) =>
+        WithDocCommandDiagnostics(field, subject, () => DocComment.Field(RawDoc(field)));
+
+    /// <summary>A field's description, with what its doc commands give; an owning kind's has no offset.</summary>
+    private FieldDescription Field(FieldDecl field, string subject, FieldType type, DefaultValue value,
+                                   DocComment.FieldDoc doc)
+    {
+        return new FieldDescription(field.Name, type.IsOwning ? null : Offset(field), type, value, doc.Text)
+        {
+            Formerly = doc.Formerly,
+            Metadata = doc.Metadata,
+        };
     }
 
     /// <summary>
@@ -493,7 +623,7 @@ internal sealed class Describer
 
         var kinds = members.Select((member, i) => new UnionKind(member.Name, enumerators[i].Name,
                                                                 Classify(member.Type, member, $"{name}::{member.Name}"),
-                                                                Doc(member)))
+                                                                PlainDoc(member, $"{name}::{member.Name}", "a tagged union's kind")))
                         .ToList();
         var kindNames = kinds.Select(kind => kind.Name).ToHashSet(StringComparer.Ordinal);
 
@@ -519,7 +649,14 @@ internal sealed class Describer
 
         var defaultKind = DefaultKind(record, name, kindNames);
         var tagDefault = new DefaultValue.Text(kinds.First(kind => kind.Name == defaultKind).Tag);
-        var tag = new FieldDescription(tagField.Name, Offset(tagField), tagType, tagDefault, Doc(tagField));
+        var tagSubject = $"{name}::{tagField.Name}";
+        var tagDoc = FieldDoc(tagField, tagSubject);
+        if (tagDoc.Transient)
+        {
+            throw Error(tagField, tagSubject, "@transient on a tagged union's tag, which the union cannot leave out");
+        }
+
+        var tag = Field(tagField, tagSubject, tagType, tagDefault, tagDoc);
         return new TaggedUnionDescription(name, size, alignment, doc, role, tag, Offset(unionField), kinds, defaultKind);
     }
 
@@ -586,12 +723,38 @@ internal sealed class Describer
 
         switch (type.Handle.kind)
         {
+            // The engine's own fixed-layout values, recognised by qualified name: the tool is binding-agnostic but not
+            // engine-agnostic. Neither is described for the kind.
+            case CXTypeKind.CXType_Record when IsEngineEntity(type):
+                return new FieldType("entity");
+            case CXTypeKind.CXType_Record when AssetHandleTarget(type) is { } target:
+                return new FieldType("reference", Target: target)
+                {
+                    SelectedHandle = m_names.GetValueOrDefault(type.AsString),
+                };
+            case CXTypeKind.CXType_ConstantArray when IsTextUnit(((ArrayType)type).ElementType.CanonicalType):
+                return new FieldType("fixed-string", Length: type.Handle.ArraySize);
             case CXTypeKind.CXType_Enum when IsHandle(type):
                 var enumDecl = (EnumDecl)type.AsTagDecl!.Definition!;
                 return new FieldType(IntegerKind(enumDecl.IntegerType.CanonicalType) ??
                                      throw Error(at, subject, $"its type '{declared.AsString}' is not a kind the description records"));
             case CXTypeKind.CXType_Enum:
                 return new FieldType("enum", RegisterReferenced(type, subject));
+            // The owning kinds, recognised by qualified name as the engine's values are. Which roles may hold them is
+            // CheckOwningKinds's to say, once every type that reaches this one is known.
+            case CXTypeKind.CXType_Record when StdSpecialisation(type, "basic_string") is { } text:
+                return IsTextUnit(text.TemplateArgs[0].AsType.CanonicalType)
+                           ? new FieldType("string")
+                           : throw Error(at, subject, $"a {declared.AsString}: a string is a std::string of UTF-8 text");
+            case CXTypeKind.CXType_Record when StdSpecialisation(type, "vector") is { } vector:
+                return ListField(vector.TemplateArgs[0].AsType, at, subject);
+            case CXTypeKind.CXType_Record when StdSpecialisation(type, "optional") is { } optional:
+                var held = Classify(optional.TemplateArgs[0].AsType, at, subject);
+                return held.Kind == "optional"
+                           ? throw Error(at, subject, "an optional of an optional, which the kinds cannot express")
+                           : new FieldType("optional", Element: held);
+            case CXTypeKind.CXType_Record when IsFilesystemPath(type):
+                return new FieldType("path");
             case CXTypeKind.CXType_Record when StdArray(type) is var (elementType, length):
                 return ArrayField(elementType, length, at, subject);
             case CXTypeKind.CXType_Record:
@@ -642,16 +805,87 @@ internal sealed class Describer
         };
     }
 
+    /// <summary><c>Fenrir::Entity</c>, the <c>entity</c> kind.</summary>
+    private static bool IsEngineEntity(Type canonical) =>
+        canonical.AsCXXRecordDecl is { Name: "Entity" } record && IsInFenrirNamespace(record);
+
+    /// <summary>
+    /// The canonical name of <c>T</c> when the type is a <c>Fenrir::AssetHandle&lt;T&gt;</c>, the <c>reference</c> kind's
+    /// target; null for any other type.
+    /// </summary>
+    private static string? AssetHandleTarget(Type canonical) =>
+        canonical.AsTagDecl is ClassTemplateSpecializationDecl { Name: "AssetHandle" } handle && IsInFenrirNamespace(handle) &&
+        handle.TemplateArgs is [{ Kind: CXTemplateArgumentKind.CXTemplateArgumentKind_Type } argument]
+            ? argument.AsType.CanonicalType.AsString
+            : null;
+
+    private static bool IsInFenrirNamespace(Decl decl) =>
+        decl.DeclContext is NamespaceDecl { Name: "Fenrir", DeclContext: TranslationUnitDecl };
+
+    /// <summary>
+    /// A <c>char</c> of either signedness or a <c>char8_t</c>: a byte of UTF-8 text, so an array of them is a
+    /// <c>fixed-string</c>. A <c>signed char</c>, <c>unsigned char</c> and <c>std::uint8_t</c> are bytes, not text.
+    /// </summary>
+    private static bool IsTextUnit(Type canonical) =>
+        canonical.Handle.kind is CXTypeKind.CXType_Char_S or CXTypeKind.CXType_Char_U ||
+        // libclang has no kind of its own for char8_t, so it is known by its spelling.
+        canonical.AsString == "char8_t";
+
     /// <summary>The <c>array</c> kind: <paramref name="length"/> elements of <paramref name="elementType"/>, whether a C array's or a <c>std::array</c>'s, never an array of arrays.</summary>
     private FieldType ArrayField(Type elementType, long length, Decl at, string subject)
     {
         var element = Classify(elementType, at, subject);
-        if (element.Kind == "array")
+        if (element.Kind is "array" or "fixed-string")
         {
             throw Error(at, subject, "an array of arrays, which the kinds cannot express");
         }
 
+        if (element.IsOwning)
+        {
+            throw Error(at, subject, $"an array of {element.Kind}s, which the kinds cannot express: hold a list");
+        }
+
         return new FieldType("array", Element: element, Length: length);
+    }
+
+    /// <summary>
+    /// The <c>list</c> kind: a <c>std::vector</c> of any kind, a list included, but <c>bool</c>, whose
+    /// <c>std::vector</c> packs bits a visitor cannot hand out one by one.
+    /// </summary>
+    private FieldType ListField(Type elementType, Decl at, string subject)
+    {
+        var element = Classify(elementType, at, subject);
+        if (element.Kind == "bool")
+        {
+            throw Error(at, subject, "a std::vector<bool>, whose elements are bits rather than values: hold a list of u8");
+        }
+
+        return new FieldType("list", Element: element);
+    }
+
+    /// <summary>The specialisation of the standard's class template of this name the type is, or null.</summary>
+    private static ClassTemplateSpecializationDecl? StdSpecialisation(Type canonical, string name) =>
+        canonical.AsTagDecl is ClassTemplateSpecializationDecl specialisation && specialisation.Name == name &&
+        specialisation.IsInStdNamespace && specialisation.TemplateArgs.Count > 0 &&
+        specialisation.TemplateArgs[0].Kind == CXTemplateArgumentKind.CXTemplateArgumentKind_Type
+            ? specialisation
+            : null;
+
+    /// <summary><c>std::filesystem::path</c>, the <c>path</c> kind, wherever the library's inline namespaces put it.</summary>
+    private static bool IsFilesystemPath(Type canonical)
+    {
+        if (canonical.AsCXXRecordDecl is not { Name: "path" } record)
+        {
+            return false;
+        }
+
+        var context = record.DeclContext;
+        while (context is NamespaceDecl { IsInline: true } inline)
+        {
+            context = inline.DeclContext;
+        }
+
+        return context is NamespaceDecl { Name: "filesystem" } filesystem && filesystem.IsInStdNamespace;
     }
 
     /// <summary>
@@ -679,15 +913,122 @@ internal sealed class Describer
     private string RegisterReferenced(Type canonical, string subject)
     {
         var decl = (Decl?)canonical.AsTagDecl?.Definition ?? canonical.AsTagDecl!;
+        var name = Register(canonical, canonical.AsString, Role.Nested, decl, subject);
         if (canonical.AsTagDecl is EnumDecl)
         {
-            var name = Register(canonical, canonical.AsString, Role.Nested, decl, subject);
             m_enums[name] = (EnumDecl)decl;
-            return name;
+        }
+        else if (m_describing is not null)
+        {
+            m_holds.Add((m_describing, subject, name));
         }
 
-        return Register(canonical, canonical.AsString, Role.Nested, decl, subject);
+        return name;
     }
+
+    /// <summary>
+    /// The owning kinds' rule (SCHEMA.md, "Owning kinds"): a type may hold one only when every type reaching it, by
+    /// value through any chain of fields, is a data asset or settings type, or it is one itself. A type a fixed-layout
+    /// role reaches fails naming each owning field; one both kinds of role reach fails naming a path from each.
+    /// </summary>
+    private void CheckOwningKinds()
+    {
+        // The first path by which a fixed-layout and an owning role reach each type: the role at its start and the
+        // field reaching the type (null for a selected type, which its own role reaches).
+        var fixedFrom = new Dictionary<string, (Role Role, string? Through)>(StringComparer.Ordinal);
+        var owningFrom = new Dictionary<string, (Role Role, string? Through)>(StringComparer.Ordinal);
+        var queue = new Queue<string>();
+        // A selected type is described under the name the selection gives it (an enum under its canonical name).
+        foreach (var (name, role) in m_selection.Types)
+        {
+            if (m_roles.ContainsKey(name) && role is not (Role.BoundType or Role.Enum))
+            {
+                (Roles.IsOwning(role) ? owningFrom : fixedFrom).TryAdd(name, (role, null));
+                queue.Enqueue(name);
+            }
+        }
+
+        while (queue.Count > 0)
+        {
+            var from = queue.Dequeue();
+            foreach (var (_, subject, to) in m_holds.Where(hold => hold.From == from))
+            {
+                var reached = false;
+                if (fixedFrom.TryGetValue(from, out var viaFixed))
+                {
+                    reached |= fixedFrom.TryAdd(to, (viaFixed.Role, viaFixed.Through ?? subject));
+                }
+
+                if (owningFrom.TryGetValue(from, out var viaOwning))
+                {
+                    reached |= owningFrom.TryAdd(to, (viaOwning.Role, viaOwning.Through ?? subject));
+                }
+
+                if (reached)
+                {
+                    queue.Enqueue(to);
+                }
+            }
+        }
+
+        foreach (var (name, fields) in m_owningFields.Where(type => fixedFrom.ContainsKey(type.Key)))
+        {
+            var (role, through) = fixedFrom[name];
+            var holder = through is null ? Roles.Phrase(role) : $"a nested type reached from {Roles.Phrase(role)}";
+            if (owningFrom.TryGetValue(name, out var owning))
+            {
+                var (at, subject, kind) = fields[0];
+                m_errors.Add(Error(at, name,
+                                   $"holds {KindPhrase(kind)} ({subject}), which {Roles.Phrase(role)} cannot reach, but " +
+                                   $"is reached from {Roles.Phrase(role)} {Path(through)} and from " +
+                                   $"{Roles.Phrase(owning.Role)} {Path(owning.Through)}").Message);
+                continue;
+            }
+
+            foreach (var (at, subject, kind) in fields)
+            {
+                m_errors.Add(Error(at, subject,
+                                   $"{KindPhrase(kind)}, which {holder} cannot hold: the owning kinds (string, list, " +
+                                   "optional and path) are for data assets and settings types" +
+                                   (through is null ? "" : $" (reached through {through})")).Message);
+            }
+        }
+
+        static string Path(string? through) => through is null ? "where it is selected" : $"through {through}";
+    }
+
+    /// <summary>
+    /// Marks the structs a generated visitor reaches by member (<see cref="StructDescription.ByMember" />) and drops their
+    /// offsets: the data assets and settings types, and every struct whose layout is the standard library's: one holding
+    /// an owning kind, or holding such a struct by value, or extending one. (A data asset of numbers alone has a fixed
+    /// layout, so a struct holding it keeps its offsets.)
+    /// </summary>
+    private void MarkByMember()
+    {
+        var structs = m_described.Values.OfType<StructDescription>().ToList();
+        var libraryLayout = m_owningFields.Keys.ToHashSet(StringComparer.Ordinal);
+        bool added;
+        do
+        {
+            added = false;
+            foreach (var (from, _, to) in m_holds.Where(hold => libraryLayout.Contains(hold.To)))
+            {
+                added |= libraryLayout.Add(from);
+            }
+        }
+        while (added);
+
+        foreach (var type in structs.Where(type => Roles.IsOwning(type.Role) || libraryLayout.Contains(type.Name)))
+        {
+            m_described[type.Name] = type with
+            {
+                ByMember = true,
+                Fields = type.Fields.Select(field => field with { Offset = null }).ToList(),
+            };
+        }
+    }
+
+    private static string KindPhrase(string kind) => kind == "optional" ? "an optional" : $"a {kind}";
 
     // --- Defaults ---
 
@@ -698,9 +1039,30 @@ internal sealed class Describer
             return StructDefault(type, init, at, subject);
         }
 
-        if (type.Kind == "array")
+        switch (type.Kind)
         {
-            return ArrayDefault(type, init, at, subject);
+            case "array":
+                return ArrayDefault(type, init, at, subject);
+            case "entity":
+                return EmptyDefault(init, at, subject, "an entity", "the empty entity", "Entity()");
+            case "reference":
+                return EmptyDefault(init, at, subject, "a reference", "the empty handle", "AssetHandle<T>()");
+            case "fixed-string":
+                return FixedStringDefault(type, init, at, subject);
+            case "string" or "path":
+                return TextDefault(type.Kind, init, at, subject);
+            case "list":
+                return init is null || IsOwnDefaults(init)
+                           ? new DefaultValue.Array([])
+                           : throw Error(at, subject,
+                                         $"the default '{SourceText(init)}' is not one a list records: its default is the " +
+                                         "empty list (no initialiser or {})");
+            case "optional":
+                return init is null || IsOwnDefaults(init) || IsNullopt(init)
+                           ? new DefaultValue.Null()
+                           : throw Error(at, subject,
+                                         $"the default '{SourceText(init)}' is not one an optional records: its default is " +
+                                         "empty (no initialiser, {} or std::nullopt)");
         }
 
         if (init is null)
@@ -732,15 +1094,130 @@ internal sealed class Describer
 
                 break;
             default:
-                if (IsLiteral(expression) || IsNumericLimits(expression))
+                // A number's or bool's default is any constant libclang evaluates: a literal, a named constant, an
+                // arithmetic expression over them.
+                if (TryEvaluate(init, type.Kind, at, subject) is { } evaluated)
                 {
-                    return Evaluate(init, type.Kind, at, subject);
+                    return evaluated;
                 }
 
                 break;
         }
 
         throw UnknownDefault(init, at, subject);
+    }
+
+    /// <summary>
+    /// An entity's or reference's default, which names nothing: no initialiser, or the value's own defaults
+    /// (<c>{}</c>, <c>Entity()</c>). Recorded as <c>null</c>.
+    /// </summary>
+    private DefaultValue EmptyDefault(Expr? init, Decl at, string subject, string what, string empty, string spelling)
+    {
+        if (init is null || IsOwnDefaults(init))
+        {
+            return new DefaultValue.Null();
+        }
+
+        throw Error(at, subject,
+                    $"the default '{SourceText(init)}' is not one {what} records: its default is {empty} (no " +
+                    $"initialiser, {{}} or {spelling})");
+    }
+
+    /// <summary>
+    /// A fixed string's default, the text its initialiser spells: a string literal, a braced list of character
+    /// constants (ending at the first zero), or <c>{}</c> or no initialiser for the empty string. The text must leave
+    /// room for its terminator and be UTF-8.
+    /// </summary>
+    private DefaultValue FixedStringDefault(FieldType type, Expr? init, Decl at, string subject)
+    {
+        if (init is null || IsZeroInit(Strip(init)))
+        {
+            return new DefaultValue.Text("");
+        }
+
+        byte[]? bytes = Strip(init) switch
+        {
+            StringLiteral literal => Encoding.UTF8.GetBytes(literal.String),
+            InitListExpr list => CharacterBytes(list, at, subject),
+            _ => null,
+        };
+        if (bytes is null)
+        {
+            throw Error(at, subject,
+                        $"the default '{SourceText(init)}' is not one a fixed string records: a string literal, a " +
+                        "braced list of character constants, or {}");
+        }
+
+        var end = Array.IndexOf(bytes, (byte)0);
+        var text = end < 0 ? bytes : bytes[..end];
+        if (text.Length >= type.Length)
+        {
+            throw Error(at, subject,
+                        $"its default fills all {type.Length} bytes, leaving no room for the terminator a fixed string keeps");
+        }
+
+        try
+        {
+            return new DefaultValue.Text(new UTF8Encoding(false, true).GetString(text));
+        }
+        catch (DecoderFallbackException)
+        {
+            throw Error(at, subject, $"the default '{SourceText(init)}' is not UTF-8 text");
+        }
+    }
+
+    /// <summary>
+    /// A string's or path's default, the literal its initialiser constructs it from (<c>= "assets"</c>,
+    /// <c>{"assets"}</c>), or the empty text for no initialiser or its own defaults (<c>{}</c>).
+    /// </summary>
+    private DefaultValue TextDefault(string kind, Expr? init, Decl at, string subject)
+    {
+        if (init is null || IsOwnDefaults(init))
+        {
+            return new DefaultValue.Text("");
+        }
+
+        var expression = Strip(init);
+        if (expression is CXXConstructExpr construct &&
+            construct.Args.Where(argument => argument is not CXXDefaultArgExpr).ToList() is [var argument])
+        {
+            expression = Strip(argument);
+        }
+
+        return expression is StringLiteral literal
+                   ? new DefaultValue.Text(literal.String)
+                   : throw Error(at, subject,
+                                 $"the default '{SourceText(init)}' is not one {KindPhrase(kind)} records: a string " +
+                                 $"literal, or {{}} or no initialiser for the empty {kind}");
+    }
+
+    /// <summary><c>std::nullopt</c>, or an optional constructed from it.</summary>
+    private static bool IsNullopt(Expr init)
+    {
+        var expression = Strip(init);
+        if (expression is CXXConstructExpr { NumArgs: 1 } construct)
+        {
+            expression = Strip(construct.Args[0]);
+        }
+
+        return expression is DeclRefExpr { Decl: VarDecl { Name: "nullopt" } nullopt } && nullopt.IsInStdNamespace;
+    }
+
+    // A braced list's characters as bytes, or null when one is not a constant libclang evaluates.
+    private byte[]? CharacterBytes(InitListExpr list, Decl at, string subject)
+    {
+        var bytes = new List<byte>();
+        foreach (var item in list.Inits.Cast<Expr>())
+        {
+            if (TryEvaluate(item, "u8", at, subject) is not DefaultValue.Number number)
+            {
+                return null;
+            }
+
+            bytes.Add(byte.Parse(number.Spelling, CultureInfo.InvariantCulture));
+        }
+
+        return [.. bytes];
     }
 
     private DefaultValue StructDefault(FieldType type, Expr? init, Decl at, string subject)
@@ -880,17 +1357,76 @@ internal sealed class Describer
         })];
     }
 
+    /// <summary>
+    /// A bound type's components as its description records them: every scalar it holds, in storage order, with its
+    /// offset; of an anonymous union, its first member's; a nested struct's members and an array's elements by path
+    /// (<c>m_value[0].x</c>). Null when it holds anything else (a pointer, an enum), which a visitor cannot present.
+    /// </summary>
+    private static List<BoundComponent>? BoundComponents(RecordDecl record)
+    {
+        var components = new List<BoundComponent>();
+        return Collect(record, "", 0) ? components : null;
+
+        // A record's members, from `offset`, each named `prefix` and its own name (an anonymous one adds no name).
+        bool Collect(RecordDecl inner, string prefix, long offset)
+        {
+            foreach (var field in inner.IsUnion ? inner.Fields.Take(1) : inner.Fields)
+            {
+                var anonymous = field.IsAnonymousStructOrUnion;
+                if (!CollectType(field.Type.CanonicalType, anonymous ? prefix : prefix + field.Name, offset + Offset(field),
+                                 anonymous))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        bool CollectType(Type type, string name, long offset, bool anonymous)
+        {
+            if (ScalarKind(type) is { } kind)
+            {
+                components.Add(new BoundComponent(name, offset, kind));
+                return true;
+            }
+
+            // A std::array is the C array it holds, as a field's kind records it: its member's name is the library's.
+            (Type Element, long Length)? array = type.Handle.kind == CXTypeKind.CXType_ConstantArray
+                            ? (((ArrayType)type).ElementType, type.Handle.ArraySize)
+                            : StdArray(type);
+            if (array is var (elementType, length))
+            {
+                var element = elementType.CanonicalType;
+                for (long i = 0; i < length; ++i)
+                {
+                    if (!CollectType(element, $"{name}[{i}]", offset + (i * element.Handle.SizeOf), false))
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+
+            return type.Handle.kind == CXTypeKind.CXType_Record && type.AsCXXRecordDecl?.Definition is RecordDecl nested &&
+                   Collect(nested, anonymous ? name : name + ".", offset);
+        }
+    }
+
     private DefaultValue ArrayDefault(FieldType type, Expr? init, Decl at, string subject)
     {
         var element = type.Element!;
         if (init is null)
         {
-            if (element.Kind != "struct")
+            // Only these kinds have a default without an initialiser (T{}, the empty entity, the empty handle); a
+            // scalar's would be indeterminate.
+            if (element.Kind is not ("struct" or "entity" or "reference"))
             {
                 throw Error(at, subject, "has no default member initialiser");
             }
 
-            return new DefaultValue.Array(Enumerable.Repeat<DefaultValue>(DefaultValue.TypeDefaults, (int)type.Length).ToList());
+            return new DefaultValue.Array(Enumerable.Repeat(Zero(element, at, subject), (int)type.Length).ToList());
         }
 
         if (Strip(init) is not InitListExpr list)
@@ -932,7 +1468,9 @@ internal sealed class Describer
     private DefaultValue Zero(FieldType type, Decl at, string subject) => type.Kind switch
     {
         "bool" => new DefaultValue.Bool(false),
-        "pointer" => new DefaultValue.Null(),
+        "pointer" or "entity" or "reference" or "optional" => new DefaultValue.Null(),
+        "fixed-string" or "string" or "path" => new DefaultValue.Text(""),
+        "list" => new DefaultValue.Array([]),
         "struct" => DefaultValue.TypeDefaults,
         "array" => new DefaultValue.Array(Enumerable.Range(0, (int)type.Length).Select(_ => Zero(type.Element!, at, subject)).ToList()),
         "enum" => new DefaultValue.Text(
@@ -941,7 +1479,15 @@ internal sealed class Describer
         _ => new DefaultValue.Number("0"),
     };
 
-    private DefaultValue Evaluate(Expr expression, string kind, Decl at, string subject)
+    private DefaultValue Evaluate(Expr expression, string kind, Decl at, string subject) =>
+        TryEvaluate(expression, kind, at, subject) ??
+        throw Error(at, subject, $"a default libclang could not evaluate as {kind}");
+
+    /// <summary>
+    /// The constant <paramref name="expression"/> evaluates to, as <paramref name="kind"/>; null when libclang cannot
+    /// evaluate it as that kind.
+    /// </summary>
+    private DefaultValue? TryEvaluate(Expr expression, string kind, Decl at, string subject)
     {
         using var result = expression.Handle.Evaluate;
         switch (result.Kind)
@@ -976,7 +1522,7 @@ internal sealed class Describer
                 };
         }
 
-        throw Error(at, subject, $"a default libclang could not evaluate as {kind}");
+        return null;
     }
 
     /// <summary>The value an integer of these bits has as this kind, as C++'s conversion gives it.</summary>
@@ -1071,10 +1617,10 @@ internal sealed class Describer
     private static long Offset(FieldDecl field) => field.Handle.OffsetOfField / 8;
 
     /// <summary>
-    /// The decl's doc comment. Clang attaches a comment to the next enumerator when only a comma lies between, so a
-    /// comment that ends before the previous sibling does is that sibling's, not this one's.
+    /// The decl's raw doc comment, or null when it has none. Clang attaches a comment to the next enumerator when only a
+    /// comma lies between, so a comment that ends before the previous sibling does is that sibling's, not this one's.
     /// </summary>
-    private static string? Doc(Decl? decl, Decl? previous = null)
+    private static string? RawDoc(Decl? decl, Decl? previous = null)
     {
         if (decl is null)
         {
@@ -1091,7 +1637,29 @@ internal sealed class Describer
             }
         }
 
-        return DocComment.Text(decl.Handle.RawCommentText.ToString());
+        var raw = decl.Handle.RawCommentText.ToString();
+        return string.IsNullOrWhiteSpace(raw) ? null : raw;
+    }
+
+    /// <summary>A type's doc comment, split into its text and what its doc commands give.</summary>
+    private DocComment.TypeDoc TypeDoc(Decl decl, string subject) =>
+        WithDocCommandDiagnostics(decl, subject, () => DocComment.Type(RawDoc(decl)));
+
+    /// <summary>The doc comment of <paramref name="what"/>, which takes no doc command.</summary>
+    private string? PlainDoc(Decl decl, string subject, string what, Decl? previous = null) =>
+        WithDocCommandDiagnostics(decl, subject, () => DocComment.Plain(RawDoc(decl, previous), what));
+
+    // Splits a doc comment, turning a doc command's failure into a diagnostic naming the subject.
+    private T WithDocCommandDiagnostics<T>(Decl at, string subject, Func<T> split)
+    {
+        try
+        {
+            return split();
+        }
+        catch (DocCommandException exception)
+        {
+            throw Error(at, subject, exception.Message);
+        }
     }
 
     private DescribeException Error(Cursor at, string subject, string message) =>
@@ -1099,8 +1667,8 @@ internal sealed class Describer
 
     private DescribeException UnknownDefault(Expr init, Cursor at, string subject) =>
         Error(at, subject,
-              $"the default '{SourceText(init)}' is not one the description records: a literal, an enum value, " +
-              "std::numeric_limits<T>::infinity(), max() or lowest(), a bound type's constructor with literal " +
+              $"the default '{SourceText(init)}' is not one the description records: for a number or bool, a " +
+              "constant expression libclang evaluates; an enum value, a bound type's constructor with literal " +
               "arguments, a nested type's own defaults (T{}), or a constant of its type");
 
     private static string Where(Cursor at)
@@ -1121,7 +1689,8 @@ internal sealed class Describer
             m_sources[path] = text;
         }
 
-        return end > start && end <= text.Length ? text[(int)start..(int)end] : at.Spelling;
+        // A class's copy-initialisation (`= {1.0f, 2.0f}`) spans its `=`, which is not the initialiser's.
+        return end > start && end <= text.Length ? text[(int)start..(int)end].TrimStart('=').TrimStart() : at.Spelling;
     }
 
     /// <summary>Every described type, dependencies first, then by name.</summary>

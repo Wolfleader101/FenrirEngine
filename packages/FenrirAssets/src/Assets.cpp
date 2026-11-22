@@ -4,11 +4,16 @@
 #include <utility>
 
 #include "FenrirApp/App.hpp"
+#include "FenrirAssets/Generated/FenrirAssetsTypes.hpp"
+#include "FenrirTypes/TypeRegistry.hpp"
 
 namespace Fenrir
 {
     Assets Assets::Install(App& app, AssetsConfig config)
     {
+        // Its types first (ADR-0074), before any resource or system: a second Install registers nothing again.
+        Generated::RegisterFenrirAssetsTypes(app.GetResource<TypeRegistry>());
+
         app.AddResource<AssetStore>(*app.Logger(), std::move(config));
         return Assets(app);
     }

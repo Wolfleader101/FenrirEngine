@@ -2,6 +2,8 @@
 # source and spawning (ADR-0028, ADR-0031, ADR-0033, ADR-0037, ADR-0041). It links no library and has no GPU code. Built
 # with FENRIR_ENABLE_ASSETS, with no option of its own; FenrirRenderer reaches it only through FenrirAssets' SkinningSource, and links nothing
 # from it.
+# It registers its described types with FenrirTypes' type registry (ADR-0074), through the generated registration
+# it compiles, so it links FenrirTypes PUBLIC: the generated header, public, gives a game Describe<T>.
 add_library(FenrirSkeleton STATIC
     include/FenrirSkeleton/SkeletonPose.hpp
     include/FenrirSkeleton/PoseStages.hpp
@@ -43,3 +45,9 @@ endif()
 # Its shared types (ADR-0042): `cmake --build <dir> --target fenrir-describe-api` regenerates api/FenrirSkeleton.api.json,
 # which FenrirSkeletonScripting's binding binds.
 fenrir_describe_api(FenrirSkeleton api/FenrirSkeleton.api.toml)
+# Its type registration (ADR-0074), from that description: `cmake --build <dir> --target
+# fenrir-generate-type-registry` regenerates include/FenrirSkeleton/Generated/ and src/Generated/.
+fenrir_generate_type_registry(FenrirSkeleton api/FenrirSkeleton.api.toml)
+target_sources(FenrirSkeleton PRIVATE include/FenrirSkeleton/Generated/FenrirSkeletonTypes.hpp
+                                      src/Generated/FenrirSkeletonTypes.cpp)
+target_link_libraries(FenrirSkeleton PUBLIC FenrirTypes)

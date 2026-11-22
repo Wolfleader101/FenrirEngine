@@ -21,5 +21,20 @@ private-members = ["Fixture::Tag"]
 # A specialisation named with its arguments, which no alias names and nothing instantiates.
 "Fixture::Pair<double>" = "bound-type"
 "Fixture::Ticket" = "bound-type"
+"Fixture::Columns" = "bound-type"
+"Fixture::Dial" = "component"
+"Fixture::Contacts" = "component"
+"Fixture::Folder" = "component"
+"Fixture::Socket" = "component"
+"Fixture::WeaponData" = "data-asset"
+"Fixture::Sword" = "data-asset"
+"Fixture::Paths" = "settings"
 # Held by no field: described because the selection names it.
 "Fixture::Heading" = "enum"
+
+# What tools/generate-type-registry writes for the fixture: the FenrirTypes tests compile and exercise it.
+[registration]
+header = "../../../../packages/FenrirTypes/Tests/Generated/FixtureTypes.hpp"
+source = "../../../../packages/FenrirTypes/Tests/Generated/FixtureTypes.cpp"
+function = "Fenrir::Generated::RegisterFixtureTypes"
+includes = ["Fixture.hpp"]

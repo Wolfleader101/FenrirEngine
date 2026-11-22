@@ -9,11 +9,8 @@ headers = [
     "../include/FenrirPhysics/Events.hpp",
     "../include/FenrirPhysics/Queries.hpp",
     "../include/FenrirPhysics/PhysicsWorld.hpp",
+    "../include/FenrirPhysics/Physics.hpp",
 ]
-
-# Joint, CharacterState and the events hold the engine's Entity, which keeps its value and entity list private: described
-# here as nested with the layout FenrirECS shares, and mirrored by the built-in binding.
-private-members = ["Fenrir::Entity"]
 
 [types]
 # The physics extension's components.
@@ -51,6 +48,31 @@ private-members = ["Fenrir::Entity"]
 "Fenrir::JointFrames" = "shared-struct"
 "Fenrir::JointState" = "shared-struct"
 
+# Physics::Install's config, which a project file fills (ADR-0084); its collision layers are described through it.
+"Fenrir::PhysicsConfig" = "settings"
+
 # Types every binding has its own of.
 "Fenrir::Math::Vec3" = "bound-type"
 "Fenrir::Math::Quat" = "bound-type"
+
+# What tools/generate-type-registry writes for the package (ADR-0074): its types' descriptions, the function registering
+# them, compiled into FenrirPhysics, and the test that their registered descriptions construct the defaults the
+# description records. It uses the registrations of the packages registering the types it holds of theirs (FenrirMath's
+# vector, quaternion and box), which it points at rather than describing them again.
+[registration]
+header = "../include/FenrirPhysics/Generated/FenrirPhysicsTypes.hpp"
+source = "../src/Generated/FenrirPhysicsTypes.cpp"
+test = "../Tests/Generated/FenrirPhysicsTypesDefaultsTests.cpp"
+function = "Fenrir::Generated::RegisterFenrirPhysicsTypes"
+includes = [
+    "FenrirPhysics/Components.hpp",
+    "FenrirPhysics/Joints.hpp",
+    "FenrirPhysics/Characters.hpp",
+    "FenrirPhysics/Vehicles.hpp",
+    "FenrirPhysics/Events.hpp",
+    "FenrirPhysics/Queries.hpp",
+    "FenrirPhysics/PhysicsWorld.hpp",
+    "FenrirPhysics/Physics.hpp",
+    "FenrirECS/TypeAttachments.hpp",
+]
+uses = ["../../FenrirMath/api/FenrirMath.api.toml"]

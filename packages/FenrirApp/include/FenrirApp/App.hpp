@@ -1,11 +1,19 @@
 #pragma once
 
+// FenrirApp's role hook (FenrirTypes/RoleHooks.hpp): a generated registration lists this header in its
+// `[registration] includes`, so the hook it calls for each `app-resource` type is AttachAppResource below, not the
+// no-op its generated header would otherwise define.
+#define FENRIR_TYPES_ATTACH_APP_RESOURCE_DEFINED
+
 #include <memory>
 
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "FenrirScheduler/Scheduler.hpp"
 #include "FenrirTime/Time.hpp"
+#include "FenrirTypes/RoleHooks.hpp"
+#include "FenrirTypes/TypeDescription.hpp"
+#include "FenrirTypes/TypeRegistry.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -388,6 +396,29 @@ namespace Fenrir
         Detail::EventCursor cursor;
     };
 
+    class App;
+
+    /**
+     * @brief A registered app resource type's doors over an app, for code that knows the type only by name: `find` is
+     * `TryGetResource<T>()`, `add` a default-constructed `AddResource<T>()` and `remove` `RemoveResource<T>()`, with
+     * the resource as an untyped pointer.
+     */
+    struct AppResourceDoors
+    {
+        void* (*find)(App& app) = nullptr;
+        void* (*add)(App& app) = nullptr;
+        void (*remove)(App& app) = nullptr;
+    };
+
+    /**
+     * @brief The attachment tag FenrirApp hangs a registered app resource type's doors under (ADR-0074), which App's
+     * named FindResource, AddResource and RemoveResource open.
+     */
+    struct AppResourceAttachment
+    {
+        using Value = AppResourceDoors;
+    };
+
     /**
      * @brief The main app class
      *
@@ -401,6 +432,15 @@ namespace Fenrir
      * package cannot start, `Install` logs one diagnostic saying why and returns an owner whose `IsValid()` is false:
      * it has added no systems and its calls do nothing, so the app keeps running without that package. FenrirPhysics
      * and FenrirScripting predate this and keep their own shapes (`Scripting::IsRunning`).
+     *
+     * **Types.** The App's first app resource is its `TypeRegistry` (FenrirTypes, ADR-0074), reached through
+     * `GetResource<TypeRegistry>()`: the constructor registers the types of the packages beneath `Install` (FenrirMath,
+     * FenrirECS and FenrirApp; FenrirScene describes none) before any scene exists, and every `Install` registers its
+     * own package's types first, so the registry knows a type by the name a file spells once its package is on. A
+     * second `Install` registers nothing again. What the registry refuses it reports through the App's logger. The
+     * registrations hang each type's role facts on it: code holding only a name reaches a component through
+     * `ComponentType::ForName`, a scene resource through Scene's named doors and an app resource through the App's
+     * (FindResource, AddResource and RemoveResource taking the registry and a name).
      */
     class App
     {
@@ -530,6 +570,27 @@ namespace Fenrir
         {
             m_resources.erase(std::type_index(typeid(T)));
         }
+
+        /**
+         * @brief The app's resource of the app resource type registered under `name` (canonical or former), as
+         * TryGetResource of that type gives it; null when the app has none, or when `name` is no registered app
+         * resource type's. Reports nothing.
+         */
+        [[nodiscard]] void* FindResource(const TypeRegistry& registry, std::string_view name);
+
+        /**
+         * @brief Default-constructs the app's resource of the app resource type registered under `name`, as
+         * AddResource of that type does, and gives it; null, adding nothing, when `name` is no registered app resource
+         * type's. Reports nothing.
+         */
+        void* AddResource(const TypeRegistry& registry, std::string_view name);
+
+        /**
+         * @brief Destroys the app's resource of the app resource type registered under `name`, as RemoveResource of
+         * that type does. Does nothing when the app has none, or when `name` is no registered app resource type's.
+         * Reports nothing.
+         */
+        void RemoveResource(const TypeRegistry& registry, std::string_view name);
 
         /**
          * @brief Get the Logger object
@@ -759,5 +820,22 @@ namespace Fenrir
             it = inserted.first;
         }
         return *static_cast<EventQueue<TEvent>*>(it->second.get());
+    }
+
+    /**
+     * @brief Hangs the app resource type `T`'s doors (AppResourceDoors) on the registered type `description`
+     * describes, so App's named doors reach `T` by its name. `T` must be default constructible.
+     *
+     * @return Whether they were hung; the registry reports a refusal (no type registered under the description's name).
+     */
+    template <typename T>
+    bool AttachAppResource(TypeRegistry& registry, const TypeDescription& description)
+    {
+        return registry.Attach<AppResourceAttachment>(
+            description.name, AppResourceDoors{
+                                  .find = [](App& app) -> void* { return app.TryGetResource<T>(); },
+                                  .add = [](App& app) -> void* { return &app.AddResource<T>(); },
+                                  .remove = [](App& app) { app.RemoveResource<T>(); },
+                              });
     }
 } // namespace Fenrir

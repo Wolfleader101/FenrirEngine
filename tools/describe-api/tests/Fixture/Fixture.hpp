@@ -5,8 +5,40 @@
 
 #include <array>
 #include <cstdint>
+#include <filesystem>
+#include <functional>
 #include <limits>
 #include <numbers>
+#include <optional>
+#include <string>
+#include <vector>
+
+// The engine's entity and asset handle, as the tool recognises them by qualified name: the shapes FenrirECS and
+// FenrirAssets declare, so the fixture reads without the engine's headers.
+namespace Fenrir
+{
+    class Entity
+    {
+      public:
+        Entity() = default;
+        Entity(std::uint32_t id, void* entityList) : m_entityId(id), m_entityList(entityList)
+        {
+        }
+
+      private:
+        std::uint32_t m_entityId = 0xFFFFFFFFu;
+        void* m_entityList = nullptr;
+    };
+
+    struct Mesh;
+
+    template <typename T>
+    struct AssetHandle
+    {
+        std::uint32_t index = 0;
+        std::uint32_t generation = 0;
+    };
+} // namespace Fenrir
 
 namespace Fixture
 {
@@ -283,7 +315,7 @@ namespace Fixture
         /** @brief An Id: its default is the constant its initialiser converts to. */
         Id m_id = noId;
         const void* m_owner = nullptr;
-        /** @brief Characters: bytes, on every target. */
+        /** @brief Characters: a fixed string, its default the text its characters spell. */
         char m_label[4] = {'a'};
     };
 
@@ -356,5 +388,154 @@ namespace Fixture
     {
         Handle first;
         Handle second;
+    };
+
+    /** @brief A bound type holding an array of another, as a maths library's matrix holds its columns. */
+    class Columns
+    {
+      public:
+        Columns() = default;
+
+      private:
+        Vec3 m_value[2];
+    };
+
+    /** @brief A named constant a scalar default may name. */
+    inline constexpr std::int32_t DefaultTicks = 12;
+
+    /** @brief A named constant computed from another, as a build-dependent switch is. */
+    inline constexpr bool EnabledByDefault = DefaultTicks > 10;
+
+    /**
+     * @brief A component a file reads under its former names, at version 2.
+     *
+     * The doc commands below are recorded as keys, not as text.
+     *
+     * @version 2
+     * @formerly Fixture::Gauge
+     * @formerly Legacy::Meter
+     */
+    struct Dial
+    {
+        /**
+         * @brief Every metadata command on one field, and two former names.
+         * @formerly level
+         * @formerly amount
+         * @range 0 100
+         * @step 0.5
+         * @display Fill level
+         * @group Readout
+         * @readonly
+         * @hidden
+         * @multiline
+         * @units percent
+         */
+        float fill = 50.0f;
+        /**
+         * @brief A default named by a constant.
+         * @range -10 10.5
+         */
+        std::int32_t ticks = DefaultTicks;
+        /** @brief A default written as an arithmetic expression. */
+        std::int32_t span = 2 * 4;
+        /** @brief A default named by a constant computed from another. */
+        bool enabled = EnabledByDefault;
+        /** @brief A float default computed from a named constant. */
+        float scaled = DefaultTicks * 0.5f;
+    };
+
+    /**
+     * @brief Plain run-time data no file holds.
+     * @transient
+     */
+    struct Contacts
+    {
+        std::uint32_t count = 0;
+    };
+
+    /**
+     * @brief Editor data the cooker strips.
+     * @editor-only
+     */
+    struct Folder
+    {
+        bool open = false;
+    };
+
+    /**
+     * @brief A component holding the three fixed-layout kinds a file writes as values of their own: an entity, a
+     * fixed string and an asset reference.
+     */
+    struct Socket
+    {
+        /** @brief An entity: 16 bytes, its own kind, Fenrir::Entity never described. */
+        Fenrir::Entity owner;
+        /** @brief Another, given its own defaults. */
+        Fenrir::Entity target = Fenrir::Entity();
+        /** @brief A fixed string of 32 bytes, its default the literal. */
+        char label[32] = "Socket";
+        /** @brief A UTF-8 fixed string, empty. */
+        char8_t title[8] = {};
+        /** @brief Bytes, not text: still an array of u8. */
+        std::uint8_t bytes[4] = {};
+        /** @brief An asset reference: its target is the handle's type. */
+        Fenrir::AssetHandle<Fenrir::Mesh> mesh;
+        /** @brief Another, given its own defaults. */
+        Fenrir::AssetHandle<Fenrir::Mesh> lod{};
+    };
+
+    /** @brief A row of a data asset's table: a nested struct holding a string, reached only from data assets. */
+    struct Stat
+    {
+        /** @brief Owned text, empty by default. */
+        std::string name;
+        float value = 1.0f;
+    };
+
+    /**
+     * @brief A data asset: plain data in the asset store, owning its strings and lists, which a generated visitor reaches
+     * by member rather than by offset.
+     */
+    struct WeaponData
+    {
+        /** @brief A string, its default the literal. */
+        std::string displayName = "Weapon";
+        /** @brief A list of nested structs, empty by default. */
+        std::vector<Stat> stats;
+        /** @brief An optional number, empty by default. */
+        std::optional<float> cooldown;
+        /** @brief A reference to another asset, a fixed-layout kind a data asset holds too. */
+        Fenrir::AssetHandle<Fenrir::Mesh> mesh;
+        /** @brief A number beside them, which records no offset either: the layout is the library's. */
+        float damage = 10.0f;
+    };
+
+    /** @brief A data asset extending another: its base's fields are the base's, its own follow. */
+    struct Sword : WeaponData
+    {
+        /** @brief A number of its own. */
+        float reach = 1.5f;
+        /** @brief A list of lists. */
+        std::vector<std::vector<std::int32_t>> combos{};
+        /** @brief An optional list of strings. */
+        std::optional<std::vector<std::string>> titles = std::nullopt;
+    };
+
+    /** @brief A settings type: an Install config a project file fills, holding a path and a list. */
+    struct Paths
+    {
+        /** @brief A path, its default the literal. */
+        std::filesystem::path root = "assets";
+        /** @brief A list of strings, empty by default. */
+        std::vector<std::string> extensions;
+        /** @brief A string given its own defaults. */
+        std::string label{};
+        /** @brief A number beside them. */
+        std::uint32_t threads = 4;
+        /**
+         * @brief Code wiring no file holds: left out of the fields, its type never read.
+         * @transient
+         */
+        std::vector<std::function<void()>> hooks;
     };
 } // namespace Fixture

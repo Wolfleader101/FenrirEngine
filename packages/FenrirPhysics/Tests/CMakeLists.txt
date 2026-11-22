@@ -12,7 +12,7 @@ add_executable(FenrirPhysicsTests PublicHeaders.cpp Bodies.cpp Shapes.cpp Worlds
                                   CharacterContacts.cpp Vehicles.cpp VehiclePoses.cpp VehicleSettings.cpp VehicleGearbox.cpp
                                   VehicleDifferentials.cpp VehicleSwitching.cpp VehicleRebuilds.cpp
                                   VehicleDebugLines.cpp VehicleGround.cpp VehicleParking.cpp VehicleMotorcycles.cpp
-                                  VehicleTrailers.cpp VehicleTracks.cpp VehicleDrivers.cpp
+                                  VehicleTrailers.cpp VehicleTracks.cpp VehicleDrivers.cpp ConfigDescription.cpp
                                   CharacterTest.hpp VehicleTest.hpp
                                   PhysicsProbe.hpp)
 target_link_libraries(FenrirPhysicsTests PRIVATE FenrirPhysics Catch2::Catch2WithMain)
@@ -33,3 +33,8 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     set_tests_properties(FenrirPhysics-VehicleKindWrongViewAsserts PROPERTIES
         PASS_REGULAR_EXPRESSION "VehicleKind::As: the vehicle is a different kind" TIMEOUT 60)
 endif()
+
+# Its registration against its description: each described type, default-constructed through its registered
+# description, holds the defaults api/FenrirPhysics.api.json records (tools/generate-type-registry writes the test).
+target_sources(FenrirPhysicsTests PRIVATE Generated/FenrirPhysicsTypesDefaultsTests.cpp)
+target_link_libraries(FenrirPhysicsTests PRIVATE FenrirTypesTesting)

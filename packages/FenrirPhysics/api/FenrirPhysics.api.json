@@ -17,7 +17,24 @@
       "category": "bound-type",
       "role": "bound-type",
       "size": 12,
-      "alignment": 4
+      "alignment": 4,
+      "components": [
+        {
+          "name": "x",
+          "offset": 0,
+          "kind": "f32"
+        },
+        {
+          "name": "y",
+          "offset": 4,
+          "kind": "f32"
+        },
+        {
+          "name": "z",
+          "offset": 8,
+          "kind": "f32"
+        }
+      ]
     },
     {
       "name": "Fenrir::BoxShape",
@@ -59,28 +76,6 @@
           "offset": 4,
           "kind": "f32",
           "default": 0.5
-        }
-      ]
-    },
-    {
-      "name": "Fenrir::Entity",
-      "category": "struct",
-      "role": "nested",
-      "size": 16,
-      "alignment": 8,
-      "doc": "Entity class that is used to interact with the entity list. This forms the basis of the ECS",
-      "fields": [
-        {
-          "name": "m_entityId",
-          "offset": 0,
-          "kind": "u32",
-          "default": 4294967295
-        },
-        {
-          "name": "m_entityList",
-          "offset": 8,
-          "kind": "pointer",
-          "default": null
         }
       ]
     },
@@ -132,17 +127,15 @@
         {
           "name": "groundBody",
           "offset": 8,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The body entity of the ground (a rigid body or a character body), on ground only; empty otherwise."
         },
         {
           "name": "groundCollider",
           "offset": 24,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The collider entity of the ground touched, on ground only; empty otherwise."
         },
         {
@@ -513,6 +506,25 @@
       ]
     },
     {
+      "name": "Fenrir::CollisionLayer",
+      "category": "struct",
+      "role": "nested",
+      "doc": "A collision layer's name, and the mask a body in it collides with unless told otherwise.",
+      "fields": [
+        {
+          "name": "name",
+          "kind": "string",
+          "default": ""
+        },
+        {
+          "name": "mask",
+          "kind": "u32",
+          "default": 4294967295,
+          "doc": "The layers a body in this layer collides with by default, one bit per layer."
+        }
+      ]
+    },
+    {
       "name": "Fenrir::Contact",
       "category": "struct",
       "role": "shared-struct",
@@ -523,33 +535,29 @@
         {
           "name": "body",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The body entity (a rigid body or a character body) asked about."
         },
         {
           "name": "collider",
           "offset": 16,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The collider entity of `body` touching: `body` itself, or one beneath it in a compound body."
         },
         {
           "name": "otherBody",
           "offset": 32,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The body entity (a rigid body or a character body) `body` touches."
         },
         {
           "name": "otherCollider",
           "offset": 48,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The collider entity of `otherBody` touching."
         },
         {
@@ -589,33 +597,29 @@
         {
           "name": "bodyA",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The body entity (a rigid body or a character body) of A, the lower entity id."
         },
         {
           "name": "bodyB",
           "offset": 16,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The body entity (a rigid body or a character body) of B."
         },
         {
           "name": "colliderA",
           "offset": 32,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "A's collider entity touching: `bodyA` itself, or one beneath it in a compound body."
         },
         {
           "name": "colliderB",
           "offset": 48,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "B's collider entity touching: `bodyB` itself, or one beneath it in a compound body."
         },
         {
@@ -662,33 +666,29 @@
         {
           "name": "bodyA",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The body entity (a rigid body or a character body) of A, as in its ContactBegin."
         },
         {
           "name": "bodyB",
           "offset": 16,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The body entity (a rigid body or a character body) of B, as in its ContactBegin."
         },
         {
           "name": "colliderA",
           "offset": 32,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "A's collider entity, as in its ContactBegin."
         },
         {
           "name": "colliderB",
           "offset": 48,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "B's collider entity, as in its ContactBegin."
         }
       ]
@@ -921,7 +921,29 @@
       "category": "bound-type",
       "role": "bound-type",
       "size": 16,
-      "alignment": 4
+      "alignment": 4,
+      "components": [
+        {
+          "name": "w",
+          "offset": 0,
+          "kind": "f32"
+        },
+        {
+          "name": "x",
+          "offset": 4,
+          "kind": "f32"
+        },
+        {
+          "name": "y",
+          "offset": 8,
+          "kind": "f32"
+        },
+        {
+          "name": "z",
+          "offset": 12,
+          "kind": "f32"
+        }
+      ]
     },
     {
       "name": "Fenrir::JointFrame",
@@ -1198,17 +1220,15 @@
         {
           "name": "bodyA",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "A body entity: a RigidBody's, or a standalone static collider's. Never the world."
         },
         {
           "name": "bodyB",
           "offset": 16,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "A body entity, or empty: the world."
         },
         {
@@ -1275,25 +1295,22 @@
         {
           "name": "joint",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The joint entity, whose Joint is now disabled."
         },
         {
           "name": "bodyA",
           "offset": 16,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The joint's bodyA."
         },
         {
           "name": "bodyB",
           "offset": 32,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The joint's bodyB: empty for the world."
         },
         {
@@ -1697,17 +1714,15 @@
         {
           "name": "body",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The entity of the body that blocked the shape."
         },
         {
           "name": "collider",
           "offset": 16,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The entity of the collider that blocked it."
         },
         {
@@ -1754,17 +1769,15 @@
         {
           "name": "body",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The entity of the body."
         },
         {
           "name": "collider",
           "offset": 16,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The entity of the collider."
         }
       ]
@@ -1780,17 +1793,15 @@
         {
           "name": "body",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The entity of the body."
         },
         {
           "name": "collider",
           "offset": 16,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The entity of the collider."
         },
         {
@@ -1823,6 +1834,63 @@
           "kind": "f32",
           "default": 0,
           "doc": "How far along `normal` the shape must move to stop overlapping the collider: more than 0."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::PhysicsConfig",
+      "category": "struct",
+      "role": "settings",
+      "doc": "How Physics::Install sets physics up for an app.",
+      "fields": [
+        {
+          "name": "gravity",
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec3",
+          "default": {
+            "x": 0,
+            "y": -9.81,
+            "z": 0
+          },
+          "doc": "The gravity each new physics world starts with, in metres per second squared."
+        },
+        {
+          "name": "maxBodies",
+          "kind": "u32",
+          "default": 65536,
+          "doc": "The most bodies each world holds at once. A body beyond it is not made, and that is logged."
+        },
+        {
+          "name": "maxBodyPairs",
+          "kind": "u32",
+          "default": 65536,
+          "doc": "The most pairs of bodies whose bounds overlap that each world tracks in a step. Pairs beyond it are ignored for that step, and that is logged."
+        },
+        {
+          "name": "maxContacts",
+          "kind": "u32",
+          "default": 10240,
+          "doc": "The most contacts each world resolves in a step. Contacts beyond it are ignored for that step, and that is logged."
+        },
+        {
+          "name": "collisionLayers",
+          "kind": "list",
+          "elementKind": "struct",
+          "elementType": "Fenrir::CollisionLayer",
+          "default": [],
+          "doc": "Names for the collision layers, layer `i` named by `collisionLayers[i]` (at most 32), each with a default mask. Optional: CollisionFilter takes plain bits whether or not a layer is named."
+        },
+        {
+          "name": "useWorkerThreads",
+          "kind": "bool",
+          "default": true,
+          "doc": "Whether a step spreads its work over the App's worker threads, or runs on the thread that runs the App alone. Results are the same either way."
+        },
+        {
+          "name": "interpolate",
+          "kind": "bool",
+          "default": true,
+          "doc": "Whether bodies, characters and vehicles' wheels are interpolated between ticks (RigidBody::interpolate, CharacterBody::interpolate). Off: every one is shown at its step poses only."
         }
       ]
     },
@@ -1875,9 +1943,8 @@
         {
           "name": "ignoreBody",
           "offset": 8,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "A body never found, such as the one casting the query: the body of this entity (for a child collider's entity, the compound body it belongs to). None by default."
         },
         {
@@ -1900,17 +1967,15 @@
         {
           "name": "body",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The entity of the body hit."
         },
         {
           "name": "collider",
           "offset": 16,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The entity of the collider hit."
         },
         {
@@ -2033,17 +2098,15 @@
         {
           "name": "body",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The entity of the body hit."
         },
         {
           "name": "collider",
           "offset": 16,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The entity of the collider hit."
         },
         {
@@ -2214,25 +2277,22 @@
         {
           "name": "trigger",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The trigger's collider entity."
         },
         {
           "name": "otherBody",
           "offset": 16,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The body entity (a rigid body or a character body) of the collider that entered."
         },
         {
           "name": "otherCollider",
           "offset": 32,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The collider entity that entered."
         }
       ]
@@ -2248,25 +2308,22 @@
         {
           "name": "trigger",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The trigger's collider entity, as in its TriggerEnter."
         },
         {
           "name": "otherBody",
           "offset": 16,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The body entity (a rigid body or a character body) of the collider that left, as in its TriggerEnter."
         },
         {
           "name": "otherCollider",
           "offset": 32,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The collider entity that left, as in its TriggerEnter."
         }
       ]
@@ -2599,17 +2656,15 @@
         {
           "name": "leftWheel",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "A wheel entity, usually on the vehicle's left."
         },
         {
           "name": "rightWheel",
           "offset": 16,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "A wheel entity of the same vehicle, usually the left wheel's partner on the right."
         },
         {
@@ -2632,17 +2687,15 @@
         {
           "name": "leftWheel",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "A wheel entity, or empty for none."
         },
         {
           "name": "rightWheel",
           "offset": 16,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "A wheel entity of the same vehicle, or empty for none."
         },
         {
@@ -2779,17 +2832,15 @@
         {
           "name": "groundBody",
           "offset": 8,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The body entity of the ground, on ground only. A handle: destroyed since, it is no longer valid."
         },
         {
           "name": "groundCollider",
           "offset": 24,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The collider entity of the ground touched, on ground only."
         },
         {
@@ -2883,9 +2934,8 @@
         {
           "name": "vehicle",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The chassis entity: the entity with the Vehicle."
         },
         {

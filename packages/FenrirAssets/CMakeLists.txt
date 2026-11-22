@@ -1,6 +1,8 @@
 # FenrirAssets: plain CPU-side assets behind generational handles, owned by the app or a scene (ADR-0021). Its
 # importers sit behind a private seam: only src/Importers/ includes a third-party library, and each is linked PRIVATE,
 # so neither its headers nor its compile definitions reach FenrirAssets's users.
+# It registers its described types with FenrirTypes' type registry (ADR-0074), through the generated registration
+# it compiles, so it links FenrirTypes PUBLIC: the generated header, public, gives a game Describe<T>.
 add_subdirectory(libs)
 # The shader container format, its reader and writer: a target of its own with no dependencies, so the renderer core
 # and FenrirShaderCompiler use it without the store.
@@ -55,6 +57,12 @@ target_include_directories(FenrirAssets PUBLIC include PRIVATE src)
 
 # The package's API description, api/FenrirAssets.api.json (ADR-0042): its artefact whether or not scripting is built.
 fenrir_describe_api(FenrirAssets api/FenrirAssets.api.toml)
+# Its type registration (ADR-0074), from that description: `cmake --build <dir> --target
+# fenrir-generate-type-registry` regenerates include/FenrirAssets/Generated/ and src/Generated/.
+fenrir_generate_type_registry(FenrirAssets api/FenrirAssets.api.toml)
+target_sources(FenrirAssets PRIVATE include/FenrirAssets/Generated/FenrirAssetsTypes.hpp
+                                    src/Generated/FenrirAssetsTypes.cpp)
+target_link_libraries(FenrirAssets PUBLIC FenrirTypes)
 
 # Tests that use Catch2: only with -DFENRIR_BUILD_TESTS=ON (see the root CMakeLists.txt).
 if(FENRIR_BUILD_TESTS)

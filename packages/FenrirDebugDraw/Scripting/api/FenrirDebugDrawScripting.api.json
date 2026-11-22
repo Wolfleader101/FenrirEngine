@@ -58,33 +58,28 @@
       ]
     },
     {
-      "name": "Fenrir::Entity",
-      "category": "struct",
-      "role": "nested",
-      "size": 16,
-      "alignment": 8,
-      "doc": "Entity class that is used to interact with the entity list. This forms the basis of the ECS",
-      "fields": [
-        {
-          "name": "m_entityId",
-          "offset": 0,
-          "kind": "u32",
-          "default": 4294967295
-        },
-        {
-          "name": "m_entityList",
-          "offset": 8,
-          "kind": "pointer",
-          "default": null
-        }
-      ]
-    },
-    {
       "name": "Fenrir::Math::Vec3",
       "category": "bound-type",
       "role": "bound-type",
       "size": 12,
-      "alignment": 4
+      "alignment": 4,
+      "components": [
+        {
+          "name": "x",
+          "offset": 0,
+          "kind": "f32"
+        },
+        {
+          "name": "y",
+          "offset": 4,
+          "kind": "f32"
+        },
+        {
+          "name": "z",
+          "offset": 8,
+          "kind": "f32"
+        }
+      ]
     },
     {
       "name": "Fenrir::Math::AABB",
@@ -114,21 +109,137 @@
       "category": "bound-type",
       "role": "bound-type",
       "size": 64,
-      "alignment": 4
+      "alignment": 4,
+      "components": [
+        {
+          "name": "value[0].x",
+          "offset": 0,
+          "kind": "f32"
+        },
+        {
+          "name": "value[0].y",
+          "offset": 4,
+          "kind": "f32"
+        },
+        {
+          "name": "value[0].z",
+          "offset": 8,
+          "kind": "f32"
+        },
+        {
+          "name": "value[0].w",
+          "offset": 12,
+          "kind": "f32"
+        },
+        {
+          "name": "value[1].x",
+          "offset": 16,
+          "kind": "f32"
+        },
+        {
+          "name": "value[1].y",
+          "offset": 20,
+          "kind": "f32"
+        },
+        {
+          "name": "value[1].z",
+          "offset": 24,
+          "kind": "f32"
+        },
+        {
+          "name": "value[1].w",
+          "offset": 28,
+          "kind": "f32"
+        },
+        {
+          "name": "value[2].x",
+          "offset": 32,
+          "kind": "f32"
+        },
+        {
+          "name": "value[2].y",
+          "offset": 36,
+          "kind": "f32"
+        },
+        {
+          "name": "value[2].z",
+          "offset": 40,
+          "kind": "f32"
+        },
+        {
+          "name": "value[2].w",
+          "offset": 44,
+          "kind": "f32"
+        },
+        {
+          "name": "value[3].x",
+          "offset": 48,
+          "kind": "f32"
+        },
+        {
+          "name": "value[3].y",
+          "offset": 52,
+          "kind": "f32"
+        },
+        {
+          "name": "value[3].z",
+          "offset": 56,
+          "kind": "f32"
+        },
+        {
+          "name": "value[3].w",
+          "offset": 60,
+          "kind": "f32"
+        }
+      ]
     },
     {
       "name": "Fenrir::Math::Quat",
       "category": "bound-type",
       "role": "bound-type",
       "size": 16,
-      "alignment": 4
+      "alignment": 4,
+      "components": [
+        {
+          "name": "w",
+          "offset": 0,
+          "kind": "f32"
+        },
+        {
+          "name": "x",
+          "offset": 4,
+          "kind": "f32"
+        },
+        {
+          "name": "y",
+          "offset": 8,
+          "kind": "f32"
+        },
+        {
+          "name": "z",
+          "offset": 12,
+          "kind": "f32"
+        }
+      ]
     },
     {
       "name": "Fenrir::Math::Vec2",
       "category": "bound-type",
       "role": "bound-type",
       "size": 8,
-      "alignment": 4
+      "alignment": 4,
+      "components": [
+        {
+          "name": "x",
+          "offset": 0,
+          "kind": "f32"
+        },
+        {
+          "name": "y",
+          "offset": 4,
+          "kind": "f32"
+        }
+      ]
     },
     {
       "name": "Fenrir::ScriptOptions::ShapeOptions",
@@ -148,9 +259,8 @@
         {
           "name": "relativeTo",
           "offset": 8,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The entity the positions are relative to, or none."
         },
         {
@@ -195,9 +305,8 @@
         {
           "name": "relativeTo",
           "offset": 8,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The entity the item is relative to, or none."
         },
         {

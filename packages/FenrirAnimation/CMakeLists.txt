@@ -2,6 +2,8 @@
 # with clip events as ECS events (ADR-0028, ADR-0034). Its runtime is its own, on glm; it links no library and has no
 # GPU code. Built with FENRIR_ENABLE_ASSETS, with no option of its own; FenrirRenderer and FenrirPhysics link nothing
 # from it.
+# It registers its described types with FenrirTypes' type registry (ADR-0074), through the generated registration
+# it compiles, so it links FenrirTypes PUBLIC: the generated header, public, gives a game Describe<T>.
 add_library(FenrirAnimation STATIC
     include/FenrirAnimation/Animator.hpp
     include/FenrirAnimation/AnimationLayer.hpp
@@ -47,3 +49,9 @@ endif()
 # Its shared types (ADR-0042): `cmake --build <dir> --target fenrir-describe-api` regenerates api/FenrirAnimation.api.json,
 # which FenrirAnimationScripting's binding binds.
 fenrir_describe_api(FenrirAnimation api/FenrirAnimation.api.toml)
+# Its type registration (ADR-0074), from that description: `cmake --build <dir> --target
+# fenrir-generate-type-registry` regenerates include/FenrirAnimation/Generated/ and src/Generated/.
+fenrir_generate_type_registry(FenrirAnimation api/FenrirAnimation.api.toml)
+target_sources(FenrirAnimation PRIVATE include/FenrirAnimation/Generated/FenrirAnimationTypes.hpp
+                                       src/Generated/FenrirAnimationTypes.cpp)
+target_link_libraries(FenrirAnimation PUBLIC FenrirTypes)

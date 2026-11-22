@@ -21,3 +21,15 @@ private-members = ["Fenrir::Name", "Fenrir::Entity"]
 # FenrirMath's vector and quaternion, which Transform holds (FenrirMath.api.toml).
 "Fenrir::Math::Vec3" = "bound-type"
 "Fenrir::Math::Quat" = "bound-type"
+
+# What tools/generate-type-registry writes for the package (ADR-0074): its types' descriptions, the function registering
+# them, compiled into FenrirECS, and the test that their registered descriptions construct the defaults the description
+# records. It uses the registrations of the packages registering the types it holds of theirs (FenrirMath's vector and
+# quaternion), which it points at rather than describing them again.
+[registration]
+header = "../include/FenrirECS/Generated/FenrirECSTypes.hpp"
+source = "../src/Generated/FenrirECSTypes.cpp"
+test = "../Tests/Generated/FenrirECSTypesDefaultsTests.cpp"
+function = "Fenrir::Generated::RegisterFenrirECSTypes"
+includes = ["FenrirECS/DefaultComponents.hpp", "FenrirECS/Entity.hpp", "FenrirECS/TypeAttachments.hpp"]
+uses = ["../../FenrirMath/api/FenrirMath.api.toml"]

@@ -50,6 +50,11 @@ internal static class DescriptionWriter
             case StructDescription structType:
                 json.WriteString("category", "struct");
                 json.WriteString("role", Roles.Spelling(structType.Role));
+                if (structType.Base is not null)
+                {
+                    json.WriteString("base", structType.Base);
+                }
+
                 break;
             case TaggedUnionDescription union:
                 json.WriteString("category", "tagged-union");
@@ -61,11 +66,30 @@ internal static class DescriptionWriter
                 break;
         }
 
-        json.WriteNumber("size", type.Size);
-        json.WriteNumber("alignment", type.Alignment);
+        // A type reached by member has the standard library's layout, which the description leaves to the compiler.
+        if (type is not StructDescription { ByMember: true })
+        {
+            json.WriteNumber("size", type.Size);
+            json.WriteNumber("alignment", type.Alignment);
+        }
+
         WriteDoc(json, type.Doc);
+        WriteTypeCommands(json, type.Commands);
         switch (type)
         {
+            case BoundTypeDescription { Components: { } components }:
+                json.WriteStartArray("components");
+                foreach (var component in components)
+                {
+                    json.WriteStartObject();
+                    json.WriteString("name", component.Name);
+                    json.WriteNumber("offset", component.Offset);
+                    json.WriteString("kind", component.Kind);
+                    json.WriteEndObject();
+                }
+
+                json.WriteEndArray();
+                break;
             case EnumDescription enumType:
                 json.WriteString("underlying", enumType.Underlying);
                 json.WriteStartArray("values");
@@ -117,12 +141,100 @@ internal static class DescriptionWriter
     {
         json.WriteStartObject();
         json.WriteString("name", field.Name);
-        json.WriteNumber("offset", field.Offset);
+        if (field.Offset is { } offset)
+        {
+            json.WriteNumber("offset", offset);
+        }
+
         WriteFieldType(json, field.Type);
         json.WritePropertyName("default");
         WriteDefault(json, field.Default);
         WriteDoc(json, field.Doc);
+        WriteFormerly(json, field.Formerly);
+        WriteMetadata(json, field.Metadata);
         json.WriteEndObject();
+    }
+
+    // Each key only when its command is present, so a type with none reads as before (SCHEMA.md, "Type and field doc commands").
+    private static void WriteTypeCommands(Utf8JsonWriter json, TypeCommands commands)
+    {
+        if (commands.Version != TypeCommands.None.Version)
+        {
+            json.WriteNumber("version", commands.Version);
+        }
+
+        WriteFormerly(json, commands.Formerly);
+        if (commands.Transient)
+        {
+            json.WriteBoolean("transient", true);
+        }
+
+        if (commands.EditorOnly)
+        {
+            json.WriteBoolean("editorOnly", true);
+        }
+    }
+
+    private static void WriteFormerly(Utf8JsonWriter json, IReadOnlyList<string> formerly)
+    {
+        if (formerly.Count == 0)
+        {
+            return;
+        }
+
+        json.WriteStartArray("formerly");
+        foreach (var name in formerly)
+        {
+            json.WriteStringValue(name);
+        }
+
+        json.WriteEndArray();
+    }
+
+    private static void WriteMetadata(Utf8JsonWriter json, FieldMetadata metadata)
+    {
+        if (metadata == FieldMetadata.None)
+        {
+            return;
+        }
+
+        json.WriteStartObject("metadata");
+        if (metadata.Range is var (min, max))
+        {
+            json.WriteStartObject("range");
+            json.WriteNumber("min", min);
+            json.WriteNumber("max", max);
+            json.WriteEndObject();
+        }
+
+        if (metadata.Step is { } step)
+        {
+            json.WriteNumber("step", step);
+        }
+
+        WriteOptional("display", metadata.Display);
+        WriteOptional("group", metadata.Group);
+        WriteFlag("readonly", metadata.Readonly);
+        WriteFlag("hidden", metadata.Hidden);
+        WriteFlag("multiline", metadata.Multiline);
+        WriteOptional("units", metadata.Units);
+        json.WriteEndObject();
+
+        void WriteOptional(string key, string? value)
+        {
+            if (value is not null)
+            {
+                json.WriteString(key, value);
+            }
+        }
+
+        void WriteFlag(string key, bool value)
+        {
+            if (value)
+            {
+                json.WriteBoolean(key, true);
+            }
+        }
     }
 
     private static void WriteFieldType(Utf8JsonWriter json, FieldType type)
@@ -133,6 +245,11 @@ internal static class DescriptionWriter
             json.WriteString("type", type.TypeName);
         }
 
+        if (type.Target is not null)
+        {
+            json.WriteString("target", type.Target);
+        }
+
         if (type.Element is not null)
         {
             json.WriteString("elementKind", type.Element.Kind);
@@ -141,6 +258,23 @@ internal static class DescriptionWriter
                 json.WriteString("elementType", type.Element.TypeName);
             }
 
+            if (type.Element.Target is not null)
+            {
+                json.WriteString("elementTarget", type.Element.Target);
+            }
+
+            // The element keys above say one level only, so an element with keys of its own (a list of lists, of arrays, of
+            // fixed strings) is recorded whole, as a field's kind would be.
+            if (type.Element.Element is not null || type.Element.Kind == "fixed-string")
+            {
+                json.WriteStartObject("element");
+                WriteFieldType(json, type.Element);
+                json.WriteEndObject();
+            }
+        }
+
+        if (type.Kind is "array" or "fixed-string")
+        {
             json.WriteNumber("length", type.Length);
         }
     }

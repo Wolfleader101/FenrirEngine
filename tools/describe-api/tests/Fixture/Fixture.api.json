@@ -234,7 +234,29 @@
       "role": "bound-type",
       "size": 16,
       "alignment": 4,
-      "doc": "A bound type whose constructor takes its components in another order than it stores them, under parameter names with a leading underscore, and stores them in an anonymous struct inside an anonymous union."
+      "doc": "A bound type whose constructor takes its components in another order than it stores them, under parameter names with a leading underscore, and stores them in an anonymous struct inside an anonymous union.",
+      "components": [
+        {
+          "name": "x",
+          "offset": 0,
+          "kind": "f32"
+        },
+        {
+          "name": "y",
+          "offset": 4,
+          "kind": "f32"
+        },
+        {
+          "name": "z",
+          "offset": 8,
+          "kind": "f32"
+        },
+        {
+          "name": "w",
+          "offset": 12,
+          "kind": "f32"
+        }
+      ]
     },
     {
       "name": "Fixture::Spring",
@@ -264,7 +286,24 @@
       "role": "bound-type",
       "size": 12,
       "alignment": 4,
-      "doc": "A bound type built like a maths library's vector: each component in an anonymous union of names."
+      "doc": "A bound type built like a maths library's vector: each component in an anonymous union of names.",
+      "components": [
+        {
+          "name": "x",
+          "offset": 0,
+          "kind": "f32"
+        },
+        {
+          "name": "y",
+          "offset": 4,
+          "kind": "f32"
+        },
+        {
+          "name": "z",
+          "offset": 8,
+          "kind": "f32"
+        }
+      ]
     },
     {
       "name": "Fixture::Body",
@@ -644,6 +683,153 @@
       ]
     },
     {
+      "name": "Fixture::Columns",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 24,
+      "alignment": 4,
+      "doc": "A bound type holding an array of another, as a maths library's matrix holds its columns.",
+      "components": [
+        {
+          "name": "m_value[0].x",
+          "offset": 0,
+          "kind": "f32"
+        },
+        {
+          "name": "m_value[0].y",
+          "offset": 4,
+          "kind": "f32"
+        },
+        {
+          "name": "m_value[0].z",
+          "offset": 8,
+          "kind": "f32"
+        },
+        {
+          "name": "m_value[1].x",
+          "offset": 12,
+          "kind": "f32"
+        },
+        {
+          "name": "m_value[1].y",
+          "offset": 16,
+          "kind": "f32"
+        },
+        {
+          "name": "m_value[1].z",
+          "offset": 20,
+          "kind": "f32"
+        }
+      ]
+    },
+    {
+      "name": "Fixture::Contacts",
+      "category": "struct",
+      "role": "component",
+      "size": 4,
+      "alignment": 4,
+      "doc": "Plain run-time data no file holds.",
+      "transient": true,
+      "fields": [
+        {
+          "name": "count",
+          "offset": 0,
+          "kind": "u32",
+          "default": 0
+        }
+      ]
+    },
+    {
+      "name": "Fixture::Dial",
+      "category": "struct",
+      "role": "component",
+      "size": 20,
+      "alignment": 4,
+      "doc": "A component a file reads under its former names, at version 2.\n\nThe doc commands below are recorded as keys, not as text.",
+      "version": 2,
+      "formerly": [
+        "Fixture::Gauge",
+        "Legacy::Meter"
+      ],
+      "fields": [
+        {
+          "name": "fill",
+          "offset": 0,
+          "kind": "f32",
+          "default": 50,
+          "doc": "Every metadata command on one field, and two former names.",
+          "formerly": [
+            "level",
+            "amount"
+          ],
+          "metadata": {
+            "range": {
+              "min": 0,
+              "max": 100
+            },
+            "step": 0.5,
+            "display": "Fill level",
+            "group": "Readout",
+            "readonly": true,
+            "hidden": true,
+            "multiline": true,
+            "units": "percent"
+          }
+        },
+        {
+          "name": "ticks",
+          "offset": 4,
+          "kind": "i32",
+          "default": 12,
+          "doc": "A default named by a constant.",
+          "metadata": {
+            "range": {
+              "min": -10,
+              "max": 10.5
+            }
+          }
+        },
+        {
+          "name": "span",
+          "offset": 8,
+          "kind": "i32",
+          "default": 8,
+          "doc": "A default written as an arithmetic expression."
+        },
+        {
+          "name": "enabled",
+          "offset": 12,
+          "kind": "bool",
+          "default": true,
+          "doc": "A default named by a constant computed from another."
+        },
+        {
+          "name": "scaled",
+          "offset": 16,
+          "kind": "f32",
+          "default": 6,
+          "doc": "A float default computed from a named constant."
+        }
+      ]
+    },
+    {
+      "name": "Fixture::Folder",
+      "category": "struct",
+      "role": "component",
+      "size": 1,
+      "alignment": 1,
+      "doc": "Editor data the cooker strips.",
+      "editorOnly": true,
+      "fields": [
+        {
+          "name": "open",
+          "offset": 0,
+          "kind": "bool",
+          "default": false
+        }
+      ]
+    },
+    {
       "name": "Fixture::Heading",
       "category": "enum",
       "size": 1,
@@ -710,7 +896,52 @@
       "role": "bound-type",
       "size": 16,
       "alignment": 8,
-      "doc": "A pair of values, as a class template."
+      "doc": "A pair of values, as a class template.",
+      "components": [
+        {
+          "name": "first",
+          "offset": 0,
+          "kind": "f64"
+        },
+        {
+          "name": "second",
+          "offset": 8,
+          "kind": "f64"
+        }
+      ]
+    },
+    {
+      "name": "Fixture::Paths",
+      "category": "struct",
+      "role": "settings",
+      "doc": "A settings type: an Install config a project file fills, holding a path and a list.",
+      "fields": [
+        {
+          "name": "root",
+          "kind": "path",
+          "default": "assets",
+          "doc": "A path, its default the literal."
+        },
+        {
+          "name": "extensions",
+          "kind": "list",
+          "elementKind": "string",
+          "default": [],
+          "doc": "A list of strings, empty by default."
+        },
+        {
+          "name": "label",
+          "kind": "string",
+          "default": "",
+          "doc": "A string given its own defaults."
+        },
+        {
+          "name": "threads",
+          "kind": "u32",
+          "default": 4,
+          "doc": "A number beside them."
+        }
+      ]
     },
     {
       "name": "Fixture::Size",
@@ -718,7 +949,19 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "A bound type that is a template's specialisation nothing here instantiates: the tool instantiates it."
+      "doc": "A bound type that is a template's specialisation nothing here instantiates: the tool instantiates it.",
+      "components": [
+        {
+          "name": "first",
+          "offset": 0,
+          "kind": "f32"
+        },
+        {
+          "name": "second",
+          "offset": 4,
+          "kind": "f32"
+        }
+      ]
     },
     {
       "name": "Fixture::Sky",
@@ -752,6 +995,174 @@
       "defaultKind": "m_box"
     },
     {
+      "name": "Fixture::Socket",
+      "category": "struct",
+      "role": "component",
+      "size": 96,
+      "alignment": 8,
+      "doc": "A component holding the three fixed-layout kinds a file writes as values of their own: an entity, a fixed string and an asset reference.",
+      "fields": [
+        {
+          "name": "owner",
+          "offset": 0,
+          "kind": "entity",
+          "default": null,
+          "doc": "An entity: 16 bytes, its own kind, Fenrir::Entity never described."
+        },
+        {
+          "name": "target",
+          "offset": 16,
+          "kind": "entity",
+          "default": null,
+          "doc": "Another, given its own defaults."
+        },
+        {
+          "name": "label",
+          "offset": 32,
+          "kind": "fixed-string",
+          "length": 32,
+          "default": "Socket",
+          "doc": "A fixed string of 32 bytes, its default the literal."
+        },
+        {
+          "name": "title",
+          "offset": 64,
+          "kind": "fixed-string",
+          "length": 8,
+          "default": "",
+          "doc": "A UTF-8 fixed string, empty."
+        },
+        {
+          "name": "bytes",
+          "offset": 72,
+          "kind": "array",
+          "elementKind": "u8",
+          "length": 4,
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "doc": "Bytes, not text: still an array of u8."
+        },
+        {
+          "name": "mesh",
+          "offset": 76,
+          "kind": "reference",
+          "target": "Fenrir::Mesh",
+          "default": null,
+          "doc": "An asset reference: its target is the handle's type."
+        },
+        {
+          "name": "lod",
+          "offset": 84,
+          "kind": "reference",
+          "target": "Fenrir::Mesh",
+          "default": null,
+          "doc": "Another, given its own defaults."
+        }
+      ]
+    },
+    {
+      "name": "Fixture::Stat",
+      "category": "struct",
+      "role": "nested",
+      "doc": "A row of a data asset's table: a nested struct holding a string, reached only from data assets.",
+      "fields": [
+        {
+          "name": "name",
+          "kind": "string",
+          "default": "",
+          "doc": "Owned text, empty by default."
+        },
+        {
+          "name": "value",
+          "kind": "f32",
+          "default": 1
+        }
+      ]
+    },
+    {
+      "name": "Fixture::WeaponData",
+      "category": "struct",
+      "role": "data-asset",
+      "doc": "A data asset: plain data in the asset store, owning its strings and lists, which a generated visitor reaches by member rather than by offset.",
+      "fields": [
+        {
+          "name": "displayName",
+          "kind": "string",
+          "default": "Weapon",
+          "doc": "A string, its default the literal."
+        },
+        {
+          "name": "stats",
+          "kind": "list",
+          "elementKind": "struct",
+          "elementType": "Fixture::Stat",
+          "default": [],
+          "doc": "A list of nested structs, empty by default."
+        },
+        {
+          "name": "cooldown",
+          "kind": "optional",
+          "elementKind": "f32",
+          "default": null,
+          "doc": "An optional number, empty by default."
+        },
+        {
+          "name": "mesh",
+          "kind": "reference",
+          "target": "Fenrir::Mesh",
+          "default": null,
+          "doc": "A reference to another asset, a fixed-layout kind a data asset holds too."
+        },
+        {
+          "name": "damage",
+          "kind": "f32",
+          "default": 10,
+          "doc": "A number beside them, which records no offset either: the layout is the library's."
+        }
+      ]
+    },
+    {
+      "name": "Fixture::Sword",
+      "category": "struct",
+      "role": "data-asset",
+      "base": "Fixture::WeaponData",
+      "doc": "A data asset extending another: its base's fields are the base's, its own follow.",
+      "fields": [
+        {
+          "name": "reach",
+          "kind": "f32",
+          "default": 1.5,
+          "doc": "A number of its own."
+        },
+        {
+          "name": "combos",
+          "kind": "list",
+          "elementKind": "list",
+          "element": {
+            "kind": "list",
+            "elementKind": "i32"
+          },
+          "default": [],
+          "doc": "A list of lists."
+        },
+        {
+          "name": "titles",
+          "kind": "optional",
+          "elementKind": "list",
+          "element": {
+            "kind": "list",
+            "elementKind": "string"
+          },
+          "default": null,
+          "doc": "An optional list of strings."
+        }
+      ]
+    },
+    {
       "name": "Fixture::Tag",
       "category": "struct",
       "role": "shared-struct",
@@ -775,16 +1186,10 @@
         {
           "name": "m_label",
           "offset": 16,
-          "kind": "array",
-          "elementKind": "u8",
+          "kind": "fixed-string",
           "length": 4,
-          "default": [
-            97,
-            0,
-            0,
-            0
-          ],
-          "doc": "Characters: bytes, on every target."
+          "default": "a",
+          "doc": "Characters: a fixed string, its default the text its characters spell."
         }
       ]
     },
@@ -794,7 +1199,14 @@
       "role": "bound-type",
       "size": 4,
       "alignment": 4,
-      "doc": "A bound type of one member, which a binding may pass to a native by value as that member."
+      "doc": "A bound type of one member, which a binding may pass to a native by value as that member.",
+      "components": [
+        {
+          "name": "m_number",
+          "offset": 0,
+          "kind": "u32"
+        }
+      ]
     },
     {
       "name": "Fixture::Touched",

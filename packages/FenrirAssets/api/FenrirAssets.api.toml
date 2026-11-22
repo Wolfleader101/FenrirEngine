@@ -6,6 +6,7 @@ headers = [
     "../include/FenrirAssets/AssetHandle.hpp",
     "../include/FenrirAssets/MaterialData.hpp",
     "../include/FenrirAssets/MeshData.hpp",
+    "../include/FenrirAssets/AssetStore.hpp",
 ]
 
 [types]
@@ -14,6 +15,8 @@ headers = [
 "Fenrir::MaterialTexture" = "shared-struct"
 # What GenerateLods takes through a pointer (ADR-0057).
 "Fenrir::LodSettings" = "shared-struct"
+# Assets::Install's config, which a project file fills (ADR-0084).
+"Fenrir::AssetsConfig" = "settings"
 
 # Asset handles: every binding has its own handle type, so each is recorded by layout only (describe-api instantiates
 # the specialisations, which the headers never do).
@@ -26,3 +29,18 @@ headers = [
 "Fenrir::AssetHandle<Fenrir::Clip>" = "bound-type"
 "Fenrir::AssetHandle<Fenrir::BoneMask>" = "bound-type"
 "Fenrir::AssetHandle<Fenrir::InstanceList>" = "bound-type"
+
+# What tools/generate-type-registry writes for the package (ADR-0074): its types' descriptions, the function registering
+# them, compiled into FenrirAssets, and the test that their registered descriptions construct the defaults the
+# description records.
+[registration]
+header = "../include/FenrirAssets/Generated/FenrirAssetsTypes.hpp"
+source = "../src/Generated/FenrirAssetsTypes.cpp"
+test = "../Tests/Generated/FenrirAssetsTypesDefaultsTests.cpp"
+function = "Fenrir::Generated::RegisterFenrirAssetsTypes"
+includes = [
+    "FenrirAssets/AssetHandle.hpp",
+    "FenrirAssets/MaterialData.hpp",
+    "FenrirAssets/MeshData.hpp",
+    "FenrirAssets/AssetStore.hpp",
+]

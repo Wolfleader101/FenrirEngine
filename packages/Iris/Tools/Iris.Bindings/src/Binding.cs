@@ -533,6 +533,24 @@ internal sealed class Binding
 
     private void Check()
     {
+        // A reference holds its target's bound handle, which some description read must describe.
+        foreach (var type in Types)
+        {
+            var references = type.Fields.Select(field => (field.Name, field.Kind))
+                                 .Concat(type.Kinds.Select(kind => (kind.Name, kind.Kind)))
+                                 .Where(member => member.Kind.Target is not null);
+            foreach (var (member, kind) in references)
+            {
+                var handle = Description.HandleType(kind.Target!);
+                if (!types.ContainsKey(handle))
+                {
+                    throw new BindingException(
+                        $"{type.Source}: {type.Name}::{member}: an asset handle of {kind.Target}, but no description " +
+                        $"read describes {handle}");
+                }
+            }
+        }
+
         foreach (var type in Types.Where(type => type.Category == Category.BoundType && !IsUsed(type) && !bound.ContainsKey(type.Name)))
         {
             throw new BindingException(

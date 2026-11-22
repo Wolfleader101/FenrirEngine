@@ -87,7 +87,10 @@ namespace Fenrir
         friend constexpr bool operator==(const ImageRegion&, const ImageRegion&) = default;
     };
 
-    /** @brief How Assets::Install sets the asset store up. */
+    /**
+     * @brief How Assets::Install sets the asset store up.
+     * @version 1
+     */
     struct AssetsConfig
     {
         /**

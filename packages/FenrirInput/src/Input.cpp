@@ -8,6 +8,8 @@
 #include <vector>
 
 #include "FenrirApp/App.hpp"
+#include "FenrirInput/Generated/FenrirInputTypes.hpp"
+#include "FenrirTypes/TypeRegistry.hpp"
 #include "InputDispatch.hpp"
 
 namespace Fenrir
@@ -227,6 +229,9 @@ namespace Fenrir
 
     Input Input::Install(App& app)
     {
+        // Its types first (ADR-0074), before any resource or system: a second Install registers nothing again.
+        Generated::RegisterFenrirInputTypes(app.GetResource<TypeRegistry>());
+
         if (const Detail::InstalledInput* installed = app.TryGetResource<Detail::InstalledInput>())
         {
             if (std::shared_ptr<Detail::InputInstallation> existing = installed->installation.lock())

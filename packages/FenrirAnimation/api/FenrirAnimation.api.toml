@@ -9,10 +9,6 @@ headers = [
     "../../FenrirAssets/include/FenrirAssets/BoneMaskData.hpp",
 ]
 
-# The layer and the events hold the engine's Entity, which keeps its value and entity list private: described here as
-# nested with the layout FenrirECS shares, and mirrored by the built-in binding.
-private-members = ["Fenrir::Entity"]
-
 [types]
 # The animation extension's components.
 "Fenrir::Animator" = "component"
@@ -26,9 +22,32 @@ private-members = ["Fenrir::Entity"]
 # The plain data its natives give by pointer.
 "Fenrir::PlaybackInfo" = "shared-struct"
 
+# Animation::Install's config, which a project file fills (ADR-0084).
+"Fenrir::AnimationConfig" = "settings"
+
 # Held by no shared type, but taken by the bone mask natives: FenrirAssets's, described all the same.
 "Fenrir::MaskScope" = "enum"
 
 # Types every binding has its own of.
 "Fenrir::AssetHandle<Fenrir::Clip>" = "bound-type"
 "Fenrir::AssetHandle<Fenrir::BoneMask>" = "bound-type"
+
+# What tools/generate-type-registry writes for the package (ADR-0074): its types' descriptions, the function registering
+# them, compiled into FenrirAnimation, and the test that their registered descriptions construct the defaults the
+# description records. It uses the registrations of the packages registering the types it holds of theirs
+# (FenrirAssets's clip and mask handles, and FenrirSkeleton's PoseState), which it points at rather than describing them
+# again.
+[registration]
+header = "../include/FenrirAnimation/Generated/FenrirAnimationTypes.hpp"
+source = "../src/Generated/FenrirAnimationTypes.cpp"
+test = "../Tests/Generated/FenrirAnimationTypesDefaultsTests.cpp"
+function = "Fenrir::Generated::RegisterFenrirAnimationTypes"
+includes = [
+    "FenrirAnimation/Animator.hpp",
+    "FenrirAnimation/AnimationLayer.hpp",
+    "FenrirAnimation/AnimationEvents.hpp",
+    "FenrirAnimation/Animation.hpp",
+    "FenrirAssets/BoneMaskData.hpp",
+    "FenrirECS/TypeAttachments.hpp",
+]
+uses = ["../../FenrirAssets/api/FenrirAssets.api.toml", "../../FenrirSkeleton/api/FenrirSkeleton.api.toml"]

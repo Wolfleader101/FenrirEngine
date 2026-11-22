@@ -111,7 +111,19 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask`, `InstanceList` or `Font`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask`, `InstanceList` or `Font`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves.",
+      "components": [
+        {
+          "name": "index",
+          "offset": 0,
+          "kind": "u32"
+        },
+        {
+          "name": "generation",
+          "offset": 4,
+          "kind": "u32"
+        }
+      ]
     },
     {
       "name": "Fenrir::AssetHandle<Fenrir::InstanceList>",
@@ -119,7 +131,19 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask`, `InstanceList` or `Font`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask`, `InstanceList` or `Font`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves.",
+      "components": [
+        {
+          "name": "index",
+          "offset": 0,
+          "kind": "u32"
+        },
+        {
+          "name": "generation",
+          "offset": 4,
+          "kind": "u32"
+        }
+      ]
     },
     {
       "name": "Fenrir::AssetHandle<Fenrir::Material>",
@@ -127,7 +151,19 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask`, `InstanceList` or `Font`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask`, `InstanceList` or `Font`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves.",
+      "components": [
+        {
+          "name": "index",
+          "offset": 0,
+          "kind": "u32"
+        },
+        {
+          "name": "generation",
+          "offset": 4,
+          "kind": "u32"
+        }
+      ]
     },
     {
       "name": "Fenrir::AssetHandle<Fenrir::Mesh>",
@@ -135,7 +171,19 @@
       "role": "bound-type",
       "size": 8,
       "alignment": 4,
-      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask`, `InstanceList` or `Font`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader`, `Model`, `Skeleton`, `Clip`, `BoneMask`, `InstanceList` or `Font`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves.",
+      "components": [
+        {
+          "name": "index",
+          "offset": 0,
+          "kind": "u32"
+        },
+        {
+          "name": "generation",
+          "offset": 4,
+          "kind": "u32"
+        }
+      ]
     },
     {
       "name": "Fenrir::BackgroundType",
@@ -314,7 +362,24 @@
       "category": "bound-type",
       "role": "bound-type",
       "size": 12,
-      "alignment": 4
+      "alignment": 4,
+      "components": [
+        {
+          "name": "x",
+          "offset": 0,
+          "kind": "f32"
+        },
+        {
+          "name": "y",
+          "offset": 4,
+          "kind": "f32"
+        },
+        {
+          "name": "z",
+          "offset": 8,
+          "kind": "f32"
+        }
+      ]
     },
     {
       "name": "Fenrir::ColourGrading",
@@ -507,9 +572,9 @@
         {
           "name": "dirt",
           "offset": 24,
-          "kind": "struct",
-          "type": "Fenrir::AssetHandle<Fenrir::Image>",
-          "default": {},
+          "kind": "reference",
+          "target": "Fenrir::Image",
+          "default": null,
           "doc": "A greyscale image of the dirt on the lens, stretched over the view; none by default. A flat image with pixels; anything else (a cubemap, a render target) has no dirt, logged once."
         },
         {
@@ -830,9 +895,9 @@
         {
           "name": "image",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::AssetHandle<Fenrir::Image>",
-          "default": {}
+          "kind": "reference",
+          "target": "Fenrir::Image",
+          "default": null
         }
       ]
     },
@@ -1080,9 +1145,9 @@
         {
           "name": "cubemap",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::AssetHandle<Fenrir::Image>",
-          "default": {}
+          "kind": "reference",
+          "target": "Fenrir::Image",
+          "default": null
         },
         {
           "name": "intensity",
@@ -1159,24 +1224,22 @@
       ]
     },
     {
-      "name": "Fenrir::Entity",
-      "category": "struct",
-      "role": "nested",
-      "size": 16,
-      "alignment": 8,
-      "doc": "Entity class that is used to interact with the entity list. This forms the basis of the ECS",
-      "fields": [
+      "name": "Fenrir::GraphicsBackend",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "The graphics backend the renderer draws with, picked at install (ADR-0016).",
+      "underlying": "u8",
+      "values": [
         {
-          "name": "m_entityId",
-          "offset": 0,
-          "kind": "u32",
-          "default": 4294967295
+          "name": "OpenGL",
+          "value": 0,
+          "doc": "OpenGL 4.6 core, on the main window's graphics surface."
         },
         {
-          "name": "m_entityList",
-          "offset": 8,
-          "kind": "pointer",
-          "default": null
+          "name": "Null",
+          "value": 1,
+          "doc": "Draws nothing and needs no window or GPU: for tests and headless apps."
         }
       ]
     },
@@ -1191,23 +1254,23 @@
         {
           "name": "mesh",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::AssetHandle<Fenrir::Mesh>",
-          "default": {}
+          "kind": "reference",
+          "target": "Fenrir::Mesh",
+          "default": null
         },
         {
           "name": "material",
           "offset": 8,
-          "kind": "struct",
-          "type": "Fenrir::AssetHandle<Fenrir::Material>",
-          "default": {}
+          "kind": "reference",
+          "target": "Fenrir::Material",
+          "default": null
         },
         {
           "name": "instances",
           "offset": 16,
-          "kind": "struct",
-          "type": "Fenrir::AssetHandle<Fenrir::InstanceList>",
-          "default": {}
+          "kind": "reference",
+          "target": "Fenrir::InstanceList",
+          "default": null
         },
         {
           "name": "castShadows",
@@ -1253,7 +1316,29 @@
       "category": "bound-type",
       "role": "bound-type",
       "size": 16,
-      "alignment": 4
+      "alignment": 4,
+      "components": [
+        {
+          "name": "x",
+          "offset": 0,
+          "kind": "f32"
+        },
+        {
+          "name": "y",
+          "offset": 4,
+          "kind": "f32"
+        },
+        {
+          "name": "z",
+          "offset": 8,
+          "kind": "f32"
+        },
+        {
+          "name": "w",
+          "offset": 12,
+          "kind": "f32"
+        }
+      ]
     },
     {
       "name": "Fenrir::Math::Frustum",
@@ -1322,7 +1407,19 @@
       "category": "bound-type",
       "role": "bound-type",
       "size": 8,
-      "alignment": 4
+      "alignment": 4,
+      "components": [
+        {
+          "name": "x",
+          "offset": 0,
+          "kind": "f32"
+        },
+        {
+          "name": "y",
+          "offset": 4,
+          "kind": "f32"
+        }
+      ]
     },
     {
       "name": "Fenrir::MeshRenderer",
@@ -1335,16 +1432,16 @@
         {
           "name": "mesh",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::AssetHandle<Fenrir::Mesh>",
-          "default": {}
+          "kind": "reference",
+          "target": "Fenrir::Mesh",
+          "default": null
         },
         {
           "name": "material",
           "offset": 8,
-          "kind": "struct",
-          "type": "Fenrir::AssetHandle<Fenrir::Material>",
-          "default": {}
+          "kind": "reference",
+          "target": "Fenrir::Material",
+          "default": null
         },
         {
           "name": "visible",
@@ -1373,9 +1470,9 @@
         {
           "name": "image",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::AssetHandle<Fenrir::Image>",
-          "default": {}
+          "kind": "reference",
+          "target": "Fenrir::Image",
+          "default": null
         },
         {
           "name": "intensity",
@@ -1513,6 +1610,162 @@
           "kind": "bool",
           "default": true,
           "doc": "Whether the scene draws the light's surface, an emissive mesh where it is: true by default. Then, in a camera with reflections, its specular yields to the reflection of that surface where it is on screen, so it is not reflected twice. Set it false for a light with nothing drawn, which keeps its specular everywhere."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Vsync",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "How presenting waits for the display.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Off",
+          "value": 0,
+          "doc": "Presents at once; frames may tear."
+        },
+        {
+          "name": "On",
+          "value": 1,
+          "doc": "Waits for vertical sync."
+        },
+        {
+          "name": "Adaptive",
+          "value": 2,
+          "doc": "Waits for vertical sync unless the frame is late, which then tears instead of waiting."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::RendererConfig",
+      "category": "struct",
+      "role": "settings",
+      "doc": "How Renderer::Install sets the renderer up. There are no tuning settings and no native escape hatch.",
+      "fields": [
+        {
+          "name": "backend",
+          "kind": "enum",
+          "type": "Fenrir::GraphicsBackend",
+          "default": "OpenGL",
+          "doc": "The backend; one that cannot start fails Install, never falling back to another."
+        },
+        {
+          "name": "vsync",
+          "kind": "enum",
+          "type": "Fenrir::Vsync",
+          "default": "On",
+          "doc": "Changeable later with Renderer::SetVsync. A mode the surface lacks falls back to `On`, logged."
+        },
+        {
+          "name": "msaa",
+          "kind": "u32",
+          "default": 1,
+          "doc": "Samples per pixel of every view's scene targets, resolved in Output: 1 (off), 2, 4 or 8. Another count uses the largest of those below it, logged."
+        },
+        {
+          "name": "debugValidation",
+          "kind": "optional",
+          "elementKind": "bool",
+          "default": null,
+          "doc": "Whether the graphics API reports misuse to the app's logger; costly. Empty means the build's default, DebugValidationByDefault: on in Debug builds, off in Release. Empty by default so the default is the same in every build, as a description and a project file record it."
+        },
+        {
+          "name": "framesInFlight",
+          "kind": "u32",
+          "default": 2,
+          "doc": "How many frames the GPU may still be drawing while the next is recorded (ADR-0019)."
+        },
+        {
+          "name": "automaticInstancing",
+          "kind": "bool",
+          "default": true,
+          "doc": "Whether consecutive opaque and masked MeshRenderers with the same pipeline, material and mesh draw as one instanced draw (ADR-0051); off draws each on its own, for comparison. Changeable later with Renderer::SetAutomaticInstancing."
+        },
+        {
+          "name": "computeSkinning",
+          "kind": "bool",
+          "default": true,
+          "doc": "Whether each skinned mesh is skinned once a frame by a compute pass, which every pass then draws rigidly (ADR-0050); off, every draw of it skins it in its vertex stage, under its shader's `SKINNED` variant (ADR-0035). Changeable later with Renderer::SetComputeSkinning."
+        },
+        {
+          "name": "clusteredLights",
+          "kind": "bool",
+          "default": true,
+          "doc": "Whether each camera's PointLights, SpotLights and RectLights are clustered (ADR-0049): a compute pass a view lists them in 16 x 9 x 24 clusters of its frustum by range, and each pixel lights by its cluster's lights only; off, every pixel loops over every light, for comparison. Changeable later with Renderer::SetClusteredLights."
+        },
+        {
+          "name": "gpuCulling",
+          "kind": "bool",
+          "default": true,
+          "doc": "Whether each camera's cull pass drops the opaque and masked copies outside its frustum on the GPU (ADR-0057): each candidate's bounding sphere, then its box's eight corners, against the camera's planes; off, the pass keeps every candidate, for comparison, and only the coarse cull of whole entities on the CPU culls. Changeable later with Renderer::SetGpuCulling."
+        },
+        {
+          "name": "occlusionCulling",
+          "kind": "bool",
+          "default": true,
+          "doc": "Whether each camera's cull pass also drops the copies hidden behind others (ADR-0057): what was visible last frame is drawn into the depth prepass first, a Hi-Z pyramid is built from it, and the rest are tested against it before they are drawn, so a copy wholly behind a wall costs no shading. Off, every copy inside the frustum is drawn, for comparison; off with `gpuCulling` off. Shadow views never cull by occlusion. Changeable later with Renderer::SetOcclusionCulling."
+        },
+        {
+          "name": "lodErrorPixels",
+          "kind": "f32",
+          "default": 1,
+          "doc": "How many pixels a level of detail's error may project to (ADR-0057): each camera's cull pass draws each copy of a mesh with levels (`MeshData::lods`) at the coarsest level whose error, scaled by the copy's largest axis scale and projected at its distance from the camera, is under this; 1 by default, so no level departs from full detail by a pixel. With `gpuCulling` off every copy draws level 0, for comparison."
+        },
+        {
+          "name": "minProjectedPixels",
+          "kind": "f32",
+          "default": 0,
+          "doc": "The pixels a copy's bounding sphere's radius must project to for the cull pass to draw it at all (ADR-0057): smaller copies are dropped as if outside the camera. 0 by default, dropping none; off with `gpuCulling` off."
+        },
+        {
+          "name": "shadowCascades",
+          "kind": "u32",
+          "default": 4,
+          "doc": "How many shadow cascades the DirectionalLight has per camera (ADR-0050): 1 to 4, 4 by default."
+        },
+        {
+          "name": "shadowMapSize",
+          "kind": "u32",
+          "default": 2048,
+          "doc": "The side of each cascade's shadow map, in texels: 2048 by default. Each camera's maps sit side by side in one depth texture, so its width (this times shadowCascades) must be within the GPU's largest."
+        },
+        {
+          "name": "shadowSplitLambda",
+          "kind": "f32",
+          "default": 0.75,
+          "doc": "How the cascades split the shadow distance (the practical scheme): 0 evenly, 1 logarithmically, so the nearest cascades are smallest and sharpest. 0.75 by default."
+        },
+        {
+          "name": "spotShadowBudget",
+          "kind": "u32",
+          "default": 8,
+          "doc": "How many SpotLights may cast shadows in a frame (ADR-0050): 8 by default, the nearest to any camera each frame; the rest light unshadowed, warned about once. 0 shadows none. Changeable later with Renderer::SetSpotShadowBudget."
+        },
+        {
+          "name": "spotShadowMapSize",
+          "kind": "u32",
+          "default": 1024,
+          "doc": "The side of each shadowed spot light's tile of the spot shadow atlas, in texels: 1024 by default. The atlas is a grid of the budget's tiles, ceil(sqrt(budget)) across, which must be within the GPU's largest."
+        },
+        {
+          "name": "pointShadowBudget",
+          "kind": "u32",
+          "default": 4,
+          "doc": "How many PointLights may cast shadows in a frame (ADR-0050): 4 by default, the nearest to any camera each frame; the rest light unshadowed, warned about once. 0 shadows none. Changeable later with Renderer::SetPointShadowBudget."
+        },
+        {
+          "name": "pointShadowMapSize",
+          "kind": "u32",
+          "default": 512,
+          "doc": "The side of each face of each shadowed point light's cube, in texels: 512 by default. The cubes are one cube array of the budget's cubes."
+        },
+        {
+          "name": "offscreenGroups2D",
+          "kind": "bool",
+          "default": true,
+          "doc": "Whether 2D draw lists' offscreen groups are realised (ADR-0060): each drawn into a transient image and composited through its opacity, blend, filter or mask. Off, a group's commands draw flat into the target around it, its composite and filter ignored, and a mask's shape is not drawn and masks nothing."
         }
       ]
     },
@@ -1658,9 +1911,8 @@
         {
           "name": "skeleton",
           "offset": 0,
-          "kind": "struct",
-          "type": "Fenrir::Entity",
-          "default": {},
+          "kind": "entity",
+          "default": null,
           "doc": "The skeleton entity whose pose skins the mesh."
         }
       ]

@@ -22,3 +22,8 @@ set_tests_properties(FenrirWindow-Display PROPERTIES SKIP_RETURN_CODE 4 TIMEOUT 
 # Install when SDL's video cannot start: a video driver that does not exist stands in for a missing display.
 add_test(NAME FenrirWindow-NoVideo COMMAND FenrirWindowTests "[no-video]")
 set_tests_properties(FenrirWindow-NoVideo PROPERTIES ENVIRONMENT "SDL_VIDEO_DRIVER=no-such-driver")
+
+# Its registration against its description: each described type, default-constructed through its registered
+# description, holds the defaults api/FenrirWindow.api.json records (tools/generate-type-registry writes the test).
+target_sources(FenrirWindowTests PRIVATE Generated/FenrirWindowTypesDefaultsTests.cpp)
+target_link_libraries(FenrirWindowTests PRIVATE FenrirTypesTesting)

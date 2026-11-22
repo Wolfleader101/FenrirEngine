@@ -12,3 +12,8 @@ target_link_libraries(FenrirAnimationTests PRIVATE FenrirAnimation Catch2::Catch
 target_include_directories(FenrirAnimationTests PRIVATE ../src)
 target_compile_definitions(FenrirAnimationTests PRIVATE FENRIR_ANIMATION_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
 add_test(NAME FenrirAnimation COMMAND FenrirAnimationTests)
+
+# Its registration against its description: each described type, default-constructed through its registered
+# description, holds the defaults api/FenrirAnimation.api.json records (tools/generate-type-registry writes the test).
+target_sources(FenrirAnimationTests PRIVATE Generated/FenrirAnimationTypesDefaultsTests.cpp)
+target_link_libraries(FenrirAnimationTests PRIVATE FenrirTypesTesting)

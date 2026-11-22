@@ -103,7 +103,7 @@ The entities in one scene that have one component type, as of its last drain, in
 *Avoid:* query (a query is matched each time it runs), cache.
 
 **Component type**
-A value naming one kind of component, native or C#, that the ECS's runtime operations and queries take (`ComponentType` in FenrirECS). Code that knows a component only at run time, such as scripting or an editor, holds one instead of a C++ type. It carries no name.
+A value naming one kind of component, native or C#, that the ECS's runtime operations and queries take (`ComponentType` in FenrirECS). Code that knows a component only at run time, such as scripting or an editor, holds one instead of a C++ type. It carries no name: a described component's name is the type registry's, which `ComponentType::ForName` and `NameOf` ask (ADR-0074).
 *Avoid:* selector, registration (a registration is scripting's record of what C# sees).
 
 **System**
@@ -172,7 +172,7 @@ The language-neutral record of the plain-data types a package shares with any bi
 *Avoid:* schema, IDL, manifest, interop definition.
 
 **Bound type**
-A type the API description records by layout only, because every binding already has its own (a vector, a quaternion, a transform). A binding's own configuration says which of its types stands for it.
+A type the API description records by its layout, and the scalars it holds when it is made of them (a vector's three floats), but never as fields, because every binding already has its own (a vector, a quaternion, a transform). A binding's own configuration says which of its types stands for it.
 *Avoid:* primitive, built-in type.
 
 **Binding**
@@ -180,7 +180,7 @@ Everything that lets one language use the engine: the generated mirrors of the e
 *Avoid:* wrapper, scripting language (a binding may be no scripting at all).
 
 **Tagged union**
-A value that holds exactly one of several kinds, with a tag saying which one (a collision shape, a joint kind, a vehicle kind). In C# it is a struct with one view per kind, and the view throws if the value holds another kind. The author writes the tag and the storage; FenrirScripting's `[TaggedUnion]` generator writes the rest.
+A value that holds exactly one of several kinds, with a tag saying which one (a collision shape, a joint kind, a vehicle kind). In C# it is a struct with one view per kind, and the view throws if the value holds another kind. The author writes the tag and the storage; FenrirScripting's `[TaggedUnion]` generator writes the rest. FenrirTypes describes one by its tag and its *alternatives*, the union's members (the API description's `kinds`, each holding one kind): a visit pushes the tag, then the live alternative alone, and `TypeDescription::SelectAlternative` is the one door that changes the tag.
 *Avoid:* variant, sum type, discriminated union (a proposed C# language feature, not this).
 
 **Extension stage**
@@ -244,7 +244,7 @@ The readable random string a scene file gives an entity, held in its `EntityId` 
 *Avoid:* entity handle, fileID, GUID, name (the display string).
 
 **Transient**
-Not written to a scene file: a component whose description says so, or an entity tagged `Transient` with its children (a free-fly camera, a debug entity). Everything else described is written (ADR-0078).
+Not written to a scene file: a component whose description says so, or an entity tagged `Transient` with its children (a free-fly camera, a debug entity). Everything else described is written (ADR-0078). A field of a data asset or settings type marked `@transient` is code wiring no file holds (`ScriptingConfig::extensions`): it is left out of its type's description altogether (ADR-0084).
 *Avoid:* runtime-only, editor-only (which is written but stripped when cooked), hidden, don't-save.
 
 **Editor-only**
@@ -308,7 +308,7 @@ The generated pair that turns a data asset class into a value tree and back, emi
 *Avoid:* serializer, converter, marshaller, mapper.
 
 **Type registry**
-The run-time table of every described type the running engine knows, by canonical name: its role, fields, kinds, defaults, docs and metadata, filled from each package's generated type registration at `Install` and from C# at admission. A file reader, writer or inspector reaches a type's fields only through it (ADR-0074).
+The run-time table of every described type the running engine knows, by canonical name: its role, fields, kinds, defaults, docs and metadata, filled from each package's generated type registration at `Install` and from C# at admission. A file reader, writer or inspector reaches a type's fields only through it, and a component or a scene or app resource through what the registrations hang on it: a `ComponentType`, a resource's find, add and remove (ADR-0074).
 *Avoid:* reflection, RTTI, ClassDB, type database.
 
 **Type registration**

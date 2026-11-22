@@ -20,6 +20,8 @@
 #include "FenrirECS/WorldTransform.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "FenrirScheduler/Scheduler.hpp"
+#include "FenrirSkeleton/Generated/FenrirSkeletonTypes.hpp"
+#include "FenrirTypes/TypeRegistry.hpp"
 #include "SkeletonPoses.hpp"
 #include "SkeletonsState.hpp"
 
@@ -437,6 +439,9 @@ namespace Fenrir
 
     Skeletons Skeletons::Install(App& app)
     {
+        // Its types first (ADR-0074), before any resource or system: a second Install registers nothing again.
+        Generated::RegisterFenrirSkeletonTypes(app.GetResource<TypeRegistry>());
+
         if (app.TryGetResource<AssetStore>() == nullptr)
         {
             app.Logger()->Error("{}", "Skeletons::Install: FenrirAssets is not installed, so FenrirSkeleton is off: "

@@ -42,7 +42,7 @@ namespace Fenrir
         Adaptive,
     };
 
-    /** @brief RendererConfig::debugValidation's default: on in Debug builds, off in Release. */
+    /** @brief What an empty RendererConfig::debugValidation means: on in Debug builds, off in Release. */
     inline constexpr bool DebugValidationByDefault =
 #ifdef NDEBUG
         false;
@@ -50,7 +50,10 @@ namespace Fenrir
         true;
 #endif
 
-    /** @brief How Renderer::Install sets the renderer up. There are no tuning settings and no native escape hatch. */
+    /**
+     * @brief How Renderer::Install sets the renderer up. There are no tuning settings and no native escape hatch.
+     * @version 1
+     */
     struct RendererConfig
     {
         /** @brief The backend; one that cannot start fails Install, never falling back to another. */
@@ -62,8 +65,12 @@ namespace Fenrir
          * count uses the largest of those below it, logged.
          */
         std::uint32_t msaa = 1;
-        /** @brief Whether the graphics API reports misuse to the app's logger; costly. On in Debug builds. */
-        bool debugValidation = DebugValidationByDefault;
+        /**
+         * @brief Whether the graphics API reports misuse to the app's logger; costly. Empty means the build's default,
+         * DebugValidationByDefault: on in Debug builds, off in Release. Empty by default so the default is the same in
+         * every build, as a description and a project file record it.
+         */
+        std::optional<bool> debugValidation;
         /** @brief How many frames the GPU may still be drawing while the next is recorded (ADR-0019). */
         std::uint32_t framesInFlight = 2;
         /**

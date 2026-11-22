@@ -31,6 +31,12 @@ internal enum Role
 internal sealed record FieldKind(string Kind, string? Type, string? ElementKind, string? ElementType, int Length)
 {
     public bool IsArray => Kind == "array";
+
+    /// <summary>
+    /// The type a <c>reference</c> (or an array of them) names, which is read as the bound handle of it: kept so a
+    /// handle no description describes is diagnosed as the reference's.
+    /// </summary>
+    public string? Target { get; init; }
 }
 
 /// <summary>A struct field, or a tagged union's tag (its default is the tag value of the default kind).</summary>
@@ -76,9 +82,10 @@ internal static class Description
     {
         var types = new List<DescribedType>();
         var byName = new Dictionary<string, DescribedType>(StringComparer.Ordinal);
+        var skipped = new HashSet<string>(StringComparer.Ordinal);
         foreach (var path in paths)
         {
-            foreach (var type in ReadOne(Path.GetFullPath(path)))
+            foreach (var type in ReadOne(Path.GetFullPath(path), skipped))
             {
                 if (byName.TryGetValue(type.Name, out var earlier))
                 {
@@ -112,7 +119,70 @@ internal static class Description
             }
         }
 
-        return types;
+        return Bound(types, skipped);
+    }
+
+    // The data asset and settings roles, which the C# spec binds; until then a binding skips them and what only they
+    // hold.
+    private static bool IsSkippedRole(string role) => role is "data-asset" or "settings";
+
+    // describe-api's owning kinds (SCHEMA.md of the input format, "Owning kinds"), which only skipped types hold.
+    private static bool IsOwningKind(string kind) => kind is "string" or "list" or "optional" or "path";
+
+    // The types a binding binds: all but the nested types and enums that a skipped type reaches and no selected type
+    // does (a data asset's table row, a settings type's mode), each checked to hold no owning kind and to have a layout.
+    // An enum a selection names for a native and only a skipped type holds is dropped too: a description does not say
+    // which enums were selected.
+    private static List<DescribedType> Bound(List<DescribedType> types, IEnumerable<string> namedBySkipped)
+    {
+        var byName = types.ToDictionary(type => type.Name, StringComparer.Ordinal);
+        var fromSkipped = Reached(namedBySkipped);
+        var fromSelected = Reached(types.Where(type => type.Role is not (Role.Nested or Role.None))
+                                        .SelectMany(Binding.Named)
+                                        .OfType<string>());
+        var bound = types.Where(type => type.Role is not (Role.Nested or Role.None) || fromSelected.Contains(type.Name) ||
+                                        !fromSkipped.Contains(type.Name))
+                         .ToList();
+        foreach (var type in bound)
+        {
+            foreach (var field in type.Fields.Where(field => IsOwningKind(field.Kind.Kind)))
+            {
+                throw new BindingException(
+                    $"{type.Source}: {type.Name}::{field.Name}: a {field.Kind.Kind}, an owning kind, which a binding skips " +
+                    "only in a data asset or settings type and what only they hold");
+            }
+
+            if (type.Size < 0)
+            {
+                throw new BindingException($"{type.Source}: {type.Name}: the description has no 'size'");
+            }
+
+            foreach (var field in type.Fields.Where(field => field.Offset < 0))
+            {
+                throw new BindingException($"{type.Source}: {type.Name}::{field.Name}: the description has no 'offset'");
+            }
+        }
+
+        return bound;
+
+        // These names and every described type they reach through fields, tags and kinds.
+        HashSet<string> Reached(IEnumerable<string> names)
+        {
+            var reached = new HashSet<string>(names, StringComparer.Ordinal);
+            var next = new Queue<string>(reached);
+            while (next.Count > 0)
+            {
+                if (byName.TryGetValue(next.Dequeue(), out var held))
+                {
+                    foreach (var name in Binding.Named(held).OfType<string>().Where(reached.Add))
+                    {
+                        next.Enqueue(name);
+                    }
+                }
+            }
+
+            return reached;
+        }
     }
 
     // Whether two descriptions of a type that is not a bound type record the same fields, tag, kinds and values. Docs may
@@ -129,7 +199,8 @@ internal static class Description
                a.Values.Select(value => (value.Name, value.Value)).SequenceEqual(b.Values.Select(value => (value.Name, value.Value)));
     }
 
-    private static IEnumerable<DescribedType> ReadOne(string path)
+    // A description's types but the skipped ones, whose names and the types they name go to `skipped`.
+    private static IEnumerable<DescribedType> ReadOne(string path, HashSet<string> skipped)
     {
         JsonDocument document;
         try
@@ -150,7 +221,45 @@ internal static class Description
 
         foreach (var type in Array(root, "types", path).EnumerateArray())
         {
+            if (OptionalString(type, "role") is { } role && IsSkippedRole(role))
+            {
+                skipped.UnionWith(NamesIn(type));
+                continue;
+            }
+
             yield return ReadType(type, path);
+        }
+    }
+
+    // Every type a skipped type names: its base, and its fields' types and elements' types at any depth.
+    private static IEnumerable<string> NamesIn(JsonElement element)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                foreach (var property in element.EnumerateObject())
+                {
+                    if (property.Name is "type" or "elementType" or "base" && property.Value.ValueKind == JsonValueKind.String)
+                    {
+                        yield return property.Value.GetString()!;
+                    }
+                    else if (property.Name is "fields" or "element")
+                    {
+                        foreach (var name in NamesIn(property.Value))
+                        {
+                            yield return name;
+                        }
+                    }
+                }
+
+                break;
+            case JsonValueKind.Array:
+                foreach (var name in element.EnumerateArray().SelectMany(NamesIn))
+                {
+                    yield return name;
+                }
+
+                break;
         }
     }
 
@@ -212,7 +321,10 @@ internal static class Description
                          .ToList();
         }
 
-        return new DescribedType(name, category, role, Integer(type, "size", where), Integer(type, "alignment", where),
+        // A type reached by member records no layout; Bound refuses one a binding keeps.
+        var reachedByMember = !type.TryGetProperty("size", out _);
+        return new DescribedType(name, category, role, reachedByMember ? -1 : Integer(type, "size", where),
+                                 reachedByMember ? -1 : Integer(type, "alignment", where),
                                  OptionalString(type, "doc"), path, fields, tag, unionOffset, kinds, defaultKind,
                                  underlying, values);
     }
@@ -220,17 +332,97 @@ internal static class Description
     private static Field ReadField(JsonElement field, string where)
     {
         var name = String(field, "name", where);
-        return new Field(name, Integer(field, "offset", where), ReadKind(field, $"{where}::{name}"),
-                         Property(field, "default", $"{where}::{name}").Clone(), OptionalString(field, "doc"));
+        var subject = $"{where}::{name}";
+        var described = Property(field, "default", subject);
+        var kind = String(field, "kind", subject);
+        var element = kind == "array" ? String(field, "elementKind", subject) : null;
+        var value = (kind, element) switch
+        {
+            ("entity" or "reference", _) => Empty(described, kind, subject),
+            ("fixed-string", _) => TextBytes(described, Integer(field, "length", subject), subject),
+            ("array", "entity" or "reference") =>
+                Json(described.ValueKind == JsonValueKind.Array
+                         ? $"[{string.Join(",", described.EnumerateArray().Select(item => Empty(item, element!, subject).GetRawText()))}]"
+                         : throw new BindingException($"{subject}: 'default' is not a list")),
+            _ => described.Clone(),
+        };
+        // A field of a type reached by member records no offset; Bound refuses one a binding keeps.
+        var offset = field.TryGetProperty("offset", out _) ? Integer(field, "offset", where) : -1;
+        return new Field(name, offset, ReadKind(field, subject), value, OptionalString(field, "doc"));
     }
+
+    // describe-api's fixed-layout kinds are read as the shapes they bind as (SCHEMA.md of the input format, "Kinds"): an
+    // `entity` as the engine's entity, the built-in binding's mirror of FenrirECS's `Fenrir::Entity`; a `fixed-string` as
+    // the array of `u8` its bytes are; a `reference` as the asset handle of its target, a bound type the assets binding
+    // binds. So a binding generates what it did when the description recorded them by those shapes.
+
+    /// <summary>The engine's entity, which an <c>entity</c> kind holds.</summary>
+    internal const string EntityType = "Fenrir::Entity";
+
+    /// <summary>The bound handle a <c>reference</c> to <paramref name="target" /> holds.</summary>
+    internal static string HandleType(string target) => $"Fenrir::AssetHandle<{target}>";
 
     private static FieldKind ReadKind(JsonElement field, string where)
     {
         var kind = String(field, "kind", where);
-        return kind == "array"
-                   ? new FieldKind(kind, null, String(field, "elementKind", where), OptionalString(field, "elementType"),
-                                   Integer(field, "length", where))
-                   : new FieldKind(kind, OptionalString(field, "type"), null, null, 0);
+        switch (kind)
+        {
+            case "array":
+                var described = String(field, "elementKind", where);
+                var elementTarget = described == "reference" ? String(field, "elementTarget", where) : null;
+                var (elementKind, elementType) = described switch
+                {
+                    "entity" => ("struct", EntityType),
+                    "reference" => ("struct", HandleType(elementTarget!)),
+                    _ => (described, OptionalString(field, "elementType")),
+                };
+                return new FieldKind(kind, null, elementKind, elementType, Integer(field, "length", where))
+                {
+                    Target = elementTarget,
+                };
+            case "entity":
+                return new FieldKind("struct", EntityType, null, null, 0);
+            case "reference":
+                var target = String(field, "target", where);
+                return new FieldKind("struct", HandleType(target), null, null, 0) { Target = target };
+            case "fixed-string":
+                return new FieldKind("array", null, "u8", null, Integer(field, "length", where));
+            case var owning when IsOwningKind(owning):
+                // Read only to be dropped or refused (Bound). A list or optional names one type at most, its innermost
+                // element's, kept as the type Binding.Named reaches through it.
+                return new FieldKind(kind, NamesIn(field).SingleOrDefault(), null, null, 0);
+            default:
+                return new FieldKind(kind, OptionalString(field, "type"), null, null, 0);
+        }
+    }
+
+    // An entity's or reference's default, which names nothing (null), as its struct's own defaults ({}).
+    private static JsonElement Empty(JsonElement value, string kind, string where) =>
+        value.ValueKind == JsonValueKind.Null
+            ? Json("{}")
+            : throw new BindingException($"{where}: an {kind}'s 'default' is not null");
+
+    // A fixed string's default text as its bytes: UTF-8, then zeros to the length.
+    private static JsonElement TextBytes(JsonElement value, int length, string where)
+    {
+        if (value.ValueKind != JsonValueKind.String)
+        {
+            throw new BindingException($"{where}: a fixed string's 'default' is not a string");
+        }
+
+        var bytes = System.Text.Encoding.UTF8.GetBytes(value.GetString()!);
+        if (bytes.Length >= length)
+        {
+            throw new BindingException($"{where}: the default leaves no room in its {length} bytes for the terminator");
+        }
+
+        return Json($"[{string.Join(",", bytes.Concat(new byte[length - bytes.Length]))}]");
+    }
+
+    private static JsonElement Json(string text)
+    {
+        using var document = JsonDocument.Parse(text);
+        return document.RootElement.Clone();
     }
 
     internal static JsonElement Property(JsonElement element, string key, string where) =>

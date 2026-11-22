@@ -1,5 +1,8 @@
 #include "FenrirScripting/Scripting.hpp"
 
+#include "FenrirScripting/Generated/FenrirScriptingTypes.hpp"
+#include "FenrirTypes/TypeRegistry.hpp"
+
 #include "ComponentRegistry.hpp"
 #include "EngineContext.hpp"
 #include "ExtensionSet.hpp"
@@ -351,6 +354,8 @@ namespace Fenrir
         // the app runs without scripts. A half-built State is released as the exception unwinds.
         try
         {
+            // Its types first (ADR-0074), before any resource or system: a second Install registers nothing again.
+            Generated::RegisterFenrirScriptingTypes(app.GetResource<TypeRegistry>());
             return InstallImpl(app, std::move(config));
         }
         catch (const std::exception& exception)
@@ -573,9 +578,9 @@ namespace Fenrir
                     return StartupFailure{"the folder for the script copies could not be chosen", {}};
                 }
                 settings.hotReload = config.hotReload;
-                settings.reloadInterval = config.reloadInterval;
-                settings.reloadDebounce = config.reloadDebounce;
-                settings.unloadTimeout = config.unloadTimeout;
+                settings.reloadInterval = std::chrono::milliseconds(config.reloadInterval);
+                settings.reloadDebounce = std::chrono::milliseconds(config.reloadDebounce);
+                settings.unloadTimeout = std::chrono::milliseconds(config.unloadTimeout);
                 // The lifecycle knows nothing of what a generation holds: the State supplies that. It owns the
                 // lifecycle, so the raw pointer the hooks keep lives as long as they do.
                 State* const self = state.get();

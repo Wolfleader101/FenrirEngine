@@ -558,10 +558,10 @@ Build the script project while the game runs and the new code takes over between
   even on Windows, which locks a loaded dll. The folder is deleted once that generation has been collected.
   (`ScriptingConfig::reloadDirectory` chooses where; the default is under the system temp folder.)
 - **The watcher** (`ScriptingConfig::hotReload`, on by default) looks at the file at the start of each frame, at most every
-  `reloadInterval`. A new build is loaded once it has stayed unchanged and openable for `reloadDebounce`, so a half-written dll is
+  `reloadInterval` milliseconds (250). A new build is loaded once it has stayed unchanged and openable for `reloadDebounce` milliseconds (400), so a half-written dll is
   never loaded. `Scripting::Reload()` does the same on demand (call it between frames, not from a script).
 - **The order** is: play back anything a script left recorded; the old systems' `OnDestroy`; release the old generation and wait for
-  the runtime to confirm it unloaded (`unloadTimeout`; if a root still holds it the reload goes on, warns that the generation has not
+  the runtime to confirm it unloaded (`unloadTimeout` milliseconds, 2000; if a root still holds it the reload goes on, warns that the generation has not
   unloaded, and `PendingUnloadCount()` stays above zero); then load the new generation. System instances are always recreated, so
   `OnCreate` runs again.
 - **A broken build keeps the game running.** If the new generation does not load (not a valid assembly, a native component or event

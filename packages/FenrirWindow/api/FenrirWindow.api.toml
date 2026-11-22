@@ -7,6 +7,20 @@ headers = ["../include/FenrirWindow/WindowEvents.hpp", "../include/FenrirWindow/
 "Fenrir::WindowResizedEvent" = "event"
 "Fenrir::WindowCloseRequestedEvent" = "event"
 "Fenrir::WindowSize" = "shared-struct"
+# Window::Install's config, which a project file fills (ADR-0084).
+"Fenrir::WindowConfig" = "settings"
 # Held by no field, but taken by the natives: described all the same.
 "Fenrir::CursorMode" = "enum"
 "Fenrir::CursorShape" = "enum"
+
+# What tools/generate-type-registry writes for the package (ADR-0074): its types' descriptions, the function registering
+# them, compiled into FenrirWindow, and the test that their registered descriptions construct the defaults the
+# description records. It uses the registrations of the packages registering the types it holds of theirs (FenrirInput's
+# WindowId), which it points at rather than describing them again.
+[registration]
+header = "../include/FenrirWindow/Generated/FenrirWindowTypes.hpp"
+source = "../src/Generated/FenrirWindowTypes.cpp"
+test = "../Tests/Generated/FenrirWindowTypesDefaultsTests.cpp"
+function = "Fenrir::Generated::RegisterFenrirWindowTypes"
+includes = ["FenrirWindow/WindowEvents.hpp", "FenrirWindow/WindowTypes.hpp"]
+uses = ["../../FenrirInput/api/FenrirInput.api.toml"]

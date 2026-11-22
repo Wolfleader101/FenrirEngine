@@ -1330,7 +1330,19 @@
       "category": "bound-type",
       "role": "bound-type",
       "size": 8,
-      "alignment": 4
+      "alignment": 4,
+      "components": [
+        {
+          "name": "x",
+          "offset": 0,
+          "kind": "f32"
+        },
+        {
+          "name": "y",
+          "offset": 4,
+          "kind": "f32"
+        }
+      ]
     },
     {
       "name": "Fenrir::MouseButton",
