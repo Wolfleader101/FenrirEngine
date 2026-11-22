@@ -134,15 +134,16 @@ internal sealed record Selection(string Path, string Package, IReadOnlyList<stri
 
         foreach (var (name, orderValue) in componentTable)
         {
-            if (types.All(type => type.Key != name))
+            var selected = types.FirstOrDefault(type => type.Key == name);
+            if (selected.Key is null)
             {
                 throw new DescribeException($"{path}: [components] names {name}, which [types] does not select");
             }
 
-            if (types.First(type => type.Key == name).Value is var role && role != Role.BoundType)
+            if (selected.Value != Role.BoundType)
             {
                 throw new DescribeException(
-                    $"{path}: [components] names {name}, which [types] selects as {Roles.Phrase(role)}, not a bound type");
+                    $"{path}: [components] names {name}, which [types] selects as {Roles.Phrase(selected.Value)}, not a bound type");
             }
 
             if (orderValue is not TomlArray orderArray || orderArray.Any(item => item is not string))

@@ -349,7 +349,7 @@ internal sealed class Describer
             var components = type.AsCXXRecordDecl?.Definition is CXXRecordDecl boundRecord ? BoundComponents(boundRecord) : null;
             if (m_selection.ComponentOrders.TryGetValue(name, out var order))
             {
-                components = InOrder(components, order, pending.Decl, name);
+                components = InSelectedOrder(components, order, pending.Decl, name);
             }
 
             return new BoundTypeDescription(name, size, alignment, typeDoc.Text, components) { Commands = typeDoc.Commands };
@@ -1366,8 +1366,8 @@ internal sealed class Describer
     /// A bound type's components in the order its selection's [components] names them, each keeping its offset; fails
     /// on a name that is not a component, a component left out or named twice, and a bound type with no components.
     /// </summary>
-    private List<BoundComponent> InOrder(List<BoundComponent>? components, IReadOnlyList<string> order, Cursor at,
-                                         string typeName)
+    private List<BoundComponent> InSelectedOrder(List<BoundComponent>? components, IReadOnlyList<string> order,
+                                                 Cursor at, string typeName)
     {
         if (components is null)
         {

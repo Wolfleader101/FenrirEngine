@@ -221,15 +221,25 @@ public sealed class DescribeTests
                 "[components] names Fixture::Hit, which [types] selects as a shared struct, not a bound type")]
     [InlineData("\"Fixture::Vec3\" = \"bound-type\"", "\"Fixture::Quat\" = [\"x\", \"y\", \"z\", \"w\"]",
                 "[components] names Fixture::Quat, which [types] does not select")]
-    [InlineData("\"Fixture::Vec3\" = \"bound-type\"", "\"Fixture::Vec3\" = \"x, y, z\"",
-                "[components] gives Fixture::Vec3 'x, y, z'; an order is a list of its component names")]
     public void AComponentOrderForATypeTheSelectionDoesNotSelectAsABoundTypeFailsNamingIt(string types,
                                                                                           string components,
                                                                                           string diagnostic)
     {
         var exception = Assert.Throws<DescribeException>(() => DescribeWithComponents(types, components));
 
-        Assert.Contains(diagnostic, exception.Message, StringComparison.Ordinal);
+        Assert.True(exception.Message.Contains(diagnostic, StringComparison.Ordinal),
+                    $"The order\n  {components}\nshould fail with\n  {diagnostic}\nbut failed with\n  {exception.Message}");
+    }
+
+    [Fact]
+    public void AComponentOrderThatIsNotAListOfNamesFailsNamingTheType()
+    {
+        var exception = Assert.Throws<DescribeException>(() => DescribeWithComponents(
+                                                             "\"Fixture::Vec3\" = \"bound-type\"",
+                                                             "\"Fixture::Vec3\" = \"x, y, z\""));
+
+        Assert.Contains("[components] gives Fixture::Vec3 'x, y, z'; an order is a list of its component names",
+                        exception.Message, StringComparison.Ordinal);
     }
 
     // Describes Fixture.hpp under a selection of the given [types] and [components] rows.

@@ -93,6 +93,7 @@ Everything the tool cannot describe fails it, naming the type and member, and ev
 | `cannot tell which component of <T> each argument sets: ...` | A bound type's constructor whose parameters are not named after its components. |
 | `[components] names '<name>', which is not one of its components (...)`, `[components] names '<name>' twice`, `[components] leaves out its component '<name>'` | A bound type's `[components]` order that does not name each of its components once. |
 | `[components] names an order, but it holds something other than scalars, so it has no components` | A `[components]` order for a bound type that has no `components`. |
+| `[components] names <T>, which [types] does not select`, `[components] names <T>, which [types] selects as <a role>, not a bound type`, `[components] gives <T> '...'; an order is a list of its component names` | A `[components]` entry for a type that is not a selected bound type, or whose order is not a list of names. |
 | `a private data member outside the tagged-union shape (one enum tag followed by one anonymous union); ...` | A private (or protected) member of a class that is not a tagged union, unless `private-members` names it. |
 | `'private-members' names <T>, which [types] does not select and no selected type holds` | A `private-members` entry that is neither a selected type nor a nested type a selected type holds. |
 | `an anonymous struct or union outside the tagged-union shape (...)` | The same, for an anonymous member. |
