@@ -952,13 +952,13 @@
       "doc": "A bound type that is a template's specialisation nothing here instantiates: the tool instantiates it.",
       "components": [
         {
-          "name": "first",
-          "offset": 0,
+          "name": "second",
+          "offset": 4,
           "kind": "f32"
         },
         {
-          "name": "second",
-          "offset": 4,
+          "name": "first",
+          "offset": 0,
           "kind": "f32"
         }
       ]

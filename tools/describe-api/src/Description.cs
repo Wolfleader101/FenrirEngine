@@ -231,7 +231,8 @@ internal sealed record TaggedUnionDescription(string Name, long Size, long Align
 internal sealed record BoundComponent(string Name, long Offset, string Kind);
 
 /// <summary>
-/// A bound type: its layout and, when every value it holds is a scalar, those scalars in storage order (null otherwise).
+/// A bound type: its layout and, when every value it holds is a scalar, those scalars in storage order or the order its
+/// selection's [components] names (null otherwise).
 /// </summary>
 internal sealed record BoundTypeDescription(string Name, long Size, long Alignment, string? Doc,
                                             IReadOnlyList<BoundComponent>? Components)

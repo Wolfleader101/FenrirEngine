@@ -242,11 +242,6 @@
       "alignment": 4,
       "components": [
         {
-          "name": "w",
-          "offset": 0,
-          "kind": "f32"
-        },
-        {
           "name": "x",
           "offset": 4,
           "kind": "f32"
@@ -259,6 +254,11 @@
         {
           "name": "z",
           "offset": 12,
+          "kind": "f32"
+        },
+        {
+          "name": "w",
+          "offset": 0,
           "kind": "f32"
         }
       ]

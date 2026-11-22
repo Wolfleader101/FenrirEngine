@@ -14,9 +14,9 @@
 
 **Touches:** `tools/describe-api/src/` (`Selection.cs`, `Describer.cs`), `tools/describe-api/SCHEMA.md`, `tools/describe-api/README.md`, `tools/describe-api/tests/` (fixture `.api.toml`, `Fixture.api.json`, `Failing` cases), `packages/Iris/docs/api-description.md`, `packages/FenrirMath/api/FenrirMath.api.toml`, the regenerated `FenrirMath.api.json` and `FenrirMath` registration
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The fixture's bound type, given a `[components]` order, records its components in that order with unchanged offsets. Its `Fixture.api.json` is compared byte for byte.
-- [ ] An unknown name, a missing or repeated one, and a type that is not a bound type each fail, naming the type and the name.
-- [ ] FenrirMath's description and registration visit `Quat` as `x, y, z, w`, and its defaults test passes.
-- [ ] Every binding regenerates byte-identical.
+- [x] The fixture's bound type, given a `[components]` order, records its components in that order with unchanged offsets. Its `Fixture.api.json` is compared byte for byte.
+- [x] An unknown name, a missing or repeated one, and a type that is not a bound type each fail, naming the type and the name.
+- [x] FenrirMath's description and registration visit `Quat` as `x, y, z, w`, and its defaults test passes.
+- [x] Every binding regenerates byte-identical.

@@ -32,6 +32,10 @@ private-members = ["Fixture::Tag"]
 # Held by no field: described because the selection names it.
 "Fixture::Heading" = "enum"
 
+# The order a bound type's components visit in, when it is not storage order: each keeps its offset.
+[components]
+"Fixture::Size" = ["second", "first"]
+
 # What tools/generate-type-registry writes for the fixture: the FenrirTypes tests compile and exercise it.
 [registration]
 header = "../../../../packages/FenrirTypes/Tests/Generated/FixtureTypes.hpp"

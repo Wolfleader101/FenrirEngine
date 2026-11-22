@@ -147,10 +147,10 @@ namespace Fenrir::Generated::FenrirMathTypes
     static_assert(sizeof(Fenrir::Math::Quat) == 16 && alignof(Fenrir::Math::Quat) == 4,
                   "Fenrir::Math::Quat is not the layout FenrirMath.api.json describes: regenerate the description, then this registration");
     constexpr Fenrir::FieldInfo Fenrir_Math_Quat_Fields[] = {
-        {.name = "w", .type = {.kind = Fenrir::Kind::F32}, .offset = 0},
         {.name = "x", .type = {.kind = Fenrir::Kind::F32}, .offset = 4},
         {.name = "y", .type = {.kind = Fenrir::Kind::F32}, .offset = 8},
         {.name = "z", .type = {.kind = Fenrir::Kind::F32}, .offset = 12},
+        {.name = "w", .type = {.kind = Fenrir::Kind::F32}, .offset = 0},
     };
     constexpr Fenrir::TypeDescription Fenrir_Math_Quat{
         .name = "Fenrir::Math::Quat",
