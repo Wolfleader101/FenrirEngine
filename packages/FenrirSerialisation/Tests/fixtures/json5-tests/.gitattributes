@@ -1,0 +1,5 @@
+# The cases are kept as upstream stores them, line endings included: Git converts nothing here.
+* binary
+# This folder's own README and attribute file are ordinary LF text.
+README.md text diff merge eol=lf
+.gitattributes text diff merge eol=lf
