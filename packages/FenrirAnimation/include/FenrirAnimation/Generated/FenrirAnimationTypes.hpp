@@ -10,6 +10,7 @@
 #include "FenrirAnimation/AnimationEvents.hpp"
 #include "FenrirAnimation/Animation.hpp"
 #include "FenrirAssets/BoneMaskData.hpp"
+#include "FenrirECS/TypeAttachments.hpp"
 
 #include "FenrirAssets/Generated/FenrirAssetsTypes.hpp"
 #include "FenrirSkeleton/Generated/FenrirSkeletonTypes.hpp"

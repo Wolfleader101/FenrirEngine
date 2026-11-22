@@ -2,7 +2,7 @@
 include("${CMAKE_CURRENT_LIST_DIR}/../../../cmake/FenrirCatch2.cmake")
 fenrir_add_catch2()
 
-add_executable(FenrirAppTests AppResources.cpp EventReaders.cpp Frames.cpp Phases.cpp RecordingLogger.hpp
+add_executable(FenrirAppTests AppResources.cpp AppResourceNames.cpp EventReaders.cpp Frames.cpp Phases.cpp RecordingLogger.hpp
                               SceneResources.cpp Scenes.cpp TypeRegistry.cpp)
 target_link_libraries(FenrirAppTests PRIVATE FenrirApp Catch2::Catch2WithMain)
 add_test(NAME FenrirApp COMMAND FenrirAppTests --order decl)

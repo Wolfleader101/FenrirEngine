@@ -103,7 +103,7 @@ The entities in one scene that have one component type, as of its last drain, in
 *Avoid:* query (a query is matched each time it runs), cache.
 
 **Component type**
-A value naming one kind of component, native or C#, that the ECS's runtime operations and queries take (`ComponentType` in FenrirECS). Code that knows a component only at run time, such as scripting or an editor, holds one instead of a C++ type. It carries no name.
+A value naming one kind of component, native or C#, that the ECS's runtime operations and queries take (`ComponentType` in FenrirECS). Code that knows a component only at run time, such as scripting or an editor, holds one instead of a C++ type. It carries no name: a described component's name is the type registry's, which `ComponentType::ForName` and `NameOf` ask (ADR-0074).
 *Avoid:* selector, registration (a registration is scripting's record of what C# sees).
 
 **System**
@@ -296,7 +296,7 @@ The generated pair that turns a data asset class into a value tree and back, emi
 *Avoid:* serializer, converter, marshaller, mapper.
 
 **Type registry**
-The run-time table of every described type the running engine knows, by canonical name: its role, fields, kinds, defaults, docs and metadata, filled from each package's generated type registration at `Install` and from C# at admission. A file reader, writer or inspector reaches a type's fields only through it (ADR-0074).
+The run-time table of every described type the running engine knows, by canonical name: its role, fields, kinds, defaults, docs and metadata, filled from each package's generated type registration at `Install` and from C# at admission. A file reader, writer or inspector reaches a type's fields only through it, and a component or a scene or app resource through what the registrations hang on it: a `ComponentType`, a resource's find, add and remove (ADR-0074).
 *Avoid:* reflection, RTTI, ClassDB, type database.
 
 **Type registration**

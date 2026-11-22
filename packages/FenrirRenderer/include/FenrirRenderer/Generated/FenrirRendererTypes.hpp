@@ -8,6 +8,8 @@
 #include "FenrirRenderer/Components.hpp"
 #include "FenrirRenderer/Renderer.hpp"
 #include "FenrirRenderer/WorldTargets2D.hpp"
+#include "FenrirECS/TypeAttachments.hpp"
+#include "FenrirScene/Scene.hpp"
 
 #include "FenrirMath/Generated/FenrirMathTypes.hpp"
 #include "FenrirAssets/Generated/FenrirAssetsTypes.hpp"

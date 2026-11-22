@@ -51,7 +51,13 @@ header = "../include/FenrirRenderer/Generated/FenrirRendererTypes.hpp"
 source = "../src/Generated/FenrirRendererTypes.cpp"
 test = "../Tests/Generated/FenrirRendererTypesDefaultsTests.cpp"
 function = "Fenrir::Generated::RegisterFenrirRendererTypes"
-includes = ["FenrirRenderer/Components.hpp", "FenrirRenderer/Renderer.hpp", "FenrirRenderer/WorldTargets2D.hpp"]
+includes = [
+    "FenrirRenderer/Components.hpp",
+    "FenrirRenderer/Renderer.hpp",
+    "FenrirRenderer/WorldTargets2D.hpp",
+    "FenrirECS/TypeAttachments.hpp",
+    "FenrirScene/Scene.hpp",
+]
 uses = [
     "../../FenrirMath/api/FenrirMath.api.toml",
     "../../FenrirAssets/api/FenrirAssets.api.toml",

@@ -14,6 +14,8 @@ add_library(FenrirECS STATIC
     src/WorldTransform.cpp
 
     include/FenrirECS/ComponentType.hpp
+    include/FenrirECS/TypeAttachments.hpp
+    src/TypeAttachments.cpp
 
     include/FenrirECS/ComponentWatch.hpp
     src/ComponentWatch.cpp

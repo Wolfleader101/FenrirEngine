@@ -31,5 +31,5 @@ header = "../include/FenrirECS/Generated/FenrirECSTypes.hpp"
 source = "../src/Generated/FenrirECSTypes.cpp"
 test = "../Tests/Generated/FenrirECSTypesDefaultsTests.cpp"
 function = "Fenrir::Generated::RegisterFenrirECSTypes"
-includes = ["FenrirECS/DefaultComponents.hpp", "FenrirECS/Entity.hpp"]
+includes = ["FenrirECS/DefaultComponents.hpp", "FenrirECS/Entity.hpp", "FenrirECS/TypeAttachments.hpp"]
 uses = ["../../FenrirMath/api/FenrirMath.api.toml"]

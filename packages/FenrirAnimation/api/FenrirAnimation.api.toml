@@ -45,5 +45,6 @@ includes = [
     "FenrirAnimation/AnimationEvents.hpp",
     "FenrirAnimation/Animation.hpp",
     "FenrirAssets/BoneMaskData.hpp",
+    "FenrirECS/TypeAttachments.hpp",
 ]
 uses = ["../../FenrirAssets/api/FenrirAssets.api.toml", "../../FenrirSkeleton/api/FenrirSkeleton.api.toml"]
