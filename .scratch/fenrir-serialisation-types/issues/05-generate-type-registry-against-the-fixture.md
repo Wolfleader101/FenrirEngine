@@ -12,10 +12,10 @@
 
 **Touches:** `tools/generate-type-registry/` (new), `cmake/FenrirGenerateTypeRegistry.cmake` (new), the root `CMakeLists.txt` (the target), `tools/describe-api/tests/Fixture/` (its `.api.toml` gains `[registration]`), `packages/FenrirTypes/Tests/` (the generated fixture registration and its tests)
 
-**Status:** resolved
+**Status:** ready-for-agent
 
-- [x] `cmake --build --target fenrir-generate-type-registry` writes the fixture's header and source; a second run writes nothing (the files' timestamps do not move).
-- [x] The tool's xunit tests compare the fixture's generated header and source byte for byte against committed copies, and a description with an unknown kind fails naming the type.
-- [x] The FenrirTypes tests compile the generated fixture registration, register it, find every type by canonical name, visit a fixed-layout type's fields with the right kinds, offsets and values, and read a bound type's components and an enum's enumerators.
-- [x] `Describe<FixtureComponent>` is the description the registration added, by identity.
-- [x] `FenrirTypes` still links nothing but the standard library; the generated source includes only the fixture header and `FenrirTypes`.
+- [ ] `cmake --build --target fenrir-generate-type-registry` writes the fixture's header and source; a second run writes nothing (the files' timestamps do not move).
+- [ ] The tool's xunit tests compare the fixture's generated header and source byte for byte against committed copies, and a description with an unknown kind fails naming the type.
+- [ ] The FenrirTypes tests compile the generated fixture registration, register it, find every type by canonical name, visit a fixed-layout type's fields with the right kinds, offsets and values, and read a bound type's components and an enum's enumerators.
+- [ ] `Describe<FixtureComponent>` is the description the registration added, by identity.
+- [ ] `FenrirTypes` still links nothing but the standard library; the generated source includes only the fixture header and `FenrirTypes`.

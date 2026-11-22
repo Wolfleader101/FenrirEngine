@@ -123,38 +123,38 @@ namespace Fenrir
         }
     }
 
-    void ValueRef::SetEnumValue(std::int64_t value) const noexcept
+    bool ValueRef::SetEnumValue(std::int64_t value) const noexcept
     {
-        if (m_type->kind != Kind::Enum || m_type->type == nullptr)
-            return;
+        if (m_type->kind != Kind::Enum || m_type->type == nullptr || m_type->unionTag)
+            return false;
         switch (m_type->type->underlying)
         {
         case Kind::I8:
             Store(m_value, static_cast<std::int8_t>(value));
-            break;
+            return true;
         case Kind::I16:
             Store(m_value, static_cast<std::int16_t>(value));
-            break;
+            return true;
         case Kind::I32:
             Store(m_value, static_cast<std::int32_t>(value));
-            break;
+            return true;
         case Kind::I64:
             Store(m_value, value);
-            break;
+            return true;
         case Kind::U8:
             Store(m_value, static_cast<std::uint8_t>(value));
-            break;
+            return true;
         case Kind::U16:
             Store(m_value, static_cast<std::uint16_t>(value));
-            break;
+            return true;
         case Kind::U32:
             Store(m_value, static_cast<std::uint32_t>(value));
-            break;
+            return true;
         case Kind::U64:
             Store(m_value, static_cast<std::uint64_t>(value));
-            break;
+            return true;
         default:
-            break;
+            return false;
         }
     }
 

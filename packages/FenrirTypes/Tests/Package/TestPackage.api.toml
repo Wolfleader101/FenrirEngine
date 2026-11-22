@@ -4,6 +4,7 @@ headers = ["TestPackage.hpp"]
 [types]
 "Test::Vec2" = "bound-type"
 "Test::Marker" = "component"
+"Test::Trigger" = "component"
 "Test::Weather" = "scene-resource"
 "Test::Layers" = "app-resource"
 "Test::WeaponData" = "data-asset"
