@@ -49,5 +49,6 @@ includes = [
     "FenrirSkeleton/BoneAttachment.hpp",
     "FenrirSkeleton/PoseStages.hpp",
     "FenrirAssets/SkinningSource.hpp",
+    "FenrirECS/TypeAttachments.hpp",
 ]
 uses = ["../../FenrirAssets/api/FenrirAssets.api.toml", "../../FenrirECS/api/FenrirECS.api.toml"]

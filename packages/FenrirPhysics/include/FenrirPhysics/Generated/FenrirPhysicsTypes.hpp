@@ -12,6 +12,7 @@
 #include "FenrirPhysics/Events.hpp"
 #include "FenrirPhysics/Queries.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
+#include "FenrirECS/TypeAttachments.hpp"
 
 #include "FenrirMath/Generated/FenrirMathTypes.hpp"
 

@@ -68,5 +68,6 @@ includes = [
     "FenrirPhysics/Events.hpp",
     "FenrirPhysics/Queries.hpp",
     "FenrirPhysics/PhysicsWorld.hpp",
+    "FenrirECS/TypeAttachments.hpp",
 ]
 uses = ["../../FenrirMath/api/FenrirMath.api.toml"]

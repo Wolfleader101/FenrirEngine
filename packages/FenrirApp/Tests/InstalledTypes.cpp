@@ -3,7 +3,9 @@
 // knows their components, resources and the types they hold by name. Its own executable, since it links the packages
 // above FenrirApp.
 #include <algorithm>
+#include <cstddef>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -13,12 +15,17 @@
 #include "FenrirAnimation/Animation.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/Assets.hpp"
+#include "FenrirECS/ComponentType.hpp"
+#include "FenrirECS/DefaultComponents.hpp"
+#include "FenrirPhysics/Components.hpp"
 #include "FenrirPhysics/Physics.hpp"
+#include "FenrirScene/Scene.hpp"
 #include "FenrirSkeleton/Skeletons.hpp"
 #include "FenrirTypes/TypeRegistry.hpp"
 #include "RecordingLogger.hpp"
 
 #if FENRIR_APP_TESTS_RENDERER
+#include "FenrirRenderer/Components.hpp"
 #include "FenrirRenderer/Renderer.hpp"
 #endif
 
@@ -166,3 +173,110 @@ TEST_CASE("Installing a package twice reports nothing from the registry", "[type
     INFO("the second Physics::Install should leave the registry nothing to refuse");
     REQUIRE(AppTest::RegistryErrors(*installed.errors) == 0);
 }
+
+TEST_CASE("ComponentType::ForName finds RigidBody as a component an entity accepts", "[types][components]")
+{
+    InstalledApp installed;
+    Fenrir::EntityList& entities = installed.app.GetActiveScene().GetEntityList();
+    const auto entity = entities.CreateEntity().GetId();
+
+    const std::optional<Fenrir::ComponentType> body =
+        Fenrir::ComponentType::ForName(installed.Registry(), "Fenrir::RigidBody");
+    INFO("Physics::Install's registration should hang a ComponentType on Fenrir::RigidBody");
+    REQUIRE(body.has_value());
+    INFO("the entity should take a RigidBody through the ComponentType found by name");
+    REQUIRE(entities.Add(*body, entity));
+    INFO("the RigidBody added by name should be the one the C++ type sees");
+    REQUIRE(entities.Has(Fenrir::ComponentType::Native<Fenrir::RigidBody>(), entity));
+}
+
+TEST_CASE("ComponentType::NameOf gives RigidBody's name back", "[types][components]")
+{
+    InstalledApp installed;
+
+    const std::optional<Fenrir::ComponentType> body =
+        Fenrir::ComponentType::ForName(installed.Registry(), "Fenrir::RigidBody");
+    INFO("Physics::Install's registration should hang a ComponentType on Fenrir::RigidBody");
+    REQUIRE(body.has_value());
+    INFO("NameOf should give back the name ForName found it by");
+    REQUIRE(Fenrir::ComponentType::NameOf(installed.Registry(), *body) == "Fenrir::RigidBody");
+}
+
+TEST_CASE("ComponentType::ForName finds Transform, which the App registers itself", "[types][components]")
+{
+    InstalledApp installed;
+
+    INFO("the App's constructor registers FenrirECS, whose registration hangs a ComponentType on Fenrir::Transform");
+    REQUIRE(Fenrir::ComponentType::ForName(installed.Registry(), "Fenrir::Transform").has_value());
+}
+
+TEST_CASE("ComponentType::ForName finds no component for an unknown name", "[types][components]")
+{
+    InstalledApp installed;
+
+    INFO("no installed package describes Fenrir::NoSuchComponent");
+    REQUIRE(!Fenrir::ComponentType::ForName(installed.Registry(), "Fenrir::NoSuchComponent").has_value());
+}
+
+TEST_CASE("Every registered component has a ComponentType by its name", "[types][components]")
+{
+    InstalledApp installed;
+
+    for (const Fenrir::TypeDescription* component : installed.Registry().Types(Fenrir::Role::Component))
+    {
+        INFO(component->name << " is a registered component, so its package's registration should have attached it");
+        REQUIRE(Fenrir::ComponentType::ForName(installed.Registry(), component->name).has_value());
+    }
+}
+
+#if FENRIR_APP_TESTS_RENDERER
+TEST_CASE("Scene::AddResource by name makes a default Sky the C++ type finds", "[types][resources]")
+{
+    InstalledApp installed;
+    Fenrir::Scene& scene = installed.app.GetActiveScene();
+    scene.RemoveResource<Fenrir::Sky>();
+
+    void* added = scene.AddResource(installed.Registry(), "Fenrir::Sky");
+
+    INFO("Renderer::Install's registration should hang the sky's scene doors, so adding it by name gives a Sky");
+    REQUIRE(added != nullptr);
+    INFO("GetResource<Sky> should find the Sky added by name");
+    REQUIRE(scene.GetResource<Fenrir::Sky>() == added);
+}
+
+TEST_CASE("Scene::FindResource by name finds the scene's Sky", "[types][resources]")
+{
+    InstalledApp installed;
+    Fenrir::Scene& scene = installed.app.GetActiveScene();
+    Fenrir::Sky& sky = scene.AddResource<Fenrir::Sky>();
+
+    INFO("FindResource by Fenrir::Sky should give the Sky AddResource<Sky> made");
+    REQUIRE(scene.FindResource(installed.Registry(), "Fenrir::Sky") == &sky);
+}
+
+TEST_CASE("Scene::RemoveResource by name removes the scene's Sky", "[types][resources]")
+{
+    InstalledApp installed;
+    Fenrir::Scene& scene = installed.app.GetActiveScene();
+    scene.AddResource<Fenrir::Sky>();
+
+    scene.RemoveResource(installed.Registry(), "Fenrir::Sky");
+
+    INFO("the scene should have no Sky once it is removed by name");
+    REQUIRE(scene.GetResource<Fenrir::Sky>() == nullptr);
+}
+
+TEST_CASE("Scene's named doors open nothing for a name that is not a scene resource's", "[types][resources]")
+{
+    InstalledApp installed;
+    Fenrir::Scene& scene = installed.app.GetActiveScene();
+    const std::size_t errors = installed.errors->size();
+
+    INFO("Fenrir::Camera is a component, not a scene resource, so adding it by name gives nothing");
+    REQUIRE(scene.AddResource(installed.Registry(), "Fenrir::Camera") == nullptr);
+    INFO("and finding it by name gives nothing");
+    REQUIRE(scene.FindResource(installed.Registry(), "Fenrir::Camera") == nullptr);
+    INFO("and the registry reports nothing about it");
+    REQUIRE(installed.errors->size() == errors);
+}
+#endif

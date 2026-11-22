@@ -9,6 +9,7 @@
 #include "FenrirSkeleton/BoneAttachment.hpp"
 #include "FenrirSkeleton/PoseStages.hpp"
 #include "FenrirAssets/SkinningSource.hpp"
+#include "FenrirECS/TypeAttachments.hpp"
 
 #include "FenrirAssets/Generated/FenrirAssetsTypes.hpp"
 #include "FenrirECS/Generated/FenrirECSTypes.hpp"

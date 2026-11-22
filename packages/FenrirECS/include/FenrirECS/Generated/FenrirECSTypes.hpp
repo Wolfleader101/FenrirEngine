@@ -7,6 +7,7 @@
 
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
+#include "FenrirECS/TypeAttachments.hpp"
 
 #include "FenrirMath/Generated/FenrirMathTypes.hpp"
 

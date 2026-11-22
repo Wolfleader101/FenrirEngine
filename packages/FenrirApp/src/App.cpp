@@ -51,6 +51,25 @@ namespace Fenrir
         return *this;
     }
 
+    void* App::FindResource(const TypeRegistry& registry, std::string_view name)
+    {
+        const AppResourceDoors* doors = registry.Attachment<AppResourceAttachment>(name);
+        return doors != nullptr ? doors->find(*this) : nullptr;
+    }
+
+    void* App::AddResource(const TypeRegistry& registry, std::string_view name)
+    {
+        const AppResourceDoors* doors = registry.Attachment<AppResourceAttachment>(name);
+        return doors != nullptr ? doors->add(*this) : nullptr;
+    }
+
+    void App::RemoveResource(const TypeRegistry& registry, std::string_view name)
+    {
+        const AppResourceDoors* doors = registry.Attachment<AppResourceAttachment>(name);
+        if (doors != nullptr)
+            doors->remove(*this);
+    }
+
     const std::unique_ptr<ILogger>& App::Logger() const
     {
         return m_logger;
