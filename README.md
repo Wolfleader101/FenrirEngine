@@ -119,9 +119,9 @@ Described packages commit three generated artefacts, which the ordinary build ne
   `Tests/Generated/`. The package compiles it and links FenrirTypes, so the App's `TypeRegistry` app resource knows the
   package's types by name once its `Install` has run (FenrirMath's, FenrirECS's and FenrirApp's from the App's constructor).
 
-After changing a described header, regenerate all three, in this order, and commit the result. It needs the .NET SDK and a
-build directory configured with scripting on, as the presets are; with the renderer on, its default, FenrirWindow's and
-FenrirRenderer's are among them.
+After changing a described header, regenerate all three, in this order, and commit the result. It needs the .NET SDK and
+a build directory configured with scripting on, as the clang-x64 and msvc-x64 presets are; with the renderer on, its
+default, FenrirWindow's and FenrirRenderer's are among them.
 
 ```sh
 cmake --build out/build/clang-x64-debug --target fenrir-describe-api && cmake --build out/build/clang-x64-debug --target fenrir-generate-bindings && cmake --build out/build/clang-x64-debug --target fenrir-generate-type-registry
@@ -147,7 +147,8 @@ its `packages/<Package>/Scripting/api/<Package>.binding.toml`. The Fenrir.Math c
 by `packages/FenrirScripting/api/FenrirMath.binding.toml`, and every other binding names them through `uses` rather than
 mirroring them again (ADR-0043).
 After changing a shared type or a native, run
-the three targets above and commit the result; CI fails on a stale binding as on a stale description or registration. What each contract still holds by hand is its facades (the static
+the three targets above and commit the result; CI fails on a stale binding as on a stale description or type
+registration. What each contract still holds by hand is its facades (the static
 classes scripts call, such as `Keyboard` or `Renderer`) and the behaviour of its mirrors, as `partial` parts beside the
 generated ones.
 

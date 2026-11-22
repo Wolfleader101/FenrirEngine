@@ -62,7 +62,7 @@ From a configured build directory:
 cmake --build <build-dir> --target fenrir-describe-api
 ```
 
-That rebuilds the tool and regenerates every package's description. The ordinary build never runs it. Two generators read the descriptions it writes, so run them after it: `fenrir-generate-bindings` (the bindings, `packages/Iris/Tools/Iris.Bindings/README.md`), then `fenrir-generate-type-registry` (the type registrations, `tools/generate-type-registry/README.md`); `README.md` ("Building and testing") has the line that runs all three in that order. CI's `.github/workflows/api-descriptions.yml` runs the same three, with the renderer on, and fails when they leave the tree dirty, so commit the regenerated description, bindings and registrations with the header change. A package joins the target in its `CMakeLists.txt`:
+That rebuilds the tool and regenerates every package's description. The ordinary build never runs it. Two generators read the descriptions it writes, so run them after it: `fenrir-generate-bindings` (the bindings, `packages/Iris/Tools/Iris.Bindings/README.md`), then `fenrir-generate-type-registry` (the type registrations, `tools/generate-type-registry/README.md`); `README.md` ("Building and testing") has the line that runs all three in that order, and says how CI (`.github/workflows/api-descriptions.yml`) checks them. Commit the regenerated description, bindings and type registrations with the header change. A package joins the target in its `CMakeLists.txt`:
 
 ```cmake
 fenrir_describe_api(MyPackage api/MyPackage.api.toml)

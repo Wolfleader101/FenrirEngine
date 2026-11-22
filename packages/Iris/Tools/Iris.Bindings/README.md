@@ -36,8 +36,8 @@ A parent project names the target by setting `IRIS_GENERATE_BINDINGS_TARGET` bef
 header change, and check in CI that it leaves the tree clean. In FenrirEngine it runs after `fenrir-describe-api`
 (`tools/describe-api/README.md`), which writes the descriptions, and before `fenrir-generate-type-registry`
 (`tools/generate-type-registry/README.md`), which writes each package's type registration (ADR-0074) from the same
-descriptions; the root `README.md` ("Building and testing") has the line that runs the three in that order, and
-`.github/workflows/api-descriptions.yml` runs them, fails on a dirty tree and runs this tool's tests.
+descriptions; the root `README.md` ("Building and testing") has the line that runs the three in that order and says
+how CI (`.github/workflows/api-descriptions.yml`) checks them; the workflow also runs this tool's tests.
 
 ## The configuration
 
