@@ -23,7 +23,10 @@ namespace Fenrir
         struct PhysicsState;
     } // namespace Detail
 
-    /** @brief How Physics::Install sets physics up for an app. */
+    /**
+     * @brief How Physics::Install sets physics up for an app.
+     * @version 1
+     */
     struct PhysicsConfig
     {
         /** @brief The gravity each new physics world starts with, in metres per second squared. */

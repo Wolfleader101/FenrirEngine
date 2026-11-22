@@ -87,11 +87,14 @@ namespace Fenrir::Generated::FenrirRendererTypes
     extern const Fenrir::TypeDescription Fenrir_ColourSky;
     extern const Fenrir::TypeDescription Fenrir_CubemapSky;
     extern const Fenrir::TypeDescription Fenrir_DirectionalLight;
+    extern const Fenrir::TypeDescription Fenrir_GraphicsBackend;
     extern const Fenrir::TypeDescription Fenrir_InstancedMeshRenderer;
     extern const Fenrir::TypeDescription Fenrir_MeshRenderer;
     extern const Fenrir::TypeDescription Fenrir_PanoramaSky;
     extern const Fenrir::TypeDescription Fenrir_PointLight;
     extern const Fenrir::TypeDescription Fenrir_RectLight;
+    extern const Fenrir::TypeDescription Fenrir_Vsync;
+    extern const Fenrir::TypeDescription Fenrir_RendererConfig;
     extern const Fenrir::TypeDescription Fenrir_RendererStats;
     extern const Fenrir::TypeDescription Fenrir_SkinnedMesh;
     extern const Fenrir::TypeDescription Fenrir_SkyType;
@@ -304,6 +307,13 @@ struct Fenrir::Describe<Fenrir::DirectionalLight>
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
+/** @brief The description of Fenrir::GraphicsBackend that RegisterFenrirRendererTypes adds. */
+template <>
+struct Fenrir::Describe<Fenrir::GraphicsBackend>
+{
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
 /** @brief The description of Fenrir::InstancedMeshRenderer that RegisterFenrirRendererTypes adds. */
 template <>
 struct Fenrir::Describe<Fenrir::InstancedMeshRenderer>
@@ -335,6 +345,20 @@ struct Fenrir::Describe<Fenrir::PointLight>
 /** @brief The description of Fenrir::RectLight that RegisterFenrirRendererTypes adds. */
 template <>
 struct Fenrir::Describe<Fenrir::RectLight>
+{
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of Fenrir::Vsync that RegisterFenrirRendererTypes adds. */
+template <>
+struct Fenrir::Describe<Fenrir::Vsync>
+{
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of Fenrir::RendererConfig that RegisterFenrirRendererTypes adds. */
+template <>
+struct Fenrir::Describe<Fenrir::RendererConfig>
 {
     static const Fenrir::TypeDescription& Description() noexcept;
 };

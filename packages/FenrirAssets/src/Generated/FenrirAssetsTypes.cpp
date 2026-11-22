@@ -4,6 +4,7 @@
 #include "../../include/FenrirAssets/Generated/FenrirAssetsTypes.hpp"
 
 #include "FenrirTypes/FieldInfo.hpp"
+#include "FenrirTypes/FieldVisitor.hpp"
 #include "FenrirTypes/Kind.hpp"
 #include "FenrirTypes/TypeDescription.hpp"
 #include "FenrirTypes/TypeRegistry.hpp"
@@ -184,6 +185,28 @@ namespace Fenrir::Generated::FenrirAssetsTypes
         .fields = Fenrir_AssetHandle_Fenrir_Skeleton_Fields,
     };
 
+    // Fenrir::AssetsConfig
+    constexpr Fenrir::FieldInfo Fenrir_AssetsConfig_Fields[] = {
+        {.name = "root", .type = {.kind = Fenrir::Kind::Path}, .doc = "The asset root: the directory relative asset paths resolve against. Empty means `assets/` beside the executable. A relative root is taken relative to the working directory when the store is made."},
+    };
+    void Fenrir_AssetsConfig_Visit(void* instance, Fenrir::FieldVisitor& visitor)
+    {
+        auto& value = *static_cast<Fenrir::AssetsConfig*>(instance);
+        visitor.Field(Fenrir_AssetsConfig_Fields[0], Fenrir::ValueRef(&value.root, Fenrir_AssetsConfig_Fields[0].type));
+    }
+    constexpr Fenrir::TypeDescription Fenrir_AssetsConfig{
+        .name = "Fenrir::AssetsConfig",
+        .package = "FenrirAssets",
+        .role = Fenrir::Role::Settings,
+        .size = sizeof(Fenrir::AssetsConfig),
+        .alignment = alignof(Fenrir::AssetsConfig),
+        .construct = &Fenrir::ConstructValue<Fenrir::AssetsConfig>,
+        .destroy = &Fenrir::DestroyValue<Fenrir::AssetsConfig>,
+        .doc = "How Assets::Install sets the asset store up.",
+        .fields = Fenrir_AssetsConfig_Fields,
+        .visit = &Fenrir_AssetsConfig_Visit,
+    };
+
     // Fenrir::LodSettings
     static_assert(sizeof(Fenrir::LodSettings) == 16 && alignof(Fenrir::LodSettings) == 4,
                   "Fenrir::LodSettings is not the layout FenrirAssets.api.json describes: regenerate the description, then this registration");
@@ -333,6 +356,11 @@ const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::AssetHandle<Fenrir::Skel
     return Fenrir::Generated::FenrirAssetsTypes::Fenrir_AssetHandle_Fenrir_Skeleton;
 }
 
+const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::AssetsConfig>::Description() noexcept
+{
+    return Fenrir::Generated::FenrirAssetsTypes::Fenrir_AssetsConfig;
+}
+
 const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::LodSettings>::Description() noexcept
 {
     return Fenrir::Generated::FenrirAssetsTypes::Fenrir_LodSettings;
@@ -382,6 +410,8 @@ bool Fenrir::Generated::RegisterFenrirAssetsTypes(Fenrir::TypeRegistry& registry
         registered = registry.Register(FenrirAssetsTypes::Fenrir_AssetHandle_Fenrir_Shader) && registered;
     if (registry.Find(FenrirAssetsTypes::Fenrir_AssetHandle_Fenrir_Skeleton.name) != &FenrirAssetsTypes::Fenrir_AssetHandle_Fenrir_Skeleton)
         registered = registry.Register(FenrirAssetsTypes::Fenrir_AssetHandle_Fenrir_Skeleton) && registered;
+    if (registry.Find(FenrirAssetsTypes::Fenrir_AssetsConfig.name) != &FenrirAssetsTypes::Fenrir_AssetsConfig)
+        registered = registry.Register(FenrirAssetsTypes::Fenrir_AssetsConfig) && registered;
     if (registry.Find(FenrirAssetsTypes::Fenrir_LodSettings.name) != &FenrirAssetsTypes::Fenrir_LodSettings)
         registered = registry.Register(FenrirAssetsTypes::Fenrir_LodSettings) && registered;
     if (registry.Find(FenrirAssetsTypes::Fenrir_SamplerFilter.name) != &FenrirAssetsTypes::Fenrir_SamplerFilter)

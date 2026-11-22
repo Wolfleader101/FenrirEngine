@@ -8,6 +8,7 @@
 #include "FenrirAssets/AssetHandle.hpp"
 #include "FenrirAssets/MaterialData.hpp"
 #include "FenrirAssets/MeshData.hpp"
+#include "FenrirAssets/AssetStore.hpp"
 
 #include "FenrirTypes/Describe.hpp"
 #include "FenrirTypes/TypeDescription.hpp"
@@ -40,6 +41,7 @@ namespace Fenrir::Generated::FenrirAssetsTypes
     extern const Fenrir::TypeDescription Fenrir_AssetHandle_Fenrir_Model;
     extern const Fenrir::TypeDescription Fenrir_AssetHandle_Fenrir_Shader;
     extern const Fenrir::TypeDescription Fenrir_AssetHandle_Fenrir_Skeleton;
+    extern const Fenrir::TypeDescription Fenrir_AssetsConfig;
     extern const Fenrir::TypeDescription Fenrir_LodSettings;
     extern const Fenrir::TypeDescription Fenrir_SamplerFilter;
     extern const Fenrir::TypeDescription Fenrir_SamplerWrap;
@@ -106,6 +108,13 @@ struct Fenrir::Describe<Fenrir::AssetHandle<Fenrir::Shader>>
 /** @brief The description of Fenrir::AssetHandle<Fenrir::Skeleton> that RegisterFenrirAssetsTypes adds. */
 template <>
 struct Fenrir::Describe<Fenrir::AssetHandle<Fenrir::Skeleton>>
+{
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of Fenrir::AssetsConfig that RegisterFenrirAssetsTypes adds. */
+template <>
+struct Fenrir::Describe<Fenrir::AssetsConfig>
 {
     static const Fenrir::TypeDescription& Description() noexcept;
 };

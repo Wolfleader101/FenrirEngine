@@ -4,6 +4,7 @@
 #include "../../include/FenrirWindow/Generated/FenrirWindowTypes.hpp"
 
 #include "FenrirTypes/FieldInfo.hpp"
+#include "FenrirTypes/FieldVisitor.hpp"
 #include "FenrirTypes/Kind.hpp"
 #include "FenrirTypes/TypeDescription.hpp"
 #include "FenrirTypes/TypeRegistry.hpp"
@@ -99,6 +100,40 @@ namespace Fenrir::Generated::FenrirWindowTypes
         .fields = Fenrir_WindowSize_Fields,
     };
 
+    // Fenrir::WindowConfig
+    constexpr Fenrir::FieldInfo Fenrir_WindowConfig_Fields[] = {
+        {.name = "title", .type = {.kind = Fenrir::Kind::String}, .doc = "The main window's title."},
+        {.name = "logicalSize", .type = {.kind = Fenrir::Kind::Struct, .type = &Fenrir_WindowSize}, .doc = "The main window's size in logical units; its pixel size is this times the content scale."},
+        {.name = "visible", .type = {.kind = Fenrir::Kind::Bool}, .doc = "False makes the main window hidden: for GL tests and offscreen tools. Present on it does nothing."},
+        {.name = "stopOnMainWindowClose", .type = {.kind = Fenrir::Kind::Bool}, .doc = "True stops the app (App::Stop) when the main window's close is requested. False leaves it to game code, which reads WindowCloseRequestedEvent (to ask \"save before quitting?\", say)."},
+        {.name = "minimisedFrameSleep", .type = {.kind = Fenrir::Kind::F64}, .doc = "Seconds slept at the end of PreUpdate while no window can be drawn (all minimised)."},
+        {.name = "unfocusedFrameSleep", .type = {.kind = Fenrir::Kind::F64}, .doc = "Seconds slept at the end of PreUpdate while no window has the input focus; 0 never sleeps."},
+        {.name = "textInputByDefault", .type = {.kind = Fenrir::Kind::Bool}, .doc = "True keeps SDL's text input on in each window, so typing sends TextEvent. A window where an input router claims textInput (ADR-0027) has it on, with the claim's caret, either way; a UI app sets this false."},
+    };
+    void Fenrir_WindowConfig_Visit(void* instance, Fenrir::FieldVisitor& visitor)
+    {
+        auto& value = *static_cast<Fenrir::WindowConfig*>(instance);
+        visitor.Field(Fenrir_WindowConfig_Fields[0], Fenrir::ValueRef(&value.title, Fenrir_WindowConfig_Fields[0].type));
+        visitor.Field(Fenrir_WindowConfig_Fields[1], Fenrir::ValueRef(&value.logicalSize, Fenrir_WindowConfig_Fields[1].type));
+        visitor.Field(Fenrir_WindowConfig_Fields[2], Fenrir::ValueRef(&value.visible, Fenrir_WindowConfig_Fields[2].type));
+        visitor.Field(Fenrir_WindowConfig_Fields[3], Fenrir::ValueRef(&value.stopOnMainWindowClose, Fenrir_WindowConfig_Fields[3].type));
+        visitor.Field(Fenrir_WindowConfig_Fields[4], Fenrir::ValueRef(&value.minimisedFrameSleep, Fenrir_WindowConfig_Fields[4].type));
+        visitor.Field(Fenrir_WindowConfig_Fields[5], Fenrir::ValueRef(&value.unfocusedFrameSleep, Fenrir_WindowConfig_Fields[5].type));
+        visitor.Field(Fenrir_WindowConfig_Fields[6], Fenrir::ValueRef(&value.textInputByDefault, Fenrir_WindowConfig_Fields[6].type));
+    }
+    constexpr Fenrir::TypeDescription Fenrir_WindowConfig{
+        .name = "Fenrir::WindowConfig",
+        .package = "FenrirWindow",
+        .role = Fenrir::Role::Settings,
+        .size = sizeof(Fenrir::WindowConfig),
+        .alignment = alignof(Fenrir::WindowConfig),
+        .construct = &Fenrir::ConstructValue<Fenrir::WindowConfig>,
+        .destroy = &Fenrir::DestroyValue<Fenrir::WindowConfig>,
+        .doc = "How Window::Install sets up FenrirWindow and the main window it will make.",
+        .fields = Fenrir_WindowConfig_Fields,
+        .visit = &Fenrir_WindowConfig_Visit,
+    };
+
     // Fenrir::WindowResizedEvent
     static_assert(sizeof(Fenrir::WindowResizedEvent) == 24 && alignof(Fenrir::WindowResizedEvent) == 4,
                   "Fenrir::WindowResizedEvent is not the layout FenrirWindow.api.json describes: regenerate the description, then this registration");
@@ -141,6 +176,11 @@ const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::WindowSize>::Description
     return Fenrir::Generated::FenrirWindowTypes::Fenrir_WindowSize;
 }
 
+const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::WindowConfig>::Description() noexcept
+{
+    return Fenrir::Generated::FenrirWindowTypes::Fenrir_WindowConfig;
+}
+
 const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::WindowResizedEvent>::Description() noexcept
 {
     return Fenrir::Generated::FenrirWindowTypes::Fenrir_WindowResizedEvent;
@@ -162,6 +202,8 @@ bool Fenrir::Generated::RegisterFenrirWindowTypes(Fenrir::TypeRegistry& registry
         registered = registry.Register(FenrirWindowTypes::Fenrir_WindowCloseRequestedEvent) && registered;
     if (registry.Find(FenrirWindowTypes::Fenrir_WindowSize.name) != &FenrirWindowTypes::Fenrir_WindowSize)
         registered = registry.Register(FenrirWindowTypes::Fenrir_WindowSize) && registered;
+    if (registry.Find(FenrirWindowTypes::Fenrir_WindowConfig.name) != &FenrirWindowTypes::Fenrir_WindowConfig)
+        registered = registry.Register(FenrirWindowTypes::Fenrir_WindowConfig) && registered;
     if (registry.Find(FenrirWindowTypes::Fenrir_WindowResizedEvent.name) != &FenrirWindowTypes::Fenrir_WindowResizedEvent)
         registered = registry.Register(FenrirWindowTypes::Fenrir_WindowResizedEvent) && registered;
     return registered;

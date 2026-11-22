@@ -12,6 +12,7 @@
 #include "FenrirPhysics/Events.hpp"
 #include "FenrirPhysics/Queries.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
+#include "FenrirPhysics/Physics.hpp"
 #include "FenrirECS/TypeAttachments.hpp"
 
 #include "FenrirMath/Generated/FenrirMathTypes.hpp"
@@ -63,6 +64,7 @@ namespace Fenrir::Generated::FenrirPhysicsTypes
     extern const Fenrir::TypeDescription Fenrir_CollisionShape;
     extern const Fenrir::TypeDescription Fenrir_Collider;
     extern const Fenrir::TypeDescription Fenrir_CollisionFilter;
+    extern const Fenrir::TypeDescription Fenrir_CollisionLayer;
     extern const Fenrir::TypeDescription Fenrir_Contact;
     extern const Fenrir::TypeDescription Fenrir_ContactBegin;
     extern const Fenrir::TypeDescription Fenrir_ContactEnd;
@@ -93,6 +95,7 @@ namespace Fenrir::Generated::FenrirPhysicsTypes
     extern const Fenrir::TypeDescription Fenrir_MoveCastHit;
     extern const Fenrir::TypeDescription Fenrir_OverlapHit;
     extern const Fenrir::TypeDescription Fenrir_PenetrationHit;
+    extern const Fenrir::TypeDescription Fenrir_PhysicsConfig;
     extern const Fenrir::TypeDescription Fenrir_PhysicsMaterial;
     extern const Fenrir::TypeDescription Fenrir_QueryFilter;
     extern const Fenrir::TypeDescription Fenrir_RaycastHit;
@@ -214,6 +217,13 @@ struct Fenrir::Describe<Fenrir::Collider>
 /** @brief The description of Fenrir::CollisionFilter that RegisterFenrirPhysicsTypes adds. */
 template <>
 struct Fenrir::Describe<Fenrir::CollisionFilter>
+{
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of Fenrir::CollisionLayer that RegisterFenrirPhysicsTypes adds. */
+template <>
+struct Fenrir::Describe<Fenrir::CollisionLayer>
 {
     static const Fenrir::TypeDescription& Description() noexcept;
 };
@@ -424,6 +434,13 @@ struct Fenrir::Describe<Fenrir::OverlapHit>
 /** @brief The description of Fenrir::PenetrationHit that RegisterFenrirPhysicsTypes adds. */
 template <>
 struct Fenrir::Describe<Fenrir::PenetrationHit>
+{
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of Fenrir::PhysicsConfig that RegisterFenrirPhysicsTypes adds. */
+template <>
+struct Fenrir::Describe<Fenrir::PhysicsConfig>
 {
     static const Fenrir::TypeDescription& Description() noexcept;
 };

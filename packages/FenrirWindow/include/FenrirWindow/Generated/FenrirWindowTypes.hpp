@@ -36,6 +36,7 @@ namespace Fenrir::Generated::FenrirWindowTypes
     extern const Fenrir::TypeDescription Fenrir_CursorShape;
     extern const Fenrir::TypeDescription Fenrir_WindowCloseRequestedEvent;
     extern const Fenrir::TypeDescription Fenrir_WindowSize;
+    extern const Fenrir::TypeDescription Fenrir_WindowConfig;
     extern const Fenrir::TypeDescription Fenrir_WindowResizedEvent;
 } // namespace Fenrir::Generated::FenrirWindowTypes
 
@@ -63,6 +64,13 @@ struct Fenrir::Describe<Fenrir::WindowCloseRequestedEvent>
 /** @brief The description of Fenrir::WindowSize that RegisterFenrirWindowTypes adds. */
 template <>
 struct Fenrir::Describe<Fenrir::WindowSize>
+{
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of Fenrir::WindowConfig that RegisterFenrirWindowTypes adds. */
+template <>
+struct Fenrir::Describe<Fenrir::WindowConfig>
 {
     static const Fenrir::TypeDescription& Description() noexcept;
 };

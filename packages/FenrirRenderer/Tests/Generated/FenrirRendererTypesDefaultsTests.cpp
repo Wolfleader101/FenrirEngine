@@ -422,6 +422,32 @@ TEST_CASE("Fenrir::RectLight, default-constructed through its registration, has 
     });
 }
 
+TEST_CASE("Fenrir::RendererConfig, default-constructed through its registration, has its description's defaults", "[types][defaults]")
+{
+    Fenrir::Testing::CheckDefaults(Fenrir::Describe<Fenrir::RendererConfig>::Description(), {
+        {"backend", std::int64_t{0}},
+        {"vsync", std::int64_t{1}},
+        {"msaa", std::int64_t{1}},
+        {"debugValidation", Fenrir::Testing::Empty{}},
+        {"framesInFlight", std::int64_t{2}},
+        {"automaticInstancing", true},
+        {"computeSkinning", true},
+        {"clusteredLights", true},
+        {"gpuCulling", true},
+        {"occlusionCulling", true},
+        {"lodErrorPixels", 1.0},
+        {"minProjectedPixels", 0.0},
+        {"shadowCascades", std::int64_t{4}},
+        {"shadowMapSize", std::int64_t{2048}},
+        {"shadowSplitLambda", 0.75},
+        {"spotShadowBudget", std::int64_t{8}},
+        {"spotShadowMapSize", std::int64_t{1024}},
+        {"pointShadowBudget", std::int64_t{4}},
+        {"pointShadowMapSize", std::int64_t{512}},
+        {"offscreenGroups2D", true},
+    });
+}
+
 TEST_CASE("Fenrir::RendererStats, default-constructed through its registration, has its description's defaults", "[types][defaults]")
 {
     Fenrir::Testing::CheckDefaults(Fenrir::Describe<Fenrir::RendererStats>::Description(), {

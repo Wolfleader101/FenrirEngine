@@ -14,6 +14,13 @@
 #include <limits>
 #include <string>
 
+TEST_CASE("Fenrir::AnimationConfig, default-constructed through its registration, has its description's defaults", "[types][defaults]")
+{
+    Fenrir::Testing::CheckDefaults(Fenrir::Describe<Fenrir::AnimationConfig>::Description(), {
+        {"maxEventsPerInstancePerFrame", std::int64_t{64}},
+    });
+}
+
 TEST_CASE("Fenrir::ClipEventId, default-constructed through its registration, has its description's defaults", "[types][defaults]")
 {
     Fenrir::Testing::CheckDefaults(Fenrir::Describe<Fenrir::ClipEventId>::Description(), {

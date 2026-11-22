@@ -158,6 +158,14 @@ TEST_CASE("Fenrir::CollisionFilter, default-constructed through its registration
     });
 }
 
+TEST_CASE("Fenrir::CollisionLayer, default-constructed through its registration, has its description's defaults", "[types][defaults]")
+{
+    Fenrir::Testing::CheckDefaults(Fenrir::Describe<Fenrir::CollisionLayer>::Description(), {
+        {"name", std::string("")},
+        {"mask", std::int64_t{4294967295}},
+    });
+}
+
 TEST_CASE("Fenrir::Contact, default-constructed through its registration, has its description's defaults", "[types][defaults]")
 {
     Fenrir::Testing::CheckDefaults(Fenrir::Describe<Fenrir::Contact>::Description(), {
@@ -530,6 +538,21 @@ TEST_CASE("Fenrir::PenetrationHit, default-constructed through its registration,
         {"normal.y", 0.0},
         {"normal.z", 0.0},
         {"depth", 0.0},
+    });
+}
+
+TEST_CASE("Fenrir::PhysicsConfig, default-constructed through its registration, has its description's defaults", "[types][defaults]")
+{
+    Fenrir::Testing::CheckDefaults(Fenrir::Describe<Fenrir::PhysicsConfig>::Description(), {
+        {"gravity.x", 0.0},
+        {"gravity.y", -9.81},
+        {"gravity.z", 0.0},
+        {"maxBodies", std::int64_t{65536}},
+        {"maxBodyPairs", std::int64_t{65536}},
+        {"maxContacts", std::int64_t{10240}},
+        {"collisionLayers", Fenrir::Testing::Empty{}},
+        {"useWorkerThreads", true},
+        {"interpolate", true},
     });
 }
 

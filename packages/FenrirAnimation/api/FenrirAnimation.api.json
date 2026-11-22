@@ -24,6 +24,20 @@
       ]
     },
     {
+      "name": "Fenrir::AnimationConfig",
+      "category": "struct",
+      "role": "settings",
+      "doc": "How `Animation::Install` sets FenrirAnimation up.",
+      "fields": [
+        {
+          "name": "maxEventsPerInstancePerFrame",
+          "kind": "u32",
+          "default": 64,
+          "doc": "The most animation events sent per skeleton instance per frame (ADR-0034). Crossings past it are counted into one `AnimationEventsDropped`."
+        }
+      ]
+    },
+    {
       "name": "Fenrir::AssetHandle<Fenrir::Clip>",
       "category": "bound-type",
       "role": "bound-type",

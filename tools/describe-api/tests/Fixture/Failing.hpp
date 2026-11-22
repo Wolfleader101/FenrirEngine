@@ -199,6 +199,33 @@ namespace Failing
         std::string name;
     };
 
+    struct TransientField
+    {
+        /** @transient */
+        float value = 0.0f;
+    };
+
+    enum class TransientTagKind : std::uint8_t
+    {
+        Number,
+        Count,
+    };
+
+    struct TransientTag
+    {
+        TransientTag() : kind(TransientTagKind::Number), number{}
+        {
+        }
+
+        /** @transient */
+        TransientTagKind kind;
+        union
+        {
+            float number;
+            std::int32_t count;
+        };
+    };
+
     struct ListedEvent
     {
         std::vector<float> values;

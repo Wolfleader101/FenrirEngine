@@ -578,9 +578,9 @@ namespace Fenrir
                     return StartupFailure{"the folder for the script copies could not be chosen", {}};
                 }
                 settings.hotReload = config.hotReload;
-                settings.reloadInterval = config.reloadInterval;
-                settings.reloadDebounce = config.reloadDebounce;
-                settings.unloadTimeout = config.unloadTimeout;
+                settings.reloadInterval = std::chrono::milliseconds(config.reloadInterval);
+                settings.reloadDebounce = std::chrono::milliseconds(config.reloadDebounce);
+                settings.unloadTimeout = std::chrono::milliseconds(config.unloadTimeout);
                 // The lifecycle knows nothing of what a generation holds: the State supplies that. It owns the
                 // lifecycle, so the raw pointer the hooks keep lives as long as they do.
                 State* const self = state.get();

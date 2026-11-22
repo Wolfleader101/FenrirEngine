@@ -4,6 +4,7 @@
 #include "../../include/FenrirRenderer/Generated/FenrirRendererTypes.hpp"
 
 #include "FenrirTypes/FieldInfo.hpp"
+#include "FenrirTypes/FieldVisitor.hpp"
 #include "FenrirTypes/Kind.hpp"
 #include "FenrirTypes/TypeDescription.hpp"
 #include "FenrirTypes/TypeRegistry.hpp"
@@ -622,6 +623,26 @@ namespace Fenrir::Generated::FenrirRendererTypes
         .fields = Fenrir_DirectionalLight_Fields,
     };
 
+    // Fenrir::GraphicsBackend
+    static_assert(sizeof(Fenrir::GraphicsBackend) == 1 && alignof(Fenrir::GraphicsBackend) == 1,
+                  "Fenrir::GraphicsBackend is not the layout FenrirRenderer.api.json describes: regenerate the description, then this registration");
+    constexpr Fenrir::Enumerator Fenrir_GraphicsBackend_Enumerators[] = {
+        {.name = "OpenGL", .value = 0, .doc = "OpenGL 4.6 core, on the main window's graphics surface."},
+        {.name = "Null", .value = 1, .doc = "Draws nothing and needs no window or GPU: for tests and headless apps."},
+    };
+    constexpr Fenrir::TypeDescription Fenrir_GraphicsBackend{
+        .name = "Fenrir::GraphicsBackend",
+        .package = "FenrirRenderer",
+        .role = Fenrir::Role::Enum,
+        .size = sizeof(Fenrir::GraphicsBackend),
+        .alignment = alignof(Fenrir::GraphicsBackend),
+        .construct = &Fenrir::ConstructValue<Fenrir::GraphicsBackend>,
+        .destroy = &Fenrir::DestroyValue<Fenrir::GraphicsBackend>,
+        .doc = "The graphics backend the renderer draws with, picked at install (ADR-0016).",
+        .enumerators = Fenrir_GraphicsBackend_Enumerators,
+        .underlying = Fenrir::Kind::U8,
+    };
+
     // Fenrir::InstancedMeshRenderer
     static_assert(sizeof(Fenrir::InstancedMeshRenderer) == 28 && alignof(Fenrir::InstancedMeshRenderer) == 4,
                   "Fenrir::InstancedMeshRenderer is not the layout FenrirRenderer.api.json describes: regenerate the description, then this registration");
@@ -730,6 +751,88 @@ namespace Fenrir::Generated::FenrirRendererTypes
         .destroy = &Fenrir::DestroyValue<Fenrir::RectLight>,
         .doc = "A glowing rectangle centred on its entity, `width` along its world +X and `height` along its world +Y, shining from its face towards its world -Z (and from its back too when `twoSided`), any number per scene (ADR-0048). Its highlights take its shape, blurring with the surface's roughness: it is shaded with linearly transformed cosines, and casts no shadows. Its intensity is its radiance: a white rect light of intensity 1 filling the view of a white rough face lights it about 1, and one subtending less lights it less, as the sky does. Its light is windowed smoothly to zero at `range` from the rectangle. The rectangle itself is not drawn: give it an emissive mesh to see it. A light that can light nothing (range, intensity, width or height 0, or black) is skipped.",
         .fields = Fenrir_RectLight_Fields,
+    };
+
+    // Fenrir::Vsync
+    static_assert(sizeof(Fenrir::Vsync) == 1 && alignof(Fenrir::Vsync) == 1,
+                  "Fenrir::Vsync is not the layout FenrirRenderer.api.json describes: regenerate the description, then this registration");
+    constexpr Fenrir::Enumerator Fenrir_Vsync_Enumerators[] = {
+        {.name = "Off", .value = 0, .doc = "Presents at once; frames may tear."},
+        {.name = "On", .value = 1, .doc = "Waits for vertical sync."},
+        {.name = "Adaptive", .value = 2, .doc = "Waits for vertical sync unless the frame is late, which then tears instead of waiting."},
+    };
+    constexpr Fenrir::TypeDescription Fenrir_Vsync{
+        .name = "Fenrir::Vsync",
+        .package = "FenrirRenderer",
+        .role = Fenrir::Role::Enum,
+        .size = sizeof(Fenrir::Vsync),
+        .alignment = alignof(Fenrir::Vsync),
+        .construct = &Fenrir::ConstructValue<Fenrir::Vsync>,
+        .destroy = &Fenrir::DestroyValue<Fenrir::Vsync>,
+        .doc = "How presenting waits for the display.",
+        .enumerators = Fenrir_Vsync_Enumerators,
+        .underlying = Fenrir::Kind::U8,
+    };
+
+    // Fenrir::RendererConfig
+    constexpr Fenrir::ValueType Fenrir_RendererConfig_debugValidation_Element{.kind = Fenrir::Kind::Bool};
+    constexpr Fenrir::FieldInfo Fenrir_RendererConfig_Fields[] = {
+        {.name = "backend", .type = {.kind = Fenrir::Kind::Enum, .type = &Fenrir_GraphicsBackend}, .doc = "The backend; one that cannot start fails Install, never falling back to another."},
+        {.name = "vsync", .type = {.kind = Fenrir::Kind::Enum, .type = &Fenrir_Vsync}, .doc = "Changeable later with Renderer::SetVsync. A mode the surface lacks falls back to `On`, logged."},
+        {.name = "msaa", .type = {.kind = Fenrir::Kind::U32}, .doc = "Samples per pixel of every view's scene targets, resolved in Output: 1 (off), 2, 4 or 8. Another count uses the largest of those below it, logged."},
+        {.name = "debugValidation", .type = {.kind = Fenrir::Kind::Optional, .element = &Fenrir_RendererConfig_debugValidation_Element, .optional = &Fenrir::OptionalOperationsOf<decltype(Fenrir::RendererConfig::debugValidation)::value_type>}, .doc = "Whether the graphics API reports misuse to the app's logger; costly. Empty means the build's default, DebugValidationByDefault: on in Debug builds, off in Release. Empty by default so the default is the same in every build, as a description and a project file record it."},
+        {.name = "framesInFlight", .type = {.kind = Fenrir::Kind::U32}, .doc = "How many frames the GPU may still be drawing while the next is recorded (ADR-0019)."},
+        {.name = "automaticInstancing", .type = {.kind = Fenrir::Kind::Bool}, .doc = "Whether consecutive opaque and masked MeshRenderers with the same pipeline, material and mesh draw as one instanced draw (ADR-0051); off draws each on its own, for comparison. Changeable later with Renderer::SetAutomaticInstancing."},
+        {.name = "computeSkinning", .type = {.kind = Fenrir::Kind::Bool}, .doc = "Whether each skinned mesh is skinned once a frame by a compute pass, which every pass then draws rigidly (ADR-0050); off, every draw of it skins it in its vertex stage, under its shader's `SKINNED` variant (ADR-0035). Changeable later with Renderer::SetComputeSkinning."},
+        {.name = "clusteredLights", .type = {.kind = Fenrir::Kind::Bool}, .doc = "Whether each camera's PointLights, SpotLights and RectLights are clustered (ADR-0049): a compute pass a view lists them in 16 x 9 x 24 clusters of its frustum by range, and each pixel lights by its cluster's lights only; off, every pixel loops over every light, for comparison. Changeable later with Renderer::SetClusteredLights."},
+        {.name = "gpuCulling", .type = {.kind = Fenrir::Kind::Bool}, .doc = "Whether each camera's cull pass drops the opaque and masked copies outside its frustum on the GPU (ADR-0057): each candidate's bounding sphere, then its box's eight corners, against the camera's planes; off, the pass keeps every candidate, for comparison, and only the coarse cull of whole entities on the CPU culls. Changeable later with Renderer::SetGpuCulling."},
+        {.name = "occlusionCulling", .type = {.kind = Fenrir::Kind::Bool}, .doc = "Whether each camera's cull pass also drops the copies hidden behind others (ADR-0057): what was visible last frame is drawn into the depth prepass first, a Hi-Z pyramid is built from it, and the rest are tested against it before they are drawn, so a copy wholly behind a wall costs no shading. Off, every copy inside the frustum is drawn, for comparison; off with `gpuCulling` off. Shadow views never cull by occlusion. Changeable later with Renderer::SetOcclusionCulling."},
+        {.name = "lodErrorPixels", .type = {.kind = Fenrir::Kind::F32}, .doc = "How many pixels a level of detail's error may project to (ADR-0057): each camera's cull pass draws each copy of a mesh with levels (`MeshData::lods`) at the coarsest level whose error, scaled by the copy's largest axis scale and projected at its distance from the camera, is under this; 1 by default, so no level departs from full detail by a pixel. With `gpuCulling` off every copy draws level 0, for comparison."},
+        {.name = "minProjectedPixels", .type = {.kind = Fenrir::Kind::F32}, .doc = "The pixels a copy's bounding sphere's radius must project to for the cull pass to draw it at all (ADR-0057): smaller copies are dropped as if outside the camera. 0 by default, dropping none; off with `gpuCulling` off."},
+        {.name = "shadowCascades", .type = {.kind = Fenrir::Kind::U32}, .doc = "How many shadow cascades the DirectionalLight has per camera (ADR-0050): 1 to 4, 4 by default."},
+        {.name = "shadowMapSize", .type = {.kind = Fenrir::Kind::U32}, .doc = "The side of each cascade's shadow map, in texels: 2048 by default. Each camera's maps sit side by side in one depth texture, so its width (this times shadowCascades) must be within the GPU's largest."},
+        {.name = "shadowSplitLambda", .type = {.kind = Fenrir::Kind::F32}, .doc = "How the cascades split the shadow distance (the practical scheme): 0 evenly, 1 logarithmically, so the nearest cascades are smallest and sharpest. 0.75 by default."},
+        {.name = "spotShadowBudget", .type = {.kind = Fenrir::Kind::U32}, .doc = "How many SpotLights may cast shadows in a frame (ADR-0050): 8 by default, the nearest to any camera each frame; the rest light unshadowed, warned about once. 0 shadows none. Changeable later with Renderer::SetSpotShadowBudget."},
+        {.name = "spotShadowMapSize", .type = {.kind = Fenrir::Kind::U32}, .doc = "The side of each shadowed spot light's tile of the spot shadow atlas, in texels: 1024 by default. The atlas is a grid of the budget's tiles, ceil(sqrt(budget)) across, which must be within the GPU's largest."},
+        {.name = "pointShadowBudget", .type = {.kind = Fenrir::Kind::U32}, .doc = "How many PointLights may cast shadows in a frame (ADR-0050): 4 by default, the nearest to any camera each frame; the rest light unshadowed, warned about once. 0 shadows none. Changeable later with Renderer::SetPointShadowBudget."},
+        {.name = "pointShadowMapSize", .type = {.kind = Fenrir::Kind::U32}, .doc = "The side of each face of each shadowed point light's cube, in texels: 512 by default. The cubes are one cube array of the budget's cubes."},
+        {.name = "offscreenGroups2D", .type = {.kind = Fenrir::Kind::Bool}, .doc = "Whether 2D draw lists' offscreen groups are realised (ADR-0060): each drawn into a transient image and composited through its opacity, blend, filter or mask. Off, a group's commands draw flat into the target around it, its composite and filter ignored, and a mask's shape is not drawn and masks nothing."},
+    };
+    void Fenrir_RendererConfig_Visit(void* instance, Fenrir::FieldVisitor& visitor)
+    {
+        auto& value = *static_cast<Fenrir::RendererConfig*>(instance);
+        visitor.Field(Fenrir_RendererConfig_Fields[0], Fenrir::ValueRef(&value.backend, Fenrir_RendererConfig_Fields[0].type));
+        visitor.Field(Fenrir_RendererConfig_Fields[1], Fenrir::ValueRef(&value.vsync, Fenrir_RendererConfig_Fields[1].type));
+        visitor.Field(Fenrir_RendererConfig_Fields[2], Fenrir::ValueRef(&value.msaa, Fenrir_RendererConfig_Fields[2].type));
+        visitor.Field(Fenrir_RendererConfig_Fields[3], Fenrir::ValueRef(&value.debugValidation, Fenrir_RendererConfig_Fields[3].type));
+        visitor.Field(Fenrir_RendererConfig_Fields[4], Fenrir::ValueRef(&value.framesInFlight, Fenrir_RendererConfig_Fields[4].type));
+        visitor.Field(Fenrir_RendererConfig_Fields[5], Fenrir::ValueRef(&value.automaticInstancing, Fenrir_RendererConfig_Fields[5].type));
+        visitor.Field(Fenrir_RendererConfig_Fields[6], Fenrir::ValueRef(&value.computeSkinning, Fenrir_RendererConfig_Fields[6].type));
+        visitor.Field(Fenrir_RendererConfig_Fields[7], Fenrir::ValueRef(&value.clusteredLights, Fenrir_RendererConfig_Fields[7].type));
+        visitor.Field(Fenrir_RendererConfig_Fields[8], Fenrir::ValueRef(&value.gpuCulling, Fenrir_RendererConfig_Fields[8].type));
+        visitor.Field(Fenrir_RendererConfig_Fields[9], Fenrir::ValueRef(&value.occlusionCulling, Fenrir_RendererConfig_Fields[9].type));
+        visitor.Field(Fenrir_RendererConfig_Fields[10], Fenrir::ValueRef(&value.lodErrorPixels, Fenrir_RendererConfig_Fields[10].type));
+        visitor.Field(Fenrir_RendererConfig_Fields[11], Fenrir::ValueRef(&value.minProjectedPixels, Fenrir_RendererConfig_Fields[11].type));
+        visitor.Field(Fenrir_RendererConfig_Fields[12], Fenrir::ValueRef(&value.shadowCascades, Fenrir_RendererConfig_Fields[12].type));
+        visitor.Field(Fenrir_RendererConfig_Fields[13], Fenrir::ValueRef(&value.shadowMapSize, Fenrir_RendererConfig_Fields[13].type));
+        visitor.Field(Fenrir_RendererConfig_Fields[14], Fenrir::ValueRef(&value.shadowSplitLambda, Fenrir_RendererConfig_Fields[14].type));
+        visitor.Field(Fenrir_RendererConfig_Fields[15], Fenrir::ValueRef(&value.spotShadowBudget, Fenrir_RendererConfig_Fields[15].type));
+        visitor.Field(Fenrir_RendererConfig_Fields[16], Fenrir::ValueRef(&value.spotShadowMapSize, Fenrir_RendererConfig_Fields[16].type));
+        visitor.Field(Fenrir_RendererConfig_Fields[17], Fenrir::ValueRef(&value.pointShadowBudget, Fenrir_RendererConfig_Fields[17].type));
+        visitor.Field(Fenrir_RendererConfig_Fields[18], Fenrir::ValueRef(&value.pointShadowMapSize, Fenrir_RendererConfig_Fields[18].type));
+        visitor.Field(Fenrir_RendererConfig_Fields[19], Fenrir::ValueRef(&value.offscreenGroups2D, Fenrir_RendererConfig_Fields[19].type));
+    }
+    constexpr Fenrir::TypeDescription Fenrir_RendererConfig{
+        .name = "Fenrir::RendererConfig",
+        .package = "FenrirRenderer",
+        .role = Fenrir::Role::Settings,
+        .size = sizeof(Fenrir::RendererConfig),
+        .alignment = alignof(Fenrir::RendererConfig),
+        .construct = &Fenrir::ConstructValue<Fenrir::RendererConfig>,
+        .destroy = &Fenrir::DestroyValue<Fenrir::RendererConfig>,
+        .doc = "How Renderer::Install sets the renderer up. There are no tuning settings and no native escape hatch.",
+        .fields = Fenrir_RendererConfig_Fields,
+        .visit = &Fenrir_RendererConfig_Visit,
     };
 
     // Fenrir::RendererStats
@@ -1036,6 +1139,11 @@ const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::DirectionalLight>::Descr
     return Fenrir::Generated::FenrirRendererTypes::Fenrir_DirectionalLight;
 }
 
+const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::GraphicsBackend>::Description() noexcept
+{
+    return Fenrir::Generated::FenrirRendererTypes::Fenrir_GraphicsBackend;
+}
+
 const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::InstancedMeshRenderer>::Description() noexcept
 {
     return Fenrir::Generated::FenrirRendererTypes::Fenrir_InstancedMeshRenderer;
@@ -1059,6 +1167,16 @@ const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::PointLight>::Description
 const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::RectLight>::Description() noexcept
 {
     return Fenrir::Generated::FenrirRendererTypes::Fenrir_RectLight;
+}
+
+const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::Vsync>::Description() noexcept
+{
+    return Fenrir::Generated::FenrirRendererTypes::Fenrir_Vsync;
+}
+
+const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::RendererConfig>::Description() noexcept
+{
+    return Fenrir::Generated::FenrirRendererTypes::Fenrir_RendererConfig;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::RendererStats>::Description() noexcept
@@ -1164,6 +1282,8 @@ bool Fenrir::Generated::RegisterFenrirRendererTypes(Fenrir::TypeRegistry& regist
         registered = registry.Register(FenrirRendererTypes::Fenrir_CubemapSky) && registered;
     if (registry.Find(FenrirRendererTypes::Fenrir_DirectionalLight.name) != &FenrirRendererTypes::Fenrir_DirectionalLight)
         registered = registry.Register(FenrirRendererTypes::Fenrir_DirectionalLight) && Fenrir::AttachComponent<Fenrir::DirectionalLight>(registry, FenrirRendererTypes::Fenrir_DirectionalLight) && registered;
+    if (registry.Find(FenrirRendererTypes::Fenrir_GraphicsBackend.name) != &FenrirRendererTypes::Fenrir_GraphicsBackend)
+        registered = registry.Register(FenrirRendererTypes::Fenrir_GraphicsBackend) && registered;
     if (registry.Find(FenrirRendererTypes::Fenrir_InstancedMeshRenderer.name) != &FenrirRendererTypes::Fenrir_InstancedMeshRenderer)
         registered = registry.Register(FenrirRendererTypes::Fenrir_InstancedMeshRenderer) && Fenrir::AttachComponent<Fenrir::InstancedMeshRenderer>(registry, FenrirRendererTypes::Fenrir_InstancedMeshRenderer) && registered;
     if (registry.Find(FenrirRendererTypes::Fenrir_MeshRenderer.name) != &FenrirRendererTypes::Fenrir_MeshRenderer)
@@ -1174,6 +1294,10 @@ bool Fenrir::Generated::RegisterFenrirRendererTypes(Fenrir::TypeRegistry& regist
         registered = registry.Register(FenrirRendererTypes::Fenrir_PointLight) && Fenrir::AttachComponent<Fenrir::PointLight>(registry, FenrirRendererTypes::Fenrir_PointLight) && registered;
     if (registry.Find(FenrirRendererTypes::Fenrir_RectLight.name) != &FenrirRendererTypes::Fenrir_RectLight)
         registered = registry.Register(FenrirRendererTypes::Fenrir_RectLight) && Fenrir::AttachComponent<Fenrir::RectLight>(registry, FenrirRendererTypes::Fenrir_RectLight) && registered;
+    if (registry.Find(FenrirRendererTypes::Fenrir_Vsync.name) != &FenrirRendererTypes::Fenrir_Vsync)
+        registered = registry.Register(FenrirRendererTypes::Fenrir_Vsync) && registered;
+    if (registry.Find(FenrirRendererTypes::Fenrir_RendererConfig.name) != &FenrirRendererTypes::Fenrir_RendererConfig)
+        registered = registry.Register(FenrirRendererTypes::Fenrir_RendererConfig) && registered;
     if (registry.Find(FenrirRendererTypes::Fenrir_RendererStats.name) != &FenrirRendererTypes::Fenrir_RendererStats)
         registered = registry.Register(FenrirRendererTypes::Fenrir_RendererStats) && registered;
     if (registry.Find(FenrirRendererTypes::Fenrir_SkinnedMesh.name) != &FenrirRendererTypes::Fenrir_SkinnedMesh)

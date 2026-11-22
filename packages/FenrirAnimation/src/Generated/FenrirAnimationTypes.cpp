@@ -4,6 +4,7 @@
 #include "../../include/FenrirAnimation/Generated/FenrirAnimationTypes.hpp"
 
 #include "FenrirTypes/FieldInfo.hpp"
+#include "FenrirTypes/FieldVisitor.hpp"
 #include "FenrirTypes/Kind.hpp"
 #include "FenrirTypes/TypeDescription.hpp"
 #include "FenrirTypes/TypeRegistry.hpp"
@@ -31,6 +32,28 @@ namespace Fenrir::Generated::FenrirAnimationTypes
         .doc = "What an additive layer's clip is measured from (ADR-0036).",
         .enumerators = Fenrir_AdditiveReference_Enumerators,
         .underlying = Fenrir::Kind::U8,
+    };
+
+    // Fenrir::AnimationConfig
+    constexpr Fenrir::FieldInfo Fenrir_AnimationConfig_Fields[] = {
+        {.name = "maxEventsPerInstancePerFrame", .type = {.kind = Fenrir::Kind::U32}, .doc = "The most animation events sent per skeleton instance per frame (ADR-0034). Crossings past it are counted into one `AnimationEventsDropped`."},
+    };
+    void Fenrir_AnimationConfig_Visit(void* instance, Fenrir::FieldVisitor& visitor)
+    {
+        auto& value = *static_cast<Fenrir::AnimationConfig*>(instance);
+        visitor.Field(Fenrir_AnimationConfig_Fields[0], Fenrir::ValueRef(&value.maxEventsPerInstancePerFrame, Fenrir_AnimationConfig_Fields[0].type));
+    }
+    constexpr Fenrir::TypeDescription Fenrir_AnimationConfig{
+        .name = "Fenrir::AnimationConfig",
+        .package = "FenrirAnimation",
+        .role = Fenrir::Role::Settings,
+        .size = sizeof(Fenrir::AnimationConfig),
+        .alignment = alignof(Fenrir::AnimationConfig),
+        .construct = &Fenrir::ConstructValue<Fenrir::AnimationConfig>,
+        .destroy = &Fenrir::DestroyValue<Fenrir::AnimationConfig>,
+        .doc = "How `Animation::Install` sets FenrirAnimation up.",
+        .fields = Fenrir_AnimationConfig_Fields,
+        .visit = &Fenrir_AnimationConfig_Visit,
     };
 
     // Fenrir::ClipEventId
@@ -278,6 +301,11 @@ const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::AdditiveReference>::Desc
     return Fenrir::Generated::FenrirAnimationTypes::Fenrir_AdditiveReference;
 }
 
+const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::AnimationConfig>::Description() noexcept
+{
+    return Fenrir::Generated::FenrirAnimationTypes::Fenrir_AnimationConfig;
+}
+
 const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::ClipEventId>::Description() noexcept
 {
     return Fenrir::Generated::FenrirAnimationTypes::Fenrir_ClipEventId;
@@ -344,6 +372,8 @@ bool Fenrir::Generated::RegisterFenrirAnimationTypes(Fenrir::TypeRegistry& regis
     // registers nothing; one that registers goes to its role's hook, which hangs its attachments.
     if (registry.Find(FenrirAnimationTypes::Fenrir_AdditiveReference.name) != &FenrirAnimationTypes::Fenrir_AdditiveReference)
         registered = registry.Register(FenrirAnimationTypes::Fenrir_AdditiveReference) && registered;
+    if (registry.Find(FenrirAnimationTypes::Fenrir_AnimationConfig.name) != &FenrirAnimationTypes::Fenrir_AnimationConfig)
+        registered = registry.Register(FenrirAnimationTypes::Fenrir_AnimationConfig) && registered;
     if (registry.Find(FenrirAnimationTypes::Fenrir_ClipEventId.name) != &FenrirAnimationTypes::Fenrir_ClipEventId)
         registered = registry.Register(FenrirAnimationTypes::Fenrir_ClipEventId) && registered;
     if (registry.Find(FenrirAnimationTypes::Fenrir_AnimationEvent.name) != &FenrirAnimationTypes::Fenrir_AnimationEvent)

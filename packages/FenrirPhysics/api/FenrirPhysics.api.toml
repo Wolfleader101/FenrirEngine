@@ -9,6 +9,7 @@ headers = [
     "../include/FenrirPhysics/Events.hpp",
     "../include/FenrirPhysics/Queries.hpp",
     "../include/FenrirPhysics/PhysicsWorld.hpp",
+    "../include/FenrirPhysics/Physics.hpp",
 ]
 
 [types]
@@ -47,6 +48,9 @@ headers = [
 "Fenrir::JointFrames" = "shared-struct"
 "Fenrir::JointState" = "shared-struct"
 
+# Physics::Install's config, which a project file fills (ADR-0084); its collision layers are described through it.
+"Fenrir::PhysicsConfig" = "settings"
+
 # Types every binding has its own of.
 "Fenrir::Math::Vec3" = "bound-type"
 "Fenrir::Math::Quat" = "bound-type"
@@ -68,6 +72,7 @@ includes = [
     "FenrirPhysics/Events.hpp",
     "FenrirPhysics/Queries.hpp",
     "FenrirPhysics/PhysicsWorld.hpp",
+    "FenrirPhysics/Physics.hpp",
     "FenrirECS/TypeAttachments.hpp",
 ]
 uses = ["../../FenrirMath/api/FenrirMath.api.toml"]

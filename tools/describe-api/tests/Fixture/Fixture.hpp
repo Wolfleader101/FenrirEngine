@@ -6,6 +6,7 @@
 #include <array>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <limits>
 #include <numbers>
 #include <optional>
@@ -531,5 +532,10 @@ namespace Fixture
         std::string label{};
         /** @brief A number beside them. */
         std::uint32_t threads = 4;
+        /**
+         * @brief Code wiring no file holds: left out of the fields, its type never read.
+         * @transient
+         */
+        std::vector<std::function<void()>> hooks;
     };
 } // namespace Fixture

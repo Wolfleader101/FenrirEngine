@@ -14,9 +14,18 @@
 #include <limits>
 #include <string>
 
-TEST_CASE("FenrirScripting describes no struct whose defaults are recorded", "[types][defaults]")
+TEST_CASE("Fenrir::ScriptingConfig, default-constructed through its registration, has its description's defaults", "[types][defaults]")
 {
-    SUCCEED();
+    Fenrir::Testing::CheckDefaults(Fenrir::Describe<Fenrir::ScriptingConfig>::Description(), {
+        {"scriptAssembly", std::string("")},
+        {"bridgeDirectory", std::string("")},
+        {"dotnetRoot", std::string("")},
+        {"hotReload", true},
+        {"reloadDirectory", std::string("")},
+        {"reloadInterval", std::int64_t{250}},
+        {"reloadDebounce", std::int64_t{400}},
+        {"unloadTimeout", std::int64_t{2000}},
+    });
 }
 
 // clang-format on

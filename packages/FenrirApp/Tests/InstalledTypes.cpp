@@ -26,6 +26,7 @@
 
 #if FENRIR_APP_TESTS_RENDERER
 #include "FenrirRenderer/Components.hpp"
+#include "FenrirRenderer/Generated/FenrirRendererTypes.hpp"
 #include "FenrirRenderer/Renderer.hpp"
 #endif
 
@@ -137,6 +138,16 @@ TEST_CASE("After Renderer::Install the registry knows the sky as a scene resourc
     REQUIRE(sky != nullptr);
     INFO("the sky is a scene resource by FenrirRenderer's selection");
     REQUIRE(sky->role == Fenrir::Role::SceneResource);
+}
+
+TEST_CASE("Describe<RendererConfig> is the description Renderer::Install registers", "[types]")
+{
+    InstalledApp installed;
+
+    INFO("Describe<T> and the registration should yield the same description object, so a config filled before "
+         "Install is the type the registry knows");
+    REQUIRE(installed.Registry().Find("Fenrir::RendererConfig") ==
+            &Fenrir::Describe<Fenrir::RendererConfig>::Description());
 }
 #endif
 

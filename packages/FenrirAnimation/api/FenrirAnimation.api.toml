@@ -22,6 +22,9 @@ headers = [
 # The plain data its natives give by pointer.
 "Fenrir::PlaybackInfo" = "shared-struct"
 
+# Animation::Install's config, which a project file fills (ADR-0084).
+"Fenrir::AnimationConfig" = "settings"
+
 # Held by no shared type, but taken by the bone mask natives: FenrirAssets's, described all the same.
 "Fenrir::MaskScope" = "enum"
 

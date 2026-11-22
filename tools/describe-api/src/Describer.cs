@@ -381,7 +381,13 @@ internal sealed class Describer
         {
             try
             {
-                described.Add(DescribeField(name, field));
+                var fieldDoc = FieldDoc(field, $"{name}::{field.Name}");
+                if (LeavesOutAsTransient(name, field, fieldDoc, pending.Role))
+                {
+                    continue;
+                }
+
+                described.Add(DescribeField(name, field, fieldDoc));
             }
             catch (DescribeException exception)
             {
@@ -502,7 +508,32 @@ internal sealed class Describer
         fields.Count == 2 && fields[0].Type.CanonicalType.Handle.kind == CXTypeKind.CXType_Enum &&
         fields[1].IsAnonymousStructOrUnion && fields[1].Type.CanonicalType.AsCXXRecordDecl is { IsUnion: true };
 
-    private FieldDescription DescribeField(string typeName, FieldDecl field)
+    /// <summary>
+    /// Whether a field is left out because <c>@transient</c> marks it: code wiring (a list of callbacks, say) that a data
+    /// asset or settings type holds and no file does, its type never read. Those two roles are reached by member, so a
+    /// field left out costs nothing; every other role's fields are its layout, which a binding mirrors whole, and a field
+    /// marked there throws.
+    /// </summary>
+    private bool LeavesOutAsTransient(string typeName, FieldDecl field, DocComment.FieldDoc doc, Role role)
+    {
+        var subject = $"{typeName}::{field.Name}";
+        if (!doc.Transient)
+        {
+            return false;
+        }
+
+        if (role is Role.DataAsset or Role.Settings)
+        {
+            return true;
+        }
+
+        var phrase = Roles.Phrase(role);
+        throw Error(field, subject,
+                    $"@transient on a field, which {phrase} cannot leave out: a field marked @transient is code wiring " +
+                    $"a data asset or settings type holds, and {phrase}'s fields are its layout");
+    }
+
+    private FieldDescription DescribeField(string typeName, FieldDecl field, DocComment.FieldDoc doc)
     {
         if (field.IsAnonymousStructOrUnion)
         {
@@ -533,13 +564,17 @@ internal sealed class Describer
 
         var value = IsHandle(field.Type) ? HandleDefault(type, field.InClassInitializer, field, subject)
                                          : Default(type, field.InClassInitializer, field, subject);
-        return Field(field, subject, type, value);
+        return Field(field, subject, type, value, doc);
     }
 
+    /// <summary>A field's doc comment, split into its text and doc commands, a malformed command failing naming it.</summary>
+    private DocComment.FieldDoc FieldDoc(FieldDecl field, string subject) =>
+        WithDocCommandDiagnostics(field, subject, () => DocComment.Field(RawDoc(field)));
+
     /// <summary>A field's description, with what its doc commands give; an owning kind's has no offset.</summary>
-    private FieldDescription Field(FieldDecl field, string subject, FieldType type, DefaultValue value)
+    private FieldDescription Field(FieldDecl field, string subject, FieldType type, DefaultValue value,
+                                   DocComment.FieldDoc doc)
     {
-        var doc = WithDocCommandDiagnostics(field, subject, () => DocComment.Field(RawDoc(field)));
         return new FieldDescription(field.Name, type.IsOwning ? null : Offset(field), type, value, doc.Text)
         {
             Formerly = doc.Formerly,
@@ -614,7 +649,14 @@ internal sealed class Describer
 
         var defaultKind = DefaultKind(record, name, kindNames);
         var tagDefault = new DefaultValue.Text(kinds.First(kind => kind.Name == defaultKind).Tag);
-        var tag = Field(tagField, $"{name}::{tagField.Name}", tagType, tagDefault);
+        var tagSubject = $"{name}::{tagField.Name}";
+        var tagDoc = FieldDoc(tagField, tagSubject);
+        if (tagDoc.Transient)
+        {
+            throw Error(tagField, tagSubject, "@transient on a tagged union's tag, which the union cannot leave out");
+        }
+
+        var tag = Field(tagField, tagSubject, tagType, tagDefault, tagDoc);
         return new TaggedUnionDescription(name, size, alignment, doc, role, tag, Offset(unionField), kinds, defaultKind);
     }
 
