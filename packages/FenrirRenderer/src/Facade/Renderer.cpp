@@ -31,7 +31,9 @@
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirECS/WorldTransform.hpp"
+#include "FenrirRenderer/Generated/FenrirRendererTypes.hpp"
 #include "FenrirScene/Scene.hpp"
+#include "FenrirTypes/TypeRegistry.hpp"
 #include "FenrirWindow/Window.hpp"
 
 namespace Fenrir
@@ -1657,6 +1659,9 @@ namespace Fenrir
 
     Renderer Renderer::Install(App& app, RendererConfig config)
     {
+        // Its types first (ADR-0074), before any resource or system: a second Install registers nothing again.
+        Generated::RegisterFenrirRendererTypes(app.GetResource<TypeRegistry>());
+
         AssetStore* store = app.TryGetResource<AssetStore>();
         if (store == nullptr)
         {

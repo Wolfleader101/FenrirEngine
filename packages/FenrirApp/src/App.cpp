@@ -1,5 +1,11 @@
 #include "FenrirApp/App.hpp"
 
+#include "FenrirApp/Generated/FenrirAppTypes.hpp"
+#include "FenrirECS/Generated/FenrirECSTypes.hpp"
+#include "FenrirMath/Generated/FenrirMathTypes.hpp"
+#include "FenrirTypes/TypeRegistry.hpp"
+
+#include <string_view>
 #include <thread>
 
 namespace Fenrir
@@ -12,6 +18,13 @@ namespace Fenrir
     App::App(std::unique_ptr<ILogger> logger, std::size_t workerThreads)
         : m_time(), m_scheduler(workerThreads), m_logger(std::move(logger)), m_scenes(), m_eventQueues()
     {
+        // The type registry first (ADR-0074), holding the packages beneath Install before any scene exists: FenrirMath,
+        // FenrirECS (whose registration runs FenrirMath's first) and FenrirApp. FenrirScene describes none.
+        auto& types = AddResource<TypeRegistry>([this](std::string_view message) { m_logger->Error("{}", message); });
+        Generated::RegisterFenrirMathTypes(types);
+        Generated::RegisterFenrirECSTypes(types);
+        Generated::RegisterFenrirAppTypes(types);
+
         m_scenes.push_back(std::make_unique<Scene>("Default"));
     }
 

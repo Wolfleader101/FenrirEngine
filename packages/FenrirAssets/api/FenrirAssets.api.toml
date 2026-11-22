@@ -26,3 +26,13 @@ headers = [
 "Fenrir::AssetHandle<Fenrir::Clip>" = "bound-type"
 "Fenrir::AssetHandle<Fenrir::BoneMask>" = "bound-type"
 "Fenrir::AssetHandle<Fenrir::InstanceList>" = "bound-type"
+
+# What tools/generate-type-registry writes for the package (ADR-0074): its types' descriptions, the function registering
+# them, compiled into FenrirAssets, and the test that their registered descriptions construct the defaults the
+# description records.
+[registration]
+header = "../include/FenrirAssets/Generated/FenrirAssetsTypes.hpp"
+source = "../src/Generated/FenrirAssetsTypes.cpp"
+test = "../Tests/Generated/FenrirAssetsTypesDefaultsTests.cpp"
+function = "Fenrir::Generated::RegisterFenrirAssetsTypes"
+includes = ["FenrirAssets/AssetHandle.hpp", "FenrirAssets/MaterialData.hpp", "FenrirAssets/MeshData.hpp"]

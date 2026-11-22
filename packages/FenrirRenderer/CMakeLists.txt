@@ -13,6 +13,8 @@
 #   directory, but never links FenrirAssets or sees its store (ADR-0023).
 # - FenrirRenderer: the ECS facade (include/, src/Facade): Renderer::Install, the components and the Render system.
 #   The only public target, and the only one that links FenrirWindow, PRIVATE.
+# It registers its described types with FenrirTypes' type registry (ADR-0074), through the generated registration
+# it compiles, so it links FenrirTypes PUBLIC: the generated header, public, gives a game Describe<T>.
 add_subdirectory(Tools/ShaderCompiler)
 add_subdirectory(libs/glad)
 add_subdirectory(libs/stb_truetype)
@@ -239,3 +241,9 @@ endif()
 # Its shared types (ADR-0042): `cmake --build <dir> --target fenrir-describe-api` regenerates api/FenrirRenderer.api.json,
 # which FenrirRendererScripting's binding binds.
 fenrir_describe_api(FenrirRenderer api/FenrirRenderer.api.toml)
+# Its type registration (ADR-0074), from that description: `cmake --build <dir> --target
+# fenrir-generate-type-registry` regenerates include/FenrirRenderer/Generated/ and src/Generated/.
+fenrir_generate_type_registry(FenrirRenderer api/FenrirRenderer.api.toml)
+target_sources(FenrirRenderer PRIVATE include/FenrirRenderer/Generated/FenrirRendererTypes.hpp
+                                      src/Generated/FenrirRendererTypes.cpp)
+target_link_libraries(FenrirRenderer PUBLIC FenrirTypes)

@@ -7,7 +7,9 @@
 #include "BodyComponents.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirDebugDraw/DebugDraw.hpp"
+#include "FenrirPhysics/Generated/FenrirPhysicsTypes.hpp"
 #include "FenrirScene/Scene.hpp"
+#include "FenrirTypes/TypeRegistry.hpp"
 #include "PhysicsState.hpp"
 #include "WorldImpl.hpp"
 
@@ -119,6 +121,9 @@ namespace Fenrir
 
     Physics Physics::Install(App& app, PhysicsConfig config)
     {
+        // Its types first (ADR-0074), before any resource or system: a second Install registers nothing again.
+        Generated::RegisterFenrirPhysicsTypes(app.GetResource<TypeRegistry>());
+
         auto state = std::make_shared<Detail::PhysicsState>(app, config);
         app.AddSequentialSystems(SchedulePriority::PostTick,
                                  {[installed = std::weak_ptr<Detail::PhysicsState>(state)](App& running) {

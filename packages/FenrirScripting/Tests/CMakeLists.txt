@@ -263,3 +263,8 @@ fenrir_expect_compile(TaggedUnionWrittenConversion FENRIR0037)  # the generator 
 fenrir_expect_compile(TaggedUnionWrittenExpect FENRIR0037)      # the generator writes Expect
 fenrir_expect_compile(TaggedUnionNoZero FENRIR0038)             # new() makes the kind with tag value 0, and there is none
 fenrir_expect_compile(TaggedUnionDuplicateValue FENRIR0038)     # two tag members with one value: the message could not say which it is
+
+# Its registration against its description: each described type, default-constructed through its registered
+# description, holds the defaults api/FenrirScripting.api.json records (tools/generate-type-registry writes the test).
+target_sources(FenrirScriptingTests PRIVATE Generated/FenrirScriptingTypesDefaultsTests.cpp)
+target_link_libraries(FenrirScriptingTests PRIVATE FenrirTypesTesting)

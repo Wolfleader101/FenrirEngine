@@ -56,6 +56,47 @@ namespace Fenrir::Generated
     bool RegisterFixtureTypes(Fenrir::TypeRegistry& registry);
 } // namespace Fenrir::Generated
 
+// The description objects Describe<T> yields, declared so a registration using this one ([registration]
+// 'uses') points its fields at them rather than describing the types again.
+namespace Fenrir::Generated::FixtureTypes
+{
+    extern const Fenrir::TypeDescription Fixture_Handle;
+    extern const Fenrir::TypeDescription Fixture_Limits;
+    extern const Fenrir::TypeDescription Fixture_Marker;
+    extern const Fenrir::TypeDescription Fixture_Motion;
+    extern const Fenrir::TypeDescription Fixture_Offset;
+    extern const Fenrir::TypeDescription Fixture_Numbers;
+    extern const Fenrir::TypeDescription Fixture_Quat;
+    extern const Fenrir::TypeDescription Fixture_Spring;
+    extern const Fenrir::TypeDescription Fixture_Vec3;
+    extern const Fenrir::TypeDescription Fixture_Body;
+    extern const Fenrir::TypeDescription Fixture_BodyId;
+    extern const Fenrir::TypeDescription Fixture_BoxShape;
+    extern const Fenrir::TypeDescription Fixture_Clock;
+    extern const Fenrir::TypeDescription Fixture_ShapeType;
+    extern const Fenrir::TypeDescription Fixture_SphereShape;
+    extern const Fenrir::TypeDescription Fixture_Shape;
+    extern const Fenrir::TypeDescription Fixture_Collider;
+    extern const Fenrir::TypeDescription Fixture_Columns;
+    extern const Fenrir::TypeDescription Fixture_Contacts;
+    extern const Fenrir::TypeDescription Fixture_Dial;
+    extern const Fenrir::TypeDescription Fixture_Folder;
+    extern const Fenrir::TypeDescription Fixture_Heading;
+    extern const Fenrir::TypeDescription Fixture_Hit;
+    extern const Fenrir::TypeDescription Fixture_Pair_double;
+    extern const Fenrir::TypeDescription Fixture_Paths;
+    extern const Fenrir::TypeDescription Fixture_Size;
+    extern const Fenrir::TypeDescription Fixture_Sky;
+    extern const Fenrir::TypeDescription Fixture_Socket;
+    extern const Fenrir::TypeDescription Fixture_Stat;
+    extern const Fenrir::TypeDescription Fixture_WeaponData;
+    extern const Fenrir::TypeDescription Fixture_Sword;
+    extern const Fenrir::TypeDescription Fixture_Tag;
+    extern const Fenrir::TypeDescription Fixture_Ticket;
+    extern const Fenrir::TypeDescription Fixture_Touched;
+    extern const Fenrir::TypeDescription Fixture_Weather;
+} // namespace Fenrir::Generated::FixtureTypes
+
 /** @brief The description of Fixture::Handle that RegisterFixtureTypes adds. */
 template <>
 struct Fenrir::Describe<Fixture::Handle>

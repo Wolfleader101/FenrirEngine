@@ -401,6 +401,12 @@ namespace Fenrir
      * package cannot start, `Install` logs one diagnostic saying why and returns an owner whose `IsValid()` is false:
      * it has added no systems and its calls do nothing, so the app keeps running without that package. FenrirPhysics
      * and FenrirScripting predate this and keep their own shapes (`Scripting::IsRunning`).
+     *
+     * **Types.** The App's first app resource is its `TypeRegistry` (FenrirTypes, ADR-0074), reached through
+     * `GetResource<TypeRegistry>()`: the constructor registers the types of the packages beneath `Install` (FenrirMath,
+     * FenrirECS and FenrirApp; FenrirScene describes none) before any scene exists, and every `Install` registers its
+     * own package's types first, so the registry knows a type by the name a file spells once its package is on. A
+     * second `Install` registers nothing again. What the registry refuses it reports through the App's logger.
      */
     class App
     {

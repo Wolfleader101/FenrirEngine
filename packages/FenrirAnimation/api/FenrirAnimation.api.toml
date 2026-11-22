@@ -28,3 +28,22 @@ headers = [
 # Types every binding has its own of.
 "Fenrir::AssetHandle<Fenrir::Clip>" = "bound-type"
 "Fenrir::AssetHandle<Fenrir::BoneMask>" = "bound-type"
+
+# What tools/generate-type-registry writes for the package (ADR-0074): its types' descriptions, the function registering
+# them, compiled into FenrirAnimation, and the test that their registered descriptions construct the defaults the
+# description records. It uses the registrations of the packages registering the types it holds of theirs
+# (FenrirAssets's clip and mask handles, and FenrirSkeleton's PoseState), which it points at rather than describing them
+# again.
+[registration]
+header = "../include/FenrirAnimation/Generated/FenrirAnimationTypes.hpp"
+source = "../src/Generated/FenrirAnimationTypes.cpp"
+test = "../Tests/Generated/FenrirAnimationTypesDefaultsTests.cpp"
+function = "Fenrir::Generated::RegisterFenrirAnimationTypes"
+includes = [
+    "FenrirAnimation/Animator.hpp",
+    "FenrirAnimation/AnimationLayer.hpp",
+    "FenrirAnimation/AnimationEvents.hpp",
+    "FenrirAnimation/Animation.hpp",
+    "FenrirAssets/BoneMaskData.hpp",
+]
+uses = ["../../FenrirAssets/api/FenrirAssets.api.toml", "../../FenrirSkeleton/api/FenrirSkeleton.api.toml"]

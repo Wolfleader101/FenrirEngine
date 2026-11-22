@@ -33,3 +33,21 @@ private-members = ["Fenrir::BoneName"]
 "Fenrir::AssetHandle<Fenrir::Skeleton>" = "bound-type"
 "Fenrir::Math::Vec3" = "bound-type"
 "Fenrir::Math::Quat" = "bound-type"
+
+# What tools/generate-type-registry writes for the package (ADR-0074): its types' descriptions, the function registering
+# them, compiled into FenrirSkeleton, and the test that their registered descriptions construct the defaults the
+# description records. It uses the registrations of the packages registering the types it holds of theirs
+# (FenrirAssets's skeleton handle, and FenrirECS's Transform (with FenrirMath's types through it)), which it points at
+# rather than describing them again.
+[registration]
+header = "../include/FenrirSkeleton/Generated/FenrirSkeletonTypes.hpp"
+source = "../src/Generated/FenrirSkeletonTypes.cpp"
+test = "../Tests/Generated/FenrirSkeletonTypesDefaultsTests.cpp"
+function = "Fenrir::Generated::RegisterFenrirSkeletonTypes"
+includes = [
+    "FenrirSkeleton/SkeletonPose.hpp",
+    "FenrirSkeleton/BoneAttachment.hpp",
+    "FenrirSkeleton/PoseStages.hpp",
+    "FenrirAssets/SkinningSource.hpp",
+]
+uses = ["../../FenrirAssets/api/FenrirAssets.api.toml", "../../FenrirECS/api/FenrirECS.api.toml"]

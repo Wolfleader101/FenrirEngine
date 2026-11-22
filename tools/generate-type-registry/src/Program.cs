@@ -35,8 +35,14 @@ internal static class Program
             }
 
             var generated = Generator.Generate(registration, File.ReadAllText(registration.DescriptionPath));
-            foreach (var (path, text) in new[] { (registration.HeaderPath, generated.Header),
-                                                 (registration.SourcePath, generated.Source) })
+            var outputs = new List<(string Path, string Text)> { (registration.HeaderPath, generated.Header),
+                                                                  (registration.SourcePath, generated.Source) };
+            if (registration.TestPath is { } testPath && generated.Test is { } test)
+            {
+                outputs.Add((testPath, test));
+            }
+
+            foreach (var (path, text) in outputs)
             {
                 var written = WriteIfChanged(path, text);
                 Console.WriteLine($"generate-type-registry: {path} {(written ? "written" : "unchanged")}");

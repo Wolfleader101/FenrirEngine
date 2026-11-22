@@ -1,5 +1,8 @@
 #include "FenrirScripting/Scripting.hpp"
 
+#include "FenrirScripting/Generated/FenrirScriptingTypes.hpp"
+#include "FenrirTypes/TypeRegistry.hpp"
+
 #include "ComponentRegistry.hpp"
 #include "EngineContext.hpp"
 #include "ExtensionSet.hpp"
@@ -351,6 +354,8 @@ namespace Fenrir
         // the app runs without scripts. A half-built State is released as the exception unwinds.
         try
         {
+            // Its types first (ADR-0074), before any resource or system: a second Install registers nothing again.
+            Generated::RegisterFenrirScriptingTypes(app.GetResource<TypeRegistry>());
             return InstallImpl(app, std::move(config));
         }
         catch (const std::exception& exception)

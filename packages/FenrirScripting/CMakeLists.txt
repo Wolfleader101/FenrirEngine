@@ -1,4 +1,6 @@
 # C# scripting for FenrirEngine, built on Iris. Added to the build only when FENRIR_ENABLE_SCRIPTING is on.
+# It registers its described types with FenrirTypes' type registry (ADR-0074), through the generated registration
+# it compiles, so it links FenrirTypes PUBLIC: the generated header, public, gives a game Describe<T>.
 
 # The scripting SDK, built with the .NET SDK Iris found, in one folder: the Fenrir.Scripting contract (the C# API scripts
 # compile against, shared by the host and never reloaded), the Fenrir.Math contract it is built on (FenrirMath's, built
@@ -108,6 +110,12 @@ target_link_libraries(FenrirScripting PUBLIC FenrirApp FenrirLogger Iris::Iris)
 #   cmake --build <dir> --target fenrir-describe-api
 #   cmake --build <dir> --target fenrir-generate-bindings
 fenrir_describe_api(FenrirScripting api/FenrirScripting.api.toml)
+# Its type registration (ADR-0074), from that description: `cmake --build <dir> --target
+# fenrir-generate-type-registry` regenerates include/FenrirScripting/Generated/ and src/Generated/.
+fenrir_generate_type_registry(FenrirScripting api/FenrirScripting.api.toml)
+target_sources(FenrirScripting PRIVATE include/FenrirScripting/Generated/FenrirScriptingTypes.hpp
+                                       src/Generated/FenrirScriptingTypes.cpp)
+target_link_libraries(FenrirScripting PUBLIC FenrirTypes)
 fenrir_describe_api_natives(FenrirScripting api/FenrirScripting.binding.toml)
 iris_generate_binding(FenrirScripting api/FenrirScripting.binding.toml ../FenrirECS/api/FenrirECS.api.json
     ../FenrirApp/api/FenrirApp.api.json api/FenrirScripting.api.json)

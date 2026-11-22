@@ -19,3 +19,8 @@ if(FENRIR_ENABLE_RENDERER)
     fenrir_add_shaders(FenrirAssetsTests PROGRAM Parameters VERTEX fixtures/shaders/parameters.vert
                        FRAGMENT fixtures/shaders/parameters.frag EMBED)
 endif()
+
+# Its registration against its description: each described type, default-constructed through its registered
+# description, holds the defaults api/FenrirAssets.api.json records (tools/generate-type-registry writes the test).
+target_sources(FenrirAssetsTests PRIVATE Generated/FenrirAssetsTypesDefaultsTests.cpp)
+target_link_libraries(FenrirAssetsTests PRIVATE FenrirTypesTesting)

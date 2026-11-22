@@ -40,3 +40,20 @@ private-members = ["Fenrir::Math::Frustum"]
 "Fenrir::Math::Vec2" = "bound-type"
 "Fenrir::Math::Vec3" = "bound-type"
 "Fenrir::Math::Vec4" = "bound-type"
+
+# What tools/generate-type-registry writes for the package (ADR-0074): its types' descriptions, the function registering
+# them, compiled into FenrirRenderer, and the test that their registered descriptions construct the defaults the
+# description records. It uses the registrations of the packages registering the types it holds of theirs (FenrirMath's
+# vectors, colour, ray, box and frustum, FenrirAssets's handles and FenrirInput's WindowId), which it points at rather
+# than describing them again.
+[registration]
+header = "../include/FenrirRenderer/Generated/FenrirRendererTypes.hpp"
+source = "../src/Generated/FenrirRendererTypes.cpp"
+test = "../Tests/Generated/FenrirRendererTypesDefaultsTests.cpp"
+function = "Fenrir::Generated::RegisterFenrirRendererTypes"
+includes = ["FenrirRenderer/Components.hpp", "FenrirRenderer/Renderer.hpp", "FenrirRenderer/WorldTargets2D.hpp"]
+uses = [
+    "../../FenrirMath/api/FenrirMath.api.toml",
+    "../../FenrirAssets/api/FenrirAssets.api.toml",
+    "../../FenrirInput/api/FenrirInput.api.toml",
+]

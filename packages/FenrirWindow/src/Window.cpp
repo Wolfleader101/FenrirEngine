@@ -14,6 +14,8 @@
 #include <utility>
 
 #include "FenrirApp/App.hpp"
+#include "FenrirTypes/TypeRegistry.hpp"
+#include "FenrirWindow/Generated/FenrirWindowTypes.hpp"
 #include "SdlInput.hpp"
 #include "WindowState.hpp"
 
@@ -344,6 +346,9 @@ namespace Fenrir
 
     Window Window::Install(App& app, WindowConfig config)
     {
+        // Its types first (ADR-0074), before any resource or system: a second Install registers nothing again.
+        Generated::RegisterFenrirWindowTypes(app.GetResource<TypeRegistry>());
+
         if (Detail::FindWindowState(app) != nullptr)
         {
             app.Logger()->Error("FenrirWindow: the app already has a Window; this second Install does nothing");
