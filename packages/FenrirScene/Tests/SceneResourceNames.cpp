@@ -63,6 +63,7 @@ namespace
 
         Registered()
         {
+            INFO("setup: Weather registers with its scene doors, and Footprint registers without any");
             REQUIRE(registry.Register(WeatherDescription));
             REQUIRE(Fenrir::AttachSceneResource<Weather>(registry, WeatherDescription));
             REQUIRE(registry.Register(FootprintDescription));

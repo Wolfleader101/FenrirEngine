@@ -34,6 +34,7 @@ namespace
 TEST_CASE("An attachment hung on a type reads back", "[types][attachments]")
 {
     TypeRegistry registry;
+    INFO("setup: Transform registers");
     REQUIRE(registry.Register(TypesTest::TransformDescription));
 
     INFO("hanging a value on a registered type succeeds");
@@ -53,6 +54,7 @@ TEST_CASE("A missing attachment reads as absent, not as an error", "[types][atta
 {
     std::vector<std::string> diagnostics;
     TypeRegistry registry([&](std::string_view message) { diagnostics.emplace_back(message); });
+    INFO("setup: Transform registers and takes a SizeTag attachment");
     REQUIRE(registry.Register(TypesTest::TransformDescription));
     REQUIRE(registry.Attach<SizeTag>("TypesTest::Transform", 40));
 
@@ -69,6 +71,7 @@ TEST_CASE("A missing attachment reads as absent, not as an error", "[types][atta
 TEST_CASE("Attaching again under one tag replaces the value", "[types][attachments]")
 {
     TypeRegistry registry;
+    INFO("setup: Transform registers and its SizeTag attachment is hung twice");
     REQUIRE(registry.Register(TypesTest::TransformDescription));
     REQUIRE(registry.Attach<SizeTag>("TypesTest::Transform", 40));
     REQUIRE(registry.Attach<SizeTag>("TypesTest::Transform", 41));
@@ -80,6 +83,7 @@ TEST_CASE("Attaching again under one tag replaces the value", "[types][attachmen
 TEST_CASE("An attachment is changed in place through the mutable registry", "[types][attachments]")
 {
     TypeRegistry registry;
+    INFO("setup: WeaponData registers and takes an empty upgrader list");
     REQUIRE(registry.Register(TypesTest::WeaponDataDescription));
     REQUIRE(registry.Attach<UpgradersTag>("TypesTest::WeaponData", std::make_unique<std::vector<std::string>>()));
 

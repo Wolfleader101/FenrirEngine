@@ -62,6 +62,7 @@ namespace
         RegisteredApp()
         {
             TypeRegistry& registry = Registry();
+            INFO("setup: Clock registers as an app resource and Weather as a scene resource, each with its doors");
             REQUIRE(registry.Register(ClockDescription));
             REQUIRE(Fenrir::AttachAppResource<Clock>(registry, ClockDescription));
             REQUIRE(registry.Register(WeatherDescription));

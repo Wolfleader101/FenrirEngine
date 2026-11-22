@@ -8,6 +8,7 @@
 TEST_CASE("Describe<T> yields the description the registration added, by identity", "[types][describe]")
 {
     Fenrir::TypeRegistry registry;
+    INFO("setup: Transform, WeaponData and Sword register");
     REQUIRE(registry.Register(TypesTest::TransformDescription));
     REQUIRE(registry.Register(TypesTest::WeaponDataDescription));
     REQUIRE(registry.Register(TypesTest::SwordDescription));

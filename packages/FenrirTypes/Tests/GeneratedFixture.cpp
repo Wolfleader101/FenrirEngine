@@ -353,6 +353,7 @@ TEST_CASE("Construct gives a type's defaults and Destroy ends it")
 {
     Registered fixture;
     const TypeDescription& hit = fixture.Get("Fixture::Hit");
+    INFO("Hit's description records the compiler's size and alignment");
     REQUIRE(hit.size == sizeof(Fixture::Hit));
     REQUIRE(hit.alignment == alignof(Fixture::Hit));
     alignas(Fixture::Hit) std::byte storage[sizeof(Fixture::Hit)];
@@ -372,6 +373,7 @@ TEST_CASE("Registering the fixture twice registers nothing the second time, with
     Registered fixture;
     const TypeDescription* sword = fixture.registry.Find("Fixture::Sword");
 
+    INFO("a second run of the fixture's registration reports success");
     REQUIRE(Fenrir::Generated::RegisterFixtureTypes(fixture.registry));
 
     INFO("every type the second run meets is already registered as the same description, so it is left alone");
@@ -477,6 +479,7 @@ TEST_CASE("A component holding a tagged union reaches its live alternative throu
 
     RecordingVisitor visitor;
     fixture.Get("Fixture::Collider").Visit(static_cast<const void*>(&collider), visitor);
+    INFO("Collider's visit sees its tagged-union shape at 0 and solid at 16");
     REQUIRE(visitor.seen == std::vector<Seen>{{"shape", Kind::Struct, 0}, {"solid", Kind::Bool, 16}});
     RecordingVisitor shape;
     visitor.values[0].Visit(shape);
@@ -505,6 +508,7 @@ TEST_CASE("Selecting Sphere on a box writes the tag and a sphere with its defaul
     const TypeDescription& description = fixture.Get("Fixture::Shape");
     Fixture::Shape shape(Fixture::BoxShape{Fixture::Vec3(7.0f)});
 
+    INFO("selecting the Sphere alternative on a box succeeds");
     REQUIRE(description.SelectAlternative(&shape, 1));
 
     INFO("the tag says Sphere, and the sphere is the only alternative visited");

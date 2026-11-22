@@ -49,6 +49,7 @@ TEST_CASE("A registered type is found by its canonical name", "[types][registry]
 TEST_CASE("A former name finds the type and reports its current name", "[types][registry]")
 {
     TypeRegistry registry;
+    INFO("setup: Transform registers");
     REQUIRE(registry.Register(TypesTest::TransformDescription));
 
     for (std::string_view former : {"TypesTest::Placement", "TypesTest::Pose"})
@@ -67,6 +68,7 @@ TEST_CASE("Registering a second type under one canonical name is refused, naming
           "[types][registry]")
 {
     RecordingRegistry recording;
+    INFO("setup: Transform registers");
     REQUIRE(recording.registry.Register(TypesTest::TransformDescription));
 
     const TypeDescription impostor{
@@ -96,6 +98,7 @@ TEST_CASE("Registering a second type under one canonical name is refused, naming
 TEST_CASE("A type whose former name is another type's name is refused, and adds none of its names", "[types][registry]")
 {
     RecordingRegistry recording;
+    INFO("setup: Vec3 registers");
     REQUIRE(recording.registry.Register(TypesTest::Vec3Description));
 
     static constexpr std::string_view formerly[] = {"TypesTest::Vec3"};
@@ -121,6 +124,7 @@ TEST_CASE("A type whose former name is another type's name is refused, and adds 
 TEST_CASE("A two-step base chain answers is-a both ways", "[types][registry]")
 {
     TypeRegistry registry;
+    INFO("setup: WeaponData then Sword register");
     REQUIRE(registry.Register(TypesTest::WeaponDataDescription));
     REQUIRE(registry.Register(TypesTest::SwordDescription));
 
@@ -142,6 +146,7 @@ TEST_CASE("A two-step base chain answers is-a both ways", "[types][registry]")
 TEST_CASE("A base chain of three answers is-a over every step", "[types][registry]")
 {
     TypeRegistry registry;
+    INFO("setup: WeaponData then Sword register");
     REQUIRE(registry.Register(TypesTest::WeaponDataDescription));
     REQUIRE(registry.Register(TypesTest::SwordDescription));
 
@@ -151,6 +156,7 @@ TEST_CASE("A base chain of three answers is-a over every step", "[types][registr
         .role = Role::DataAsset,
         .base = "TypesTest::Sword",
     };
+    INFO("setup: Longsword, extending Sword, registers");
     REQUIRE(registry.Register(longsword));
 
     INFO("a Longsword is a WeaponData, two steps up");
@@ -179,6 +185,7 @@ TEST_CASE("A type whose base is not registered is refused with a diagnostic", "[
 TEST_CASE("A type that is not a data asset may not have a base", "[types][registry]")
 {
     RecordingRegistry recording;
+    INFO("setup: WeaponData registers");
     REQUIRE(recording.registry.Register(TypesTest::WeaponDataDescription));
 
     const TypeDescription componentWithBase{
@@ -195,6 +202,7 @@ TEST_CASE("A type that is not a data asset may not have a base", "[types][regist
 TEST_CASE("A data asset may extend only another data asset", "[types][registry]")
 {
     RecordingRegistry recording;
+    INFO("setup: Transform registers");
     REQUIRE(recording.registry.Register(TypesTest::TransformDescription));
 
     const TypeDescription dataAssetOnComponent{
@@ -292,6 +300,7 @@ TEST_CASE("A nested struct holding an owning kind is judged in the role of the t
 TEST_CASE("A tagged union whose alternative reaches an owning kind is refused, in any role", "[types][registry]")
 {
     RecordingRegistry recording;
+    INFO("setup: Mobility and Caption register");
     REQUIRE(recording.registry.Register(TypesTest::MobilityDescription));
     REQUIRE(recording.registry.Register(CaptionDescription));
 
@@ -374,6 +383,7 @@ TEST_CASE("A version below 1 is refused", "[types][registry]")
 TEST_CASE("Types are listed by role in registration order", "[types][registry]")
 {
     TypeRegistry registry;
+    INFO("setup: four types of three roles register");
     REQUIRE(registry.Register(TypesTest::Vec3Description));
     REQUIRE(registry.Register(TypesTest::TransformDescription));
     REQUIRE(registry.Register(TypesTest::WeaponDataDescription));

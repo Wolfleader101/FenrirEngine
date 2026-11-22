@@ -22,6 +22,7 @@ namespace
     TypeRegistry EcsRegistry()
     {
         TypeRegistry registry;
+        INFO("setup: FenrirECS's generated registration adds its types with no diagnostic");
         REQUIRE(Fenrir::Generated::RegisterFenrirECSTypes(registry));
         return registry;
     }

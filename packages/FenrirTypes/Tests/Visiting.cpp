@@ -86,6 +86,7 @@ namespace
 TEST_CASE("A fixed-layout struct's visit sees every field once with its kind, offset and value", "[types][visiting]")
 {
     Fenrir::TypeRegistry registry;
+    INFO("setup: Transform registers");
     REQUIRE(registry.Register(TypesTest::TransformDescription));
 
     TypesTest::Transform transform;
