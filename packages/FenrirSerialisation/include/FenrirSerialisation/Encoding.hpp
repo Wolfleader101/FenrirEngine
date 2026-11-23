@@ -52,10 +52,11 @@ namespace Fenrir::Serialisation
      * line is 1 and its column that offset plus one, as if the buffer were one line of bytes. A buffer is refused when
      * its tag or version is not the one above; when it ends inside a node, or inside a length, number, string or count
      * (the offset is where that piece began); when a node's tag is none of those above; when a LEB128 value overflows
-     * 64 bits; when a trivia node follows another, holds two trailing comments, holds closing comments in front of a
-     * scalar or a trailing comment in front of the root, or is followed by no node; when nesting is deeper than 256
-     * objects and arrays, as in text; and when bytes follow the root node. The diagnostic is logged once through
-     * `Error` as `path:line:column: message` and returned in the result.
+     * 64 bits; when a string, key or comment is not UTF-8 (the offset is its first bad byte); when a trivia node
+     * follows another, holds two trailing comments, holds closing comments in front of a scalar or a trailing comment
+     * in front of the root, or is followed by no node; when nesting is deeper than 256 objects and arrays, as in text;
+     * and when bytes follow the root node. The diagnostic is logged once through `Error` as `path:line:column: message`
+     * and returned in the result.
      *
      * @param bytes The encoding, from its tag byte.
      * @param path The name the diagnostic gives the buffer, as the caller wants it shown.

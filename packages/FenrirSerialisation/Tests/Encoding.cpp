@@ -44,8 +44,21 @@ namespace
     std::vector<std::byte> Encoded(std::initializer_list<int> body)
     {
         std::vector<std::byte> bytes = Header();
-        for (int value : body)
-            bytes.push_back(static_cast<std::byte>(value));
+        const std::vector<std::byte> tail = Bytes(body);
+        bytes.insert(bytes.end(), tail.begin(), tail.end());
+        return bytes;
+    }
+
+    // An encoding of `depth` arrays, each holding the next, around a null.
+    std::vector<std::byte> NestedArrays(int depth)
+    {
+        std::vector<std::byte> bytes = Header();
+        for (int i = 0; i < depth; ++i)
+        {
+            bytes.push_back(std::byte{0x0A});
+            bytes.push_back(std::byte{0x01});
+        }
+        bytes.push_back(std::byte{0x01});
         return bytes;
     }
 
@@ -284,14 +297,34 @@ TEST_CASE("Every number width survives the round trip, bit for bit at its limits
     INFO("the decoded array holds seven numbers");
     REQUIRE(out.elements.size() == 7);
 
-    INFO("each integer keeps its width and value, and each float its width and bits");
-    REQUIRE(out.elements[0].value.AsNumber().AsSigned() == std::numeric_limits<std::int64_t>::min());
-    REQUIRE(out.elements[1].value.AsNumber().AsSigned() == std::numeric_limits<std::int64_t>::max());
-    REQUIRE(out.elements[2].value.AsNumber().AsUnsigned() == std::numeric_limits<std::uint64_t>::max());
-    REQUIRE(std::bit_cast<std::uint32_t>(out.elements[3].value.AsNumber().AsSingle()) == 0x00000001u);
-    REQUIRE(std::bit_cast<std::uint32_t>(out.elements[4].value.AsNumber().AsSingle()) == 0x80000000u);
-    REQUIRE(std::bit_cast<std::uint64_t>(out.elements[5].value.AsNumber().AsDouble()) == 0x0000000000000001u);
-    REQUIRE(std::bit_cast<std::uint64_t>(out.elements[6].value.AsNumber().AsDouble()) == 0x8000000000000000u);
+    {
+        INFO("the lowest signed integer comes back signed and unchanged");
+        REQUIRE(out.elements[0].value.AsNumber().AsSigned() == std::numeric_limits<std::int64_t>::min());
+    }
+    {
+        INFO("the highest signed integer comes back signed and unchanged");
+        REQUIRE(out.elements[1].value.AsNumber().AsSigned() == std::numeric_limits<std::int64_t>::max());
+    }
+    {
+        INFO("the highest unsigned integer comes back unsigned and unchanged");
+        REQUIRE(out.elements[2].value.AsNumber().AsUnsigned() == std::numeric_limits<std::uint64_t>::max());
+    }
+    {
+        INFO("the smallest single denormal comes back a single with bits 00000001");
+        REQUIRE(std::bit_cast<std::uint32_t>(out.elements[3].value.AsNumber().AsSingle()) == 0x00000001u);
+    }
+    {
+        INFO("a single negative zero comes back with bits 80000000");
+        REQUIRE(std::bit_cast<std::uint32_t>(out.elements[4].value.AsNumber().AsSingle()) == 0x80000000u);
+    }
+    {
+        INFO("the smallest double denormal comes back a double with bits 0000000000000001");
+        REQUIRE(std::bit_cast<std::uint64_t>(out.elements[5].value.AsNumber().AsDouble()) == 0x0000000000000001u);
+    }
+    {
+        INFO("a double negative zero comes back with bits 8000000000000000");
+        REQUIRE(std::bit_cast<std::uint64_t>(out.elements[6].value.AsNumber().AsDouble()) == 0x8000000000000000u);
+    }
 }
 
 TEST_CASE("Infinity and NaN survive the round trip bit for bit in both float widths", "[serialisation][encoding]")
@@ -311,13 +344,30 @@ TEST_CASE("Infinity and NaN survive the round trip bit for bit in both float wid
     INFO("the decoded array holds six numbers");
     REQUIRE(out.elements.size() == 6);
 
-    INFO("each infinity keeps its sign and each NaN its payload");
-    REQUIRE(std::bit_cast<std::uint32_t>(out.elements[0].value.AsNumber().AsSingle()) == 0x7F800000u);
-    REQUIRE(std::bit_cast<std::uint32_t>(out.elements[1].value.AsNumber().AsSingle()) == 0xFF800000u);
-    REQUIRE(std::bit_cast<std::uint32_t>(out.elements[2].value.AsNumber().AsSingle()) == singleNaN);
-    REQUIRE(std::bit_cast<std::uint64_t>(out.elements[3].value.AsNumber().AsDouble()) == 0x7FF0000000000000u);
-    REQUIRE(std::bit_cast<std::uint64_t>(out.elements[4].value.AsNumber().AsDouble()) == 0xFFF0000000000000u);
-    REQUIRE(std::bit_cast<std::uint64_t>(out.elements[5].value.AsNumber().AsDouble()) == doubleNaN);
+    {
+        INFO("single Infinity comes back with bits 7F800000");
+        REQUIRE(std::bit_cast<std::uint32_t>(out.elements[0].value.AsNumber().AsSingle()) == 0x7F800000u);
+    }
+    {
+        INFO("single -Infinity comes back with bits FF800000");
+        REQUIRE(std::bit_cast<std::uint32_t>(out.elements[1].value.AsNumber().AsSingle()) == 0xFF800000u);
+    }
+    {
+        INFO("a single NaN comes back with its payload, bits 7FC00123");
+        REQUIRE(std::bit_cast<std::uint32_t>(out.elements[2].value.AsNumber().AsSingle()) == singleNaN);
+    }
+    {
+        INFO("double Infinity comes back with bits 7FF0000000000000");
+        REQUIRE(std::bit_cast<std::uint64_t>(out.elements[3].value.AsNumber().AsDouble()) == 0x7FF0000000000000u);
+    }
+    {
+        INFO("double -Infinity comes back with bits FFF0000000000000");
+        REQUIRE(std::bit_cast<std::uint64_t>(out.elements[4].value.AsNumber().AsDouble()) == 0xFFF0000000000000u);
+    }
+    {
+        INFO("a double NaN comes back with its payload, bits 7FF8000000000123");
+        REQUIRE(std::bit_cast<std::uint64_t>(out.elements[5].value.AsNumber().AsDouble()) == doubleNaN);
+    }
 }
 
 TEST_CASE("A comment in every place a tree holds one survives the round trip", "[serialisation][encoding]")
@@ -394,6 +444,24 @@ TEST_CASE("A LEB128 value wider than 64 bits is refused where it began", "[seria
     RequireAtByte(Fail(Encoded({0x08, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01})), 6);
 }
 
+TEST_CASE("A string that is not UTF-8 is refused at its first bad byte", "[serialisation][encoding]")
+{
+    INFO("\"a\" then a lone continuation byte 80: the text begins at byte 7, so the bad byte is byte 8");
+    RequireAtByte(Fail(Encoded({0x08, 0x02, 'a', 0x80})), 8);
+}
+
+TEST_CASE("An overlong UTF-8 form is refused where it begins", "[serialisation][encoding]")
+{
+    INFO("C0 80, a two-byte form of NUL, begins at byte 7");
+    RequireAtByte(Fail(Encoded({0x08, 0x02, 0xC0, 0x80})), 7);
+}
+
+TEST_CASE("A surrogate's three-byte form decodes, as ReadText keeps it", "[serialisation][encoding]")
+{
+    INFO("ED A0 80, the lone surrogate U+D800, is a string of three bytes");
+    REQUIRE(Decode(Encoded({0x08, 0x03, 0xED, 0xA0, 0x80})).AsString() == "\xED\xA0\x80");
+}
+
 TEST_CASE("A trivia node followed by another is refused at the second", "[serialisation][encoding]")
 {
     INFO("two empty trivia nodes before a null: the second is at byte 9");
@@ -409,38 +477,33 @@ TEST_CASE("A trivia node with closing comments in front of a scalar is refused a
 
 TEST_CASE("Nesting deeper than 256 containers is refused at the container too deep", "[serialisation][encoding]")
 {
-    std::vector<std::byte> bytes = Header();
-    for (int depth = 0; depth < 257; ++depth)
-    {
-        bytes.push_back(std::byte{0x0A});
-        bytes.push_back(std::byte{0x01});
-    }
-    bytes.push_back(std::byte{0x01});
     INFO("the 257th array begins at byte " << 5 + 256 * 2);
-    RequireAtByte(Fail(bytes), 5 + 256 * 2);
+    RequireAtByte(Fail(NestedArrays(257)), 5 + 256 * 2);
 }
 
 TEST_CASE("Nesting 256 containers deep decodes", "[serialisation][encoding]")
 {
-    std::vector<std::byte> bytes = Header();
-    for (int depth = 0; depth < 256; ++depth)
-    {
-        bytes.push_back(std::byte{0x0A});
-        bytes.push_back(std::byte{0x01});
-    }
-    bytes.push_back(std::byte{0x01});
     INFO("256 nested arrays are within the limit");
-    REQUIRE(Decode(bytes).Kind() == ValueKind::Array);
+    REQUIRE(Decode(NestedArrays(256)).Kind() == ValueKind::Array);
 }
 
 TEST_CASE("A refused buffer's diagnostic is logged once through Error, with its path", "[serialisation][encoding]")
 {
     RecordingLogger logger;
     ReadTreeResult result = DecodeTree(Encoded({0x7F}), "data/sword.bin", logger);
-    INFO("one error is logged as path:line:column: message, and no warning");
-    REQUIRE(logger.errors.size() == 1);
-    REQUIRE(logger.warnings.empty());
-    REQUIRE(result.diagnostics.size() == 1);
-    REQUIRE(result.diagnostics.front().path == "data/sword.bin");
-    REQUIRE(logger.errors.front() == "data/sword.bin:1:6: " + result.diagnostics.front().message);
+    {
+        INFO("one error is logged, and no warning");
+        REQUIRE(logger.errors.size() == 1);
+        REQUIRE(logger.warnings.empty());
+    }
+    {
+        INFO("the error is logged as path:line:column: message, naming the byte and the tag found");
+        REQUIRE(logger.errors.front() ==
+                "data/sword.bin:1:6: at byte 5, expected a node tag, found the unknown tag 7F");
+    }
+    {
+        INFO("the result holds the one diagnostic, with the path as given");
+        REQUIRE(result.diagnostics.size() == 1);
+        REQUIRE(result.diagnostics.front().path == "data/sword.bin");
+    }
 }

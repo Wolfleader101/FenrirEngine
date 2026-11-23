@@ -15,9 +15,9 @@
 
 **Touches:** `packages/FenrirSerialisation/` (`include/FenrirSerialisation/Encoding.hpp`, `src/Encoding.cpp`, `Tests/Encoding.cpp`, one line of `Tests/CMakeLists.txt`)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Each golden, read and then encoded and decoded, equals its tree. With `Trivia::Keep` the trivia is included in the comparison, and with `Trivia::Drop` the tree has none.
-- [ ] Every number width, `Infinity` and `NaN` survives the round trip bit for bit.
-- [ ] Each golden's encoding is smaller than its text.
-- [ ] A truncated buffer and an unknown node tag each give one diagnostic with the offset, and no tree.
+- [x] Each golden, read and then encoded and decoded, equals its tree. With `Trivia::Keep` the trivia is included in the comparison, and with `Trivia::Drop` the tree has none.
+- [x] Every number width, `Infinity` and `NaN` survives the round trip bit for bit.
+- [x] Each golden's encoding is smaller than its text.
+- [x] A truncated buffer and an unknown node tag each give one diagnostic with the offset, and no tree.
