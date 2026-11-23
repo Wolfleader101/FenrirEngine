@@ -28,8 +28,9 @@ namespace Fenrir::Serialisation
      *
      * Each callback is handed the field, whose `type.target` names a reference's target type. For an element of an
      * array, list or optional, it is a copy of the field holding it whose `type` is the element's, so `type.target`
-     * names the target there too. `null` in a file is none both ways: the bridge writes an empty string as `null` and
-     * reads `null` as the empty handle or the null entity, with no callback asked and no diagnostic. A missing callback
+     * names the target there too; its name and offset are the field's. `null` in a file is none both ways: the bridge
+     * writes the empty handle, the null entity and an empty string from a callback as `null`, and reads `null` as the
+     * empty handle or the null entity, with no callback asked and no diagnostic. A missing callback
      * writes `null`, and on read leaves the field empty with one error, counted in `unresolved`, as a read callback
      * returning nothing does.
      */
@@ -60,7 +61,7 @@ namespace Fenrir::Serialisation
      * - a tagged union is an `Object` whose first member is `kind`, its tag's enumerator name, followed by the fields
      * of its live alternative alone;
      * - a `reference` or an `entity` is the string `writeReference` or `writeEntity` gives it, or `null` when that is
-     *   empty or the callback is missing;
+     *   empty, the callback is missing or the value is the empty handle or the null entity;
      * - a `pointer` field is never written, since its target is never described and its bytes mean nothing in a
      *   file; a pointer element of an array, list or optional is `null`.
      *

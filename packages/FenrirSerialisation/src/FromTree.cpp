@@ -1,6 +1,6 @@
 #include "FenrirSerialisation/Bridge.hpp"
 
-#include "HandedField.hpp"
+#include "ResolverField.hpp"
 
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirTypes/FieldVisitor.hpp"
@@ -333,19 +333,21 @@ namespace Fenrir::Serialisation
                 }
                 if (node.Kind() != ValueKind::String)
                     return Reject(node, where, std::format("{} or null", what));
+                const bool asked = resolve && m_field != nullptr;
                 std::optional<Resolved> resolved;
-                if (resolve && m_field != nullptr)
-                    resolved = HandedField(*m_field, target.Type(),
-                                           [&](const FieldInfo& handed) { return resolve(node.AsString(), handed); });
+                if (asked)
+                    resolved = CallWithResolverField(*m_field, target.Type(), [&](const FieldInfo& handed) {
+                        return resolve(node.AsString(), handed);
+                    });
                 set(resolved.value_or(Resolved{}));
                 if (resolved.has_value())
                     return true;
                 ++m_result.unresolved;
                 Report(DiagnosticSeverity::Error, node,
-                       resolve ? std::format("`{}` names {}, which {} resolves to nothing; it is left empty", where,
-                                             Found(node), callback)
-                               : std::format("`{}` names {}, but there is no {} to resolve it; it is left empty", where,
-                                             Found(node), callback));
+                       asked ? std::format("`{}` names {}, which {} resolves to nothing; it is left empty", where,
+                                           Found(node), callback)
+                             : std::format("`{}` names {}, but there is no {} to resolve it; it is left empty", where,
+                                           Found(node), callback));
                 return true;
             }
 

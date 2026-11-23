@@ -1,6 +1,6 @@
 #include "FenrirSerialisation/Bridge.hpp"
 
-#include "HandedField.hpp"
+#include "ResolverField.hpp"
 
 #include "FenrirTypes/FieldVisitor.hpp"
 #include "FenrirTypes/Kind.hpp"
@@ -173,9 +173,16 @@ namespace Fenrir::Serialisation
             return false;
         }
 
-        // What a write callback gave: its string, or `null` when it is empty.
-        Value StringOrNull(std::string text)
+        // A reference or an entity, `resolved` from the value by `write`, the caller's callback: `null` for the
+        // kind's empty value, which the callback is not asked about, for an empty string it gives, and when there is
+        // no callback.
+        template <typename Resolved, typename Write>
+        Value WriteResolved(const Write& write, const FieldInfo* field, const ValueType& type, Resolved resolved)
         {
+            if (!write || field == nullptr || resolved == Resolved{})
+                return Value(nullptr);
+            std::string text =
+                CallWithResolverField(*field, type, [&](const FieldInfo& handed) { return write(resolved, handed); });
             return text.empty() ? Value(nullptr) : Value(std::move(text));
         }
 
@@ -316,17 +323,9 @@ namespace Fenrir::Serialisation
                 return ToValue(resolvers, field, value.Value(), defaultHolds ? &held : nullptr);
             }
             case Kind::Reference:
-                if (!resolvers.writeReference || field == nullptr)
-                    return Value(nullptr);
-                return StringOrNull(HandedField(*field, value.Type(), [&](const FieldInfo& handed) {
-                    return resolvers.writeReference(value.Reference(), handed);
-                }));
+                return WriteResolved(resolvers.writeReference, field, value.Type(), value.Reference());
             case Kind::Entity:
-                if (!resolvers.writeEntity || field == nullptr)
-                    return Value(nullptr);
-                return StringOrNull(HandedField(*field, value.Type(), [&](const FieldInfo& handed) {
-                    return resolvers.writeEntity(value.Entity(), handed);
-                }));
+                return WriteResolved(resolvers.writeEntity, field, value.Type(), value.Entity());
             case Kind::Pointer:
                 return Value(nullptr);
             case Kind::Struct: {

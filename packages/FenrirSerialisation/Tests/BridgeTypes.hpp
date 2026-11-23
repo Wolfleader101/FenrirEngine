@@ -423,6 +423,41 @@ namespace BridgeTest
         .fields = LinkedFields,
     };
 
+    // A reference in a list and an entity in an optional: owning, so walked by a visit function.
+    struct Roster
+    {
+        std::vector<HandleLayout> meshes;
+        std::optional<EntityLayout> leader;
+    };
+
+    inline const FieldInfo RosterFields[] = {
+        {.name = "meshes",
+         .type = {.kind = Kind::List, .element = &PartType, .list = &Fenrir::ListOperationsOf<HandleLayout>}},
+        {.name = "leader",
+         .type = {.kind = Kind::Optional,
+                  .element = &CrewType,
+                  .optional = &Fenrir::OptionalOperationsOf<EntityLayout>}},
+    };
+
+    inline void VisitRoster(void* instance, Fenrir::FieldVisitor& visitor)
+    {
+        auto& roster = *static_cast<Roster*>(instance);
+        visitor.Field(RosterFields[0], Fenrir::ValueRef(&roster.meshes, RosterFields[0].type));
+        visitor.Field(RosterFields[1], Fenrir::ValueRef(&roster.leader, RosterFields[1].type));
+    }
+
+    inline const TypeDescription RosterDescription{
+        .name = "BridgeTest::Roster",
+        .package = "FenrirSerialisationTests",
+        .role = Role::DataAsset,
+        .size = sizeof(Roster),
+        .alignment = alignof(Roster),
+        .construct = Fenrir::ConstructValue<Roster>,
+        .destroy = Fenrir::DestroyValue<Roster>,
+        .fields = RosterFields,
+        .visit = VisitRoster,
+    };
+
     // Adds the types above to `registry`, as a package's generated registration would; whether every one was added.
     inline bool RegisterBridgeTypes(Fenrir::TypeRegistry& registry)
     {
@@ -430,7 +465,7 @@ namespace BridgeTest
         for (const TypeDescription* description :
              {&MobilityDescription, &Vec3Description, &RangeDescription, &ShapeKindDescription, &BoxShapeDescription,
               &SphereShapeDescription, &ShapeDescription, &FixedDescription, &OwnedDescription, &RenamedDescription,
-              &LinkedDescription})
+              &LinkedDescription, &RosterDescription})
             registered = registry.Register(*description) && registered;
         return registered;
     }

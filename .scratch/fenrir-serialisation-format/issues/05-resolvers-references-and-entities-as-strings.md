@@ -18,9 +18,9 @@
 
 **Touches:** `packages/FenrirSerialisation/` (`include/FenrirSerialisation/`, `src/`, `Tests/`, `Tests/CMakeLists.txt`)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Recording lambdas observe each callback once per field, with the field's name and target type, in both directions.
-- [ ] An empty result writes `null`, and `null` reads as the empty handle or the null entity with no diagnostic.
-- [ ] A missing callback or a failed read counts in `unresolved` and leaves the field empty.
-- [ ] A `path` field round-trips its text, non-ASCII UTF-8 included.
+- [x] Recording lambdas observe each callback once per field, with the field's name and target type, in both directions.
+- [x] An empty result writes `null`, and `null` reads as the empty handle or the null entity with no diagnostic.
+- [x] A missing callback or a failed read counts in `unresolved` and leaves the field empty.
+- [x] A `path` field round-trips its text, non-ASCII UTF-8 included.

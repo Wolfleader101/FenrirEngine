@@ -161,9 +161,9 @@ TEST_CASE("Each reference in a file is read as the handle readReference gives it
     INFO("readReference is called once for mesh and once for material, each with its path and target type");
     REQUIRE(calls ==
             std::vector<Call>{{"mesh", "BridgeTest::Mesh", "asset3"}, {"material", "BridgeTest::Material", "asset9"}});
-    INFO("each field holds the handle its call gave");
-    REQUIRE(fixed.mesh.index == 3);
-    REQUIRE(fixed.mesh.generation == 1);
+    INFO("mesh holds the handle its call gave, generation and all");
+    REQUIRE((fixed.mesh.index == 3 && fixed.mesh.generation == 1));
+    INFO("material holds the handle its call gave");
     REQUIRE(fixed.material.index == 9);
     INFO("both resolved, so nothing was counted");
     REQUIRE(result.status == BridgeStatus::Succeeded);
@@ -197,16 +197,62 @@ TEST_CASE("Each entity in a file is read as the entity readEntity gives its id",
     INFO("calls: " << Describe(calls));
     INFO("readEntity is called once for target and once for owner, each with its id");
     REQUIRE(calls == std::vector<Call>{{"target", "", "e4"}, {"owner", "", "e12"}});
-    INFO("each field holds the entity its call gave");
+    INFO("target holds the entity its call gave");
     REQUIRE(fixed.target.id == 4);
+    INFO("owner holds the entity its call gave");
     REQUIRE(fixed.owner.id == 12);
     INFO("both resolved, so nothing was counted");
     REQUIRE(result.status == BridgeStatus::Succeeded);
 }
 
-TEST_CASE("A reference or entity in a fixed array is handed to its callback element by element, with the element's "
-          "target type",
+TEST_CASE("Each reference and entity in a fixed array is written through its callback, with the element's target "
+          "type",
           "[serialisation][resolvers]")
+{
+    Linked linked;
+    linked.parts[0] = HandleLayout{5, 1};
+    linked.parts[1] = HandleLayout{6, 1};
+    linked.crew[0] = EntityLayout{7, nullptr};
+    linked.crew[1] = EntityLayout{8, nullptr};
+    std::vector<Call> calls;
+
+    const Value tree = Tree(&linked, LinkedDescription, Recording(calls));
+
+    INFO("calls: " << Describe(calls));
+    INFO("each element is handed over once, under its array's name and with its element's target type");
+    REQUIRE(calls == std::vector<Call>{{"parts", "BridgeTest::Mesh", "asset5"},
+                                       {"parts", "BridgeTest::Mesh", "asset6"},
+                                       {"crew", "", "e7"},
+                                       {"crew", "", "e8"}});
+    INFO("each element holds the string its call gave");
+    REQUIRE(tree == ObjectOf({{"parts", ArrayOf({"asset5", "asset6"})}, {"crew", ArrayOf({"e7", "e8"})}}));
+}
+
+TEST_CASE("Each reference and entity in a fixed array is read through its callback, with the element's target type",
+          "[serialisation][resolvers]")
+{
+    Linked linked;
+    std::vector<Call> calls;
+    RecordingLogger logger;
+
+    const BridgeResult result = Read("{ parts: ['asset5', 'asset6'], crew: ['e7', 'e8'] }", LinkedDescription, &linked,
+                                     Recording(calls), logger);
+
+    INFO("calls: " << Describe(calls));
+    INFO("each element is handed over once, under its array's name and with its element's target type");
+    REQUIRE(calls == std::vector<Call>{{"parts", "BridgeTest::Mesh", "asset5"},
+                                       {"parts", "BridgeTest::Mesh", "asset6"},
+                                       {"crew", "", "e7"},
+                                       {"crew", "", "e8"}});
+    INFO("parts[1] holds the handle its call gave");
+    REQUIRE(linked.parts[1].index == 6);
+    INFO("crew[1] holds the entity its call gave");
+    REQUIRE(linked.crew[1].id == 8);
+    INFO("every element resolved, so nothing was counted");
+    REQUIRE(result.status == BridgeStatus::Succeeded);
+}
+
+TEST_CASE("The empty handle and the null entity write null without a call", "[serialisation][resolvers]")
 {
     Linked linked;
     linked.parts[0] = HandleLayout{5, 1};
@@ -216,14 +262,69 @@ TEST_CASE("A reference or entity in a fixed array is handed to its callback elem
     const Value tree = Tree(&linked, LinkedDescription, Recording(calls));
 
     INFO("calls: " << Describe(calls));
-    INFO("parts[1] is the empty handle and crew[0] the null entity, yet each element is handed over, under its "
-         "array's name and its element's target type");
-    REQUIRE(calls == std::vector<Call>{{"parts", "BridgeTest::Mesh", "asset5"},
-                                       {"parts", "BridgeTest::Mesh", "asset0"},
-                                       {"crew", "", "e4294967295"},
-                                       {"crew", "", "e7"}});
-    INFO("each element holds the string its call gave");
-    REQUIRE(tree == ObjectOf({{"parts", ArrayOf({"asset5", "asset0"})}, {"crew", ArrayOf({"e4294967295", "e7"})}}));
+    INFO("parts[1] is the empty handle and crew[0] the null entity: none, which no callback is asked about");
+    REQUIRE(calls == std::vector<Call>{{"parts", "BridgeTest::Mesh", "asset5"}, {"crew", "", "e7"}});
+    INFO("each is written null beside its array's other element");
+    REQUIRE(tree == ObjectOf({{"parts", ArrayOf({"asset5", nullptr})}, {"crew", ArrayOf({nullptr, "e7"})}}));
+}
+
+TEST_CASE("A reference in a list is written and read through its callback, with the element's target type",
+          "[serialisation][resolvers]")
+{
+    Roster original;
+    original.meshes = {HandleLayout{2, 1}, HandleLayout{4, 1}};
+    std::vector<Call> writes;
+    const Value tree = Tree(&original, RosterDescription, Recording(writes));
+
+    Roster read;
+    std::vector<Call> reads;
+    RecordingLogger logger;
+    Fenrir::TypeRegistry registry;
+    RegisterBridgeTypes(registry);
+    const BridgeResult result = FromTree(tree, RosterDescription, registry, Recording(reads), &read, Path, logger);
+
+    const std::vector<Call> expected{{"meshes", "BridgeTest::Mesh", "asset2"},
+                                     {"meshes", "BridgeTest::Mesh", "asset4"}};
+    INFO("writes: " << Describe(writes));
+    INFO("writeReference is handed each element under the list's name, with the element's target type");
+    REQUIRE(writes == expected);
+    INFO("reads: " << Describe(reads));
+    INFO("readReference is handed each element the same way");
+    REQUIRE(reads == expected);
+    INFO("the list read back both handles");
+    REQUIRE(read.meshes.size() == 2);
+    INFO("the second handle is the one its call gave");
+    REQUIRE(read.meshes[1].index == 4);
+    INFO("every element resolved, so nothing was counted");
+    REQUIRE(result.status == BridgeStatus::Succeeded);
+}
+
+TEST_CASE("An entity in an optional is written and read through its callback", "[serialisation][resolvers]")
+{
+    Roster original;
+    original.leader = EntityLayout{9, nullptr};
+    std::vector<Call> writes;
+    const Value tree = Tree(&original, RosterDescription, Recording(writes));
+
+    Roster read;
+    std::vector<Call> reads;
+    RecordingLogger logger;
+    Fenrir::TypeRegistry registry;
+    RegisterBridgeTypes(registry);
+    const BridgeResult result = FromTree(tree, RosterDescription, registry, Recording(reads), &read, Path, logger);
+
+    INFO("writes: " << Describe(writes));
+    INFO("writeEntity is handed the optional's value under the optional's name");
+    REQUIRE(writes == std::vector<Call>{{"leader", "", "e9"}});
+    INFO("reads: " << Describe(reads));
+    INFO("readEntity is handed it the same way");
+    REQUIRE(reads == std::vector<Call>{{"leader", "", "e9"}});
+    INFO("the optional holds a value");
+    REQUIRE(read.leader.has_value());
+    INFO("the entity its call gave");
+    REQUIRE(read.leader->id == 9);
+    INFO("it resolved, so nothing was counted");
+    REQUIRE(result.status == BridgeStatus::Succeeded);
 }
 
 TEST_CASE("An empty path from writeReference is written as null", "[serialisation][resolvers]")
@@ -258,12 +359,12 @@ TEST_CASE("A null reference reads as the empty handle with no diagnostic and no 
     const BridgeResult result = Read("{ mesh: null }", FixedDescription, &fixed, Recording(calls), logger);
 
     INFO("mesh held a live handle before the read");
-    REQUIRE(fixed.mesh.index == 0);
-    REQUIRE(fixed.mesh.generation == 0);
+    REQUIRE((fixed.mesh.index == 0 && fixed.mesh.generation == 0));
     INFO("null is none: readReference is not asked");
     REQUIRE(calls.empty());
-    INFO("null is what a reference admits: no diagnostic, nothing counted");
+    INFO("null is what a reference admits: no diagnostic");
     REQUIRE(result.diagnostics.empty());
+    INFO("and nothing counted");
     REQUIRE(result.status == BridgeStatus::Succeeded);
 }
 
@@ -280,8 +381,9 @@ TEST_CASE("A null entity reads as the null entity with no diagnostic and no call
     REQUIRE(fixed.target.id == 0xFFFFFFFFu);
     INFO("null is none: readEntity is not asked");
     REQUIRE(calls.empty());
-    INFO("null is what an entity admits: no diagnostic, nothing counted");
+    INFO("null is what an entity admits: no diagnostic");
     REQUIRE(result.diagnostics.empty());
+    INFO("and nothing counted");
     REQUIRE(result.status == BridgeStatus::Succeeded);
 }
 
@@ -299,16 +401,18 @@ TEST_CASE("A path readReference names nothing for leaves the reference empty, co
     const BridgeResult result = Read("{\n  mesh: 'models/gone.glb',\n}", FixedDescription, &fixed, resolvers, logger);
 
     INFO("mesh held a live handle before the read, and is left empty");
-    REQUIRE(fixed.mesh.index == 0);
-    REQUIRE(fixed.mesh.generation == 0);
-    INFO("one unresolved field, nothing defaulted");
+    REQUIRE((fixed.mesh.index == 0 && fixed.mesh.generation == 0));
+    INFO("one unresolved field");
     REQUIRE(result.unresolved == 1);
+    INFO("nothing defaulted");
     REQUIRE(result.defaulted == 0);
+    INFO("an unresolved field makes the read partial");
     REQUIRE(result.status == BridgeStatus::Partial);
     INFO("one error, at the path's node");
     REQUIRE(result.diagnostics.size() == 1);
     INFO(Where(result.diagnostics.front()) << ": " << result.diagnostics.front().message);
     REQUIRE(Where(result.diagnostics.front()) == "error at test.json5:2:9");
+    INFO("the error was logged once, through Error");
     REQUIRE(logger.errors.size() == 1);
 }
 
@@ -327,9 +431,11 @@ TEST_CASE("An id readEntity names nothing for leaves the entity null, counted in
 
     INFO("target held entity 4 before the read, and is left the null entity");
     REQUIRE(fixed.target.id == 0xFFFFFFFFu);
-    INFO("one unresolved field, nothing defaulted");
+    INFO("one unresolved field");
     REQUIRE(result.unresolved == 1);
+    INFO("nothing defaulted");
     REQUIRE(result.defaulted == 0);
+    INFO("an unresolved field makes the read partial");
     REQUIRE(result.status == BridgeStatus::Partial);
     INFO("one error, at the id's node");
     REQUIRE(result.diagnostics.size() == 1);
@@ -347,11 +453,12 @@ TEST_CASE("A reference read with no readReference is left empty, counted in unre
         Read("{\n  mesh: 'models/sword.glb',\n}", FixedDescription, &fixed, Resolvers{}, logger);
 
     INFO("mesh held a live handle before the read, and is left empty");
-    REQUIRE(fixed.mesh.index == 0);
-    REQUIRE(fixed.mesh.generation == 0);
-    INFO("one unresolved field with one diagnostic");
+    REQUIRE((fixed.mesh.index == 0 && fixed.mesh.generation == 0));
+    INFO("one unresolved field");
     REQUIRE(result.unresolved == 1);
+    INFO("an unresolved field makes the read partial");
     REQUIRE(result.status == BridgeStatus::Partial);
+    INFO("with one diagnostic naming the missing callback");
     REQUIRE(result.diagnostics.size() == 1);
 }
 
@@ -365,9 +472,11 @@ TEST_CASE("An entity read with no readEntity is left null, counted in unresolved
 
     INFO("target held entity 4 before the read, and is left the null entity");
     REQUIRE(fixed.target.id == 0xFFFFFFFFu);
-    INFO("one unresolved field with one diagnostic");
+    INFO("one unresolved field");
     REQUIRE(result.unresolved == 1);
+    INFO("an unresolved field makes the read partial");
     REQUIRE(result.status == BridgeStatus::Partial);
+    INFO("with one diagnostic naming the missing callback");
     REQUIRE(result.diagnostics.size() == 1);
 }
 
@@ -381,9 +490,11 @@ TEST_CASE("A reference that is neither a string nor null takes its default", "[s
 
     INFO("a number names no asset, so readReference is not asked");
     REQUIRE(calls.empty());
-    INFO("mesh keeps its default, the empty handle, counted in defaulted and not unresolved");
+    INFO("mesh keeps its default, the empty handle");
     REQUIRE(fixed.mesh.index == 0);
+    INFO("counted in defaulted");
     REQUIRE(result.defaulted == 1);
+    INFO("and not in unresolved, since no callback was asked");
     REQUIRE(result.unresolved == 0);
     INFO("one error, at the number");
     REQUIRE(result.diagnostics.size() == 1);
@@ -394,9 +505,9 @@ TEST_CASE("A reference that is neither a string nor null takes its default", "[s
 TEST_CASE("A path field round-trips its text through a file, non-ASCII UTF-8 included", "[serialisation][resolvers]")
 {
     Owned original;
-    // ui/icônes/épée-ß-剣.png, spelt in escapes so the source's encoding cannot change it: two-, and three-byte
-    // sequences.
-    const std::u8string icon = u8"ui/icônes/épée-ß-剣.png";
+    // Accented Latin letters and a CJK character: two- and three-byte UTF-8 sequences, spelt in escapes so the
+    // source file's encoding cannot change them.
+    const std::u8string icon = u8"ui/ic\u00F4nes/\u00E9p\u00E9e-\u00DF-\u5263.png";
     original.icon = std::filesystem::path(icon);
     std::vector<Call> calls;
     const std::string text = WriteText(Tree(&original, OwnedDescription, Recording(calls)));
