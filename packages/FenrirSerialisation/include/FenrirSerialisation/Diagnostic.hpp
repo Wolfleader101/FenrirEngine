@@ -28,7 +28,10 @@ namespace Fenrir::Serialisation
         std::string path;
         /** @brief The line, counted from 1. */
         std::uint32_t line = 1;
-        /** @brief The column on that line, counted from 1 in code points. */
+        /**
+         * @brief The column on that line, counted from 1 in code points; for the tree encoding, which has no lines, the
+         * byte offset plus one on line 1.
+         */
         std::uint32_t column = 1;
         /** @brief What was expected and what was found, without the location. */
         std::string message;
