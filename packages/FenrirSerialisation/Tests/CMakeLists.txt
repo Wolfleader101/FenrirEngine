@@ -19,6 +19,15 @@ endforeach()
 add_executable(FenrirSerialisationTests PublicHeaders.cpp Values.cpp WriteText.cpp ReadText.cpp Json5Tests.cpp
                                         Goldens.cpp SerialisationTest.hpp ${fenrir_serialisation_header_checks})
 target_link_libraries(FenrirSerialisationTests PRIVATE FenrirSerialisation Catch2::Catch2WithMain)
+target_sources(FenrirSerialisationTests PRIVATE ToTree.cpp BridgeTypes.hpp)
 target_compile_definitions(FenrirSerialisationTests
                            PRIVATE FENRIR_SERIALISATION_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
 add_test(NAME FenrirSerialisation COMMAND FenrirSerialisationTests)
+
+# The bridge over FenrirMath's real Vec3 and Quat, through their registered descriptions: a test executable of its own,
+# so FenrirMath never reaches the one above, whose PublicHeaders.cpp proves the package's headers need nothing above it.
+add_executable(FenrirSerialisationMathTests BridgeGoldens.cpp RealQuat.cpp GoldenTypes.hpp SerialisationTest.hpp)
+target_link_libraries(FenrirSerialisationMathTests PRIVATE FenrirSerialisation FenrirMath Catch2::Catch2WithMain)
+target_compile_definitions(FenrirSerialisationMathTests
+                           PRIVATE FENRIR_SERIALISATION_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
+add_test(NAME FenrirSerialisationMath COMMAND FenrirSerialisationMathTests)

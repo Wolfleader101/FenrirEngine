@@ -12,7 +12,7 @@
     - `null` in a field that does not admit it.
   - **Unknown key:** a key matching no field and no `@formerly` name is warned and dropped, counted in `unknownFields`.
   - **Former name:** a key matching a field's `@formerly` name reads into that field. When both names are present the current one wins and the former is dropped with a warning.
-  - **Optional:** `null` in an `optional` reads as disengaged, and an absent one stays disengaged.
+  - **Optional:** `null` in an `optional` reads as disengaged, and an absent one keeps its default (ticket 03 writes `null` for a disengaged one whose default holds a value).
   - **Fixed string:** text longer than N-1 bytes is cut by `ValueRef::SetText`. The bridge sees the shorter read-back and adds one diagnostic.
   - **Tagged union:** `kind` is read first and `SelectAlternative` is called before the live alternative fills. A missing or unknown `kind` keeps the default alternative, with one diagnostic counted in `defaulted`.
 - **Unknown types:** a canonical type name the registry lacks returns `BridgeStatus::UnknownType` and touches nothing. The caller keeps the subtree, and a test writes it back unchanged.
