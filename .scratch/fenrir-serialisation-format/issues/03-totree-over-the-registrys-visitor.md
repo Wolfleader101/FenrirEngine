@@ -2,7 +2,7 @@
 
 **What to build:** the first half of the bridge (ADR-0079): a described value becomes a value tree without its C++ type in hand, through FenrirTypes' one visitor, so a scene, a data asset or a config writes as the goldens show. Reading back is ticket 04, and references and entities are ticket 05.
 
-- **`ToTree(const void* value, const TypeDescription&, const TypeRegistry&, const Resolvers&, const Value* prior = nullptr) -> Value`** (the spec, "The bridge"). It writes fields in declaration order and omits every field equal to its default, plus every disengaged `optional`. The default is the same field of an instance the description's `Construct` made, visited beside the value; a nested struct compares field by field. The forms, kind by kind:
+- **`ToTree(const void* value, const TypeDescription&, const TypeRegistry&, const Resolvers&, const Value* prior = nullptr) -> Value`** (the spec, "The bridge"). It writes fields in declaration order and omits every field equal to its default, plus every disengaged `optional` whose default is disengaged too; one whose default holds a value is written `null`. The default is the same field of an instance the description's `Construct` made, visited beside the value; a nested struct compares field by field. The forms, kind by kind:
   - a struct is an `Object`, a `list` an `Array`, and an enum its enumerator name;
   - `string`, `fixed-string` and `path` are each a `String`;
   - a number is a `Number` of its own width;
@@ -16,9 +16,9 @@
 
 **Touches:** `packages/FenrirSerialisation/` (`include/FenrirSerialisation/`, `src/`, `Tests/`, `Tests/CMakeLists.txt`)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Every kind writes its form in one test per kind, the tagged union and the bound type included, with a field at its default omitted and one off its default written.
-- [ ] A disengaged `optional` is omitted. An engaged one is written as its value.
-- [ ] The hand-registered sword and scene types write the two goldens byte for byte.
-- [ ] A struct registered with FenrirMath's real `Quat` writes `rotation` as `x, y, z, w`.
+- [x] Every kind writes its form in one test per kind, the tagged union and the bound type included, with a field at its default omitted and one off its default written.
+- [x] A disengaged `optional` is omitted, or written `null` when its default holds a value. An engaged one is written as its value.
+- [x] The hand-registered sword and scene types write the two goldens byte for byte.
+- [x] A struct registered with FenrirMath's real `Quat` writes `rotation` as `x, y, z, w`.

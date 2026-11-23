@@ -1,6 +1,7 @@
 // FenrirSerialisation links FenrirTypes and FenrirLogger and nothing else (ADR-0079 §1). This file includes its headers
 // before anything else, so if one of them ever reaches for a package above it, the build fails here. That each header
 // also compiles alone is checked by the one-line sources the test CMakeLists.txt writes per header.
+#include "FenrirSerialisation/Bridge.hpp"
 #include "FenrirSerialisation/Text.hpp"
 #include "FenrirSerialisation/Value.hpp"
 
