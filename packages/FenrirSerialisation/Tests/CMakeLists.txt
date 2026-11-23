@@ -18,6 +18,7 @@ endforeach()
 
 add_executable(FenrirSerialisationTests PublicHeaders.cpp Values.cpp WriteText.cpp ReadText.cpp Json5Tests.cpp
                                         Goldens.cpp SerialisationTest.hpp ${fenrir_serialisation_header_checks})
+target_sources(FenrirSerialisationTests PRIVATE Encoding.cpp)
 target_link_libraries(FenrirSerialisationTests PRIVATE FenrirSerialisation Catch2::Catch2WithMain)
 target_compile_definitions(FenrirSerialisationTests
                            PRIVATE FENRIR_SERIALISATION_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")

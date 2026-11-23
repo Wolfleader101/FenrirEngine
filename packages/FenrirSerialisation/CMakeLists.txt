@@ -4,7 +4,9 @@ add_library(FenrirSerialisation STATIC
     src/Value.cpp
     src/Text.cpp
     src/ReadText.cpp
+    src/Encoding.cpp
     include/FenrirSerialisation/Diagnostic.hpp
+    include/FenrirSerialisation/Encoding.hpp
     include/FenrirSerialisation/Text.hpp
     include/FenrirSerialisation/Value.hpp
 )
