@@ -8,10 +8,12 @@ add_library(FenrirSerialisation STATIC
     src/ToTree.cpp
     src/FromTree.cpp
     src/Encoding.cpp
+    src/Upgrade.cpp
     include/FenrirSerialisation/Bridge.hpp
     include/FenrirSerialisation/Diagnostic.hpp
     include/FenrirSerialisation/Encoding.hpp
     include/FenrirSerialisation/Text.hpp
+    include/FenrirSerialisation/Upgrade.hpp
     include/FenrirSerialisation/Value.hpp
 )
 
