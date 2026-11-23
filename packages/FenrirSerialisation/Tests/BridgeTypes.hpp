@@ -17,6 +17,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace BridgeTest
@@ -363,13 +364,36 @@ namespace BridgeTest
         .visit = VisitOwned,
     };
 
+    // A field renamed once: files written before the rename spell `health` as `hp`.
+    struct Renamed
+    {
+        std::int32_t health = 100;
+    };
+
+    inline constexpr std::string_view HealthFormerly[] = {"hp"};
+
+    inline const FieldInfo RenamedFields[] = {
+        {.name = "health", .type = I32, .offset = offsetof(Renamed, health), .formerly = HealthFormerly},
+    };
+
+    inline const TypeDescription RenamedDescription{
+        .name = "BridgeTest::Renamed",
+        .package = "FenrirSerialisationTests",
+        .role = Role::Component,
+        .size = sizeof(Renamed),
+        .alignment = alignof(Renamed),
+        .construct = Fenrir::ConstructValue<Renamed>,
+        .destroy = Fenrir::DestroyValue<Renamed>,
+        .fields = RenamedFields,
+    };
+
     // Adds the types above to `registry`, as a package's generated registration would; whether every one was added.
     inline bool RegisterBridgeTypes(Fenrir::TypeRegistry& registry)
     {
         bool registered = true;
         for (const TypeDescription* description :
              {&MobilityDescription, &Vec3Description, &RangeDescription, &ShapeKindDescription, &BoxShapeDescription,
-              &SphereShapeDescription, &ShapeDescription, &FixedDescription, &OwnedDescription})
+              &SphereShapeDescription, &ShapeDescription, &FixedDescription, &OwnedDescription, &RenamedDescription})
             registered = registry.Register(*description) && registered;
         return registered;
     }
