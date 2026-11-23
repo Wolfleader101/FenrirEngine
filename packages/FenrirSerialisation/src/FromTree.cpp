@@ -1,5 +1,7 @@
 #include "FenrirSerialisation/Bridge.hpp"
 
+#include "HandedField.hpp"
+
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirTypes/FieldVisitor.hpp"
 #include "FenrirTypes/Kind.hpp"
@@ -9,6 +11,7 @@
 #include <cstdint>
 #include <format>
 #include <limits>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -157,7 +160,8 @@ namespace Fenrir::Serialisation
         class Reader
         {
           public:
-            Reader(std::string_view path, BridgeResult& result) : m_path(path), m_result(result)
+            Reader(const Resolvers& resolvers, std::string_view path, BridgeResult& result)
+                : m_resolvers(resolvers), m_path(path), m_result(result)
             {
             }
 
@@ -216,9 +220,14 @@ namespace Fenrir::Serialisation
                 case Kind::Optional:
                     return ReadOptional(node, target, where);
                 case Kind::Reference:
+                    return ReadResolved(node, target, where, "an asset path", "readReference",
+                                        m_resolvers.readReference,
+                                        [&](Fenrir::ReferenceValue reference) { target.SetReference(reference); });
                 case Kind::Entity:
+                    return ReadResolved(node, target, where, "an entity id", "readEntity", m_resolvers.readEntity,
+                                        [&](Fenrir::EntityValue entity) { target.SetEntity(entity); });
                 case Kind::Pointer:
-                    // A pointer is never in a file; references and entities are the resolvers' (ticket 05).
+                    // Never in a file.
                     return true;
                 case Kind::Struct:
                     return ReadStruct(node, target, where);
@@ -305,6 +314,38 @@ namespace Fenrir::Serialisation
                 }
                 }
                 *target.Get<T>() = value;
+                return true;
+            }
+
+            // A reference or an entity: `null` is none, and a string is what `resolve`, the caller's callback, names
+            // the value by. A string it names nothing for, or one with no callback to ask, leaves the value empty,
+            // with one error counted in `unresolved`. `what` is what the string should be and `callback` the
+            // callback's name, for the diagnostic; `set` writes the value.
+            template <typename Resolve, typename Set>
+            bool ReadResolved(const Value& node, ValueRef target, std::string_view where, std::string_view what,
+                              std::string_view callback, const Resolve& resolve, const Set& set)
+            {
+                using Resolved = typename std::invoke_result_t<Resolve, std::string_view, const FieldInfo&>::value_type;
+                if (node.Kind() == ValueKind::Null)
+                {
+                    set(Resolved{});
+                    return true;
+                }
+                if (node.Kind() != ValueKind::String)
+                    return Reject(node, where, std::format("{} or null", what));
+                std::optional<Resolved> resolved;
+                if (resolve && m_field != nullptr)
+                    resolved = HandedField(*m_field, target.Type(),
+                                           [&](const FieldInfo& handed) { return resolve(node.AsString(), handed); });
+                set(resolved.value_or(Resolved{}));
+                if (resolved.has_value())
+                    return true;
+                ++m_result.unresolved;
+                Report(DiagnosticSeverity::Error, node,
+                       resolve ? std::format("`{}` names {}, which {} resolves to nothing; it is left empty", where,
+                                             Found(node), callback)
+                               : std::format("`{}` names {}, but there is no {} to resolve it; it is left empty", where,
+                                             Found(node), callback));
                 return true;
             }
 
@@ -419,7 +460,10 @@ namespace Fenrir::Serialisation
                         node, where,
                         std::format("an array of {} components of {}", components.size(), target.Description()->name));
                 for (std::size_t i = 0; i < components.size(); ++i)
+                {
+                    const FieldScope scope(m_field, components[i].info);
                     Read(node.AsArray().elements[i].value, components[i].value, Below(where, components[i].info->name));
+                }
                 return true;
             }
 
@@ -512,7 +556,10 @@ namespace Fenrir::Serialisation
                                                Below(where, object.members[sources[f]].key), Below(where, formerName)));
                         }
                     if (sources[f] != none && info.type.kind != Kind::Pointer)
+                    {
+                        const FieldScope scope(m_field, &info);
                         Read(object.members[sources[f]].value, fields[f].value, Below(where, info.name));
+                    }
                 }
 
                 for (std::size_t m = 0; m < object.members.size(); ++m)
@@ -525,14 +572,40 @@ namespace Fenrir::Serialisation
                 }
             }
 
+            // Makes `field` the field being read until it ends, the one before it then again.
+            class FieldScope
+            {
+              public:
+                FieldScope(const FieldInfo*& current, const FieldInfo* field) noexcept
+                    : m_current(current), m_previous(current)
+                {
+                    m_current = field;
+                }
+
+                ~FieldScope()
+                {
+                    m_current = m_previous;
+                }
+
+                FieldScope(const FieldScope&) = delete;
+                FieldScope& operator=(const FieldScope&) = delete;
+
+              private:
+                const FieldInfo*& m_current;
+                const FieldInfo* m_previous;
+            };
+
+            const Resolvers& m_resolvers;
             std::string_view m_path;
             BridgeResult& m_result;
+            // The field being read, or holding the element or optional's value being read: the one a resolver is
+            // handed.
+            const FieldInfo* m_field = nullptr;
         };
     } // namespace
 
     BridgeResult FromTree(const Value& tree, const TypeDescription& type, const TypeRegistry& registry,
-                          [[maybe_unused]] const Resolvers& resolvers, void* value, std::string_view path,
-                          ILogger& logger)
+                          const Resolvers& resolvers, void* value, std::string_view path, ILogger& logger)
     {
         BridgeResult result;
         if (registry.Find(type.name) == nullptr)
@@ -542,7 +615,7 @@ namespace Fenrir::Serialisation
         }
 
         const ValueType valueType{.kind = Kind::Struct, .type = &type};
-        Reader(path, result).Read(tree, ValueRef(value, valueType), std::string());
+        Reader(resolvers, path, result).Read(tree, ValueRef(value, valueType), std::string());
 
         for (const Diagnostic& diagnostic : result.diagnostics)
         {

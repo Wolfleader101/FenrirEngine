@@ -109,7 +109,8 @@ TEST_CASE("A struct of every fixed-layout kind goes to a tree and back unchanged
     RegisterBridgeTypes(registry);
     const BridgeResult result = FromTree(tree, FixedDescription, registry, Resolvers{}, &read, Path, logger);
 
-    INFO("every field but the reference, entity and pointer ones (ticket 05's and never written) is off its default");
+    INFO("every field but the reference and entity ones (the resolvers') and the pointer (never written) is off its "
+         "default");
     REQUIRE(tree.AsObject().members.size() == 23);
     INFO("the read value writes the same tree as the original, so every field read back equal");
     REQUIRE(Written(&read, FixedDescription) == tree);

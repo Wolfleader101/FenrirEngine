@@ -393,13 +393,44 @@ namespace BridgeTest
         .fields = RenamedFields,
     };
 
+    // References and entities as the elements of fixed arrays, whose resolvers are handed each element apart.
+    struct Linked
+    {
+        HandleLayout parts[2];
+        EntityLayout crew[2];
+    };
+
+    inline constexpr ValueType PartType{.kind = Kind::Reference, .target = "BridgeTest::Mesh"};
+    inline constexpr ValueType CrewType{.kind = Kind::Entity};
+
+    inline const FieldInfo LinkedFields[] = {
+        {.name = "parts",
+         .type = {.kind = Kind::Array, .element = &PartType, .count = 2},
+         .offset = offsetof(Linked, parts)},
+        {.name = "crew",
+         .type = {.kind = Kind::Array, .element = &CrewType, .count = 2},
+         .offset = offsetof(Linked, crew)},
+    };
+
+    inline const TypeDescription LinkedDescription{
+        .name = "BridgeTest::Linked",
+        .package = "FenrirSerialisationTests",
+        .role = Role::Component,
+        .size = sizeof(Linked),
+        .alignment = alignof(Linked),
+        .construct = Fenrir::ConstructValue<Linked>,
+        .destroy = Fenrir::DestroyValue<Linked>,
+        .fields = LinkedFields,
+    };
+
     // Adds the types above to `registry`, as a package's generated registration would; whether every one was added.
     inline bool RegisterBridgeTypes(Fenrir::TypeRegistry& registry)
     {
         bool registered = true;
         for (const TypeDescription* description :
              {&MobilityDescription, &Vec3Description, &RangeDescription, &ShapeKindDescription, &BoxShapeDescription,
-              &SphereShapeDescription, &ShapeDescription, &FixedDescription, &OwnedDescription, &RenamedDescription})
+              &SphereShapeDescription, &ShapeDescription, &FixedDescription, &OwnedDescription, &RenamedDescription,
+              &LinkedDescription})
             registered = registry.Register(*description) && registered;
         return registered;
     }
