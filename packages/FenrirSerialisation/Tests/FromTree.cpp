@@ -188,6 +188,7 @@ TEST_CASE("An integer out of its kind's range takes its field's default, with on
 
     INFO("300 does not fit team's u8, so team keeps its default 0");
     REQUIRE(fixed.team == 0);
+    INFO("the rejected value is counted once in defaulted");
     REQUIRE(result.defaulted == 1);
     REQUIRE(result.diagnostics.size() == 1);
     INFO(Where(result.diagnostics[0]) << ": " << result.diagnostics[0].message);
@@ -205,6 +206,7 @@ TEST_CASE("A negative number in an unsigned field takes its field's default, wit
 
     INFO("-1 is below seed's u64 range, so seed keeps its default 7");
     REQUIRE(fixed.seed == 7);
+    INFO("the rejected value is counted once in defaulted");
     REQUIRE(result.defaulted == 1);
     REQUIRE(result.diagnostics.size() == 1);
     INFO(Where(result.diagnostics[0]) << ": " << result.diagnostics[0].message);
@@ -220,6 +222,7 @@ TEST_CASE("A float in an integer field takes its field's default, with one locat
 
     INFO("2.5 is no i32, so lives keeps its default 3");
     REQUIRE(fixed.lives == 3);
+    INFO("the rejected value is counted once in defaulted");
     REQUIRE(result.defaulted == 1);
     REQUIRE(result.diagnostics.size() == 1);
     INFO(Where(result.diagnostics[0]) << ": " << result.diagnostics[0].message);
@@ -235,6 +238,7 @@ TEST_CASE("An unknown enumerator takes its field's default, with one located err
 
     INFO("Mobility has no Flying, so mobility keeps its default Static");
     REQUIRE(fixed.mobility == Mobility::Static);
+    INFO("the rejected value is counted once in defaulted");
     REQUIRE(result.defaulted == 1);
     REQUIRE(result.diagnostics.size() == 1);
     INFO(Where(result.diagnostics[0]) << ": " << result.diagnostics[0].message);
@@ -251,9 +255,26 @@ TEST_CASE("Null in a field that does not admit it takes its default, with one lo
 
     INFO("speed is an f32, which null is not, so it keeps its default 1.5");
     REQUIRE(fixed.speed == 1.5f);
+    INFO("the rejected value is counted once in defaulted");
     REQUIRE(result.defaulted == 1);
     REQUIRE(result.diagnostics.size() == 1);
     INFO(Where(result.diagnostics[0]) << ": " << result.diagnostics[0].message);
+    REQUIRE(result.diagnostics[0].line == 2);
+    REQUIRE(result.diagnostics[0].column == 10);
+}
+
+TEST_CASE("A finite number beyond a float's range takes its field's default, with one located error",
+          "[serialisation][fromtree]")
+{
+    Fixed fixed;
+    RecordingLogger logger;
+    const BridgeResult result = Read("{\n  speed: 1e300,\n}", fixed, logger);
+
+    INFO("1e300 has no f32, so speed keeps its default 1.5 rather than becoming Infinity");
+    REQUIRE(fixed.speed == 1.5f);
+    INFO("the rejected value is counted once in defaulted, its error at line 2 column 10");
+    REQUIRE(result.defaulted == 1);
+    REQUIRE(result.diagnostics.size() == 1);
     REQUIRE(result.diagnostics[0].line == 2);
     REQUIRE(result.diagnostics[0].column == 10);
 }
@@ -268,6 +289,7 @@ TEST_CASE("A bound type of the wrong length takes its field's default, with one 
     INFO("a Vec3 has three components, so two leave scale at its default 1, 1, 1, none of them written");
     REQUIRE(fixed.scale.x == 1.0f);
     REQUIRE(fixed.scale.y == 1.0f);
+    INFO("the rejected value is counted once in defaulted");
     REQUIRE(result.defaulted == 1);
     REQUIRE(result.diagnostics.size() == 1);
     INFO(Where(result.diagnostics[0]) << ": " << result.diagnostics[0].message);
@@ -283,6 +305,7 @@ TEST_CASE("A bad list element takes the element type's default, with one located
 
     INFO("the list keeps all three places, the bool's taking an i32's default 0");
     REQUIRE(owned.tags == std::vector<std::int32_t>{1, 0, 3});
+    INFO("the rejected value is counted once in defaulted");
     REQUIRE(result.defaulted == 1);
     REQUIRE(result.diagnostics.size() == 1);
     INFO(Where(result.diagnostics[0]) << ": " << result.diagnostics[0].message);
@@ -324,15 +347,23 @@ TEST_CASE("A field's former name alone reads into the field", "[serialisation][f
     REQUIRE(result.diagnostics.empty());
 }
 
-TEST_CASE("With both a field's names present the current one wins, and the former is dropped with a warning",
-          "[serialisation][fromtree]")
+TEST_CASE("With both a field's names present the current one wins", "[serialisation][fromtree]")
+{
+    Renamed renamed;
+    RecordingLogger logger;
+    Read("{\n  hp: 10,\n  health: 40,\n}", renamed, logger);
+
+    INFO("health is read and hp is not, though hp comes first");
+    REQUIRE(renamed.health == 40);
+}
+
+TEST_CASE("A former name beside the current one is dropped with a located warning", "[serialisation][fromtree]")
 {
     Renamed renamed;
     RecordingLogger logger;
     const BridgeResult result = Read("{\n  hp: 10,\n  health: 40,\n}", renamed, logger);
 
-    INFO("health is read and hp is dropped, though hp comes first");
-    REQUIRE(renamed.health == 40);
+    INFO("the dropped hp gives the one diagnostic");
     REQUIRE(result.diagnostics.size() == 1);
     INFO(Where(result.diagnostics[0]) << ": " << result.diagnostics[0].message);
     INFO("the warning is at hp's value, line 2 column 7");
@@ -341,6 +372,33 @@ TEST_CASE("With both a field's names present the current one wins, and the forme
     REQUIRE(result.diagnostics[0].column == 7);
     INFO("the dropped former name is no unknown field");
     REQUIRE(result.unknownFields == 0);
+}
+
+TEST_CASE("Of two former names present the first a field lists is read, and the other dropped with a warning",
+          "[serialisation][fromtree]")
+{
+    Renamed renamed;
+    RecordingLogger logger;
+    const BridgeResult result = Read("{\n  life: 20,\n  hp: 10,\n}", renamed, logger);
+
+    INFO("health lists hp before life, so hp is read though life comes first in the file");
+    REQUIRE(renamed.health == 10);
+    INFO("life is dropped with one warning, at its value on line 2 column 9");
+    REQUIRE(result.diagnostics.size() == 1);
+    REQUIRE(result.diagnostics[0].severity == DiagnosticSeverity::Warning);
+    REQUIRE(result.diagnostics[0].line == 2);
+    REQUIRE(result.diagnostics[0].column == 9);
+}
+
+TEST_CASE("A field's current name is its own, though another field was once called it", "[serialisation][fromtree]")
+{
+    Renamed renamed;
+    RecordingLogger logger;
+    Read("{\n  shield: 5,\n}", renamed, logger);
+
+    INFO("shield is the shield field's current name and armour's former one: the current name wins");
+    REQUIRE(renamed.shield == 5);
+    REQUIRE(renamed.armour == 0);
 }
 
 TEST_CASE("Null in an optional reads as disengaged", "[serialisation][fromtree]")
@@ -365,6 +423,7 @@ TEST_CASE("An optional absent from the tree keeps its default", "[serialisation]
     INFO("edge was disengaged and reads 0.5; reach, absent, keeps its default 2");
     REQUIRE(owned.edge == std::optional<float>(0.5f));
     REQUIRE(owned.reach == std::optional<float>(2.0f));
+    INFO("nothing was defaulted or dropped");
     REQUIRE(result.status == BridgeStatus::Succeeded);
 }
 
@@ -376,6 +435,7 @@ TEST_CASE("A bad value in an optional leaves the optional at its default", "[ser
 
     INFO("edge was disengaged by default and stays so, rather than holding a value-initialised float");
     REQUIRE_FALSE(owned.edge.has_value());
+    INFO("the rejected value is counted once in defaulted");
     REQUIRE(result.defaulted == 1);
 }
 
@@ -395,6 +455,16 @@ TEST_CASE("A fixed string too long for its array is cut, with one located warnin
     REQUIRE(result.diagnostics[0].column == 10);
 }
 
+TEST_CASE("A fixed string that fits is not reported cut, though a NUL in it ends the text", "[serialisation][fromtree]")
+{
+    Fixed fixed;
+    RecordingLogger logger;
+    const BridgeResult result = Read("{\n  label: \"ab\\u0000cd\",\n}", fixed, logger);
+
+    INFO("five bytes fit label's seven, so nothing was cut and nothing is reported");
+    REQUIRE(result.diagnostics.empty());
+}
+
 TEST_CASE("A tagged union read with kind Sphere holds a sphere with the file's radius", "[serialisation][fromtree]")
 {
     Fixed fixed;
@@ -404,6 +474,7 @@ TEST_CASE("A tagged union read with kind Sphere holds a sphere with the file's r
     INFO("kind selected the sphere before radius filled it");
     REQUIRE(fixed.shape.kind == ShapeKind::Sphere);
     REQUIRE(fixed.shape.sphere.radius == 4.0f);
+    INFO("nothing was defaulted or dropped");
     REQUIRE(result.status == BridgeStatus::Succeeded);
 }
 
@@ -436,6 +507,7 @@ TEST_CASE("A tagged union with no kind holds its default alternative, with one l
 
     INFO("without kind the union keeps its default box");
     REQUIRE(fixed.shape.kind == ShapeKind::Box);
+    INFO("the rejected value is counted once in defaulted");
     REQUIRE(result.defaulted == 1);
     REQUIRE(result.diagnostics.size() == 1);
     INFO(Where(result.diagnostics[0]) << ": " << result.diagnostics[0].message);
@@ -501,6 +573,7 @@ TEST_CASE("A root that is not an object leaves the whole value at its default", 
 
     INFO("a struct reads from an object alone; the array is one value of the wrong kind");
     REQUIRE(fixed.lives == 3);
+    INFO("the rejected value is counted once in defaulted");
     REQUIRE(result.defaulted == 1);
     REQUIRE(result.diagnostics.size() == 1);
     INFO(Where(result.diagnostics[0]) << ": " << result.diagnostics[0].message);

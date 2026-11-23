@@ -364,16 +364,22 @@ namespace BridgeTest
         .visit = VisitOwned,
     };
 
-    // A field renamed once: files written before the rename spell `health` as `hp`.
+    // Renamed fields: `health` was `hp` and before that `life`; `armour` was once `shield`, a name the later `shield`
+    // field now holds, so a field's current name must win over another field's former one.
     struct Renamed
     {
         std::int32_t health = 100;
+        std::int32_t armour = 0;
+        std::int32_t shield = 0;
     };
 
-    inline constexpr std::string_view HealthFormerly[] = {"hp"};
+    inline constexpr std::string_view HealthFormerly[] = {"hp", "life"};
+    inline constexpr std::string_view ArmourFormerly[] = {"shield"};
 
     inline const FieldInfo RenamedFields[] = {
         {.name = "health", .type = I32, .offset = offsetof(Renamed, health), .formerly = HealthFormerly},
+        {.name = "armour", .type = I32, .offset = offsetof(Renamed, armour), .formerly = ArmourFormerly},
+        {.name = "shield", .type = I32, .offset = offsetof(Renamed, shield)},
     };
 
     inline const TypeDescription RenamedDescription{

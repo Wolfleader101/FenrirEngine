@@ -546,18 +546,24 @@ TEST_CASE("A value reference to a tagged union selects its alternative through t
     REQUIRE(shape.Type() == Fixture::ShapeType::Sphere);
 }
 
-TEST_CASE("A value reference to anything but a tagged union selects nothing")
+TEST_CASE("A value reference to a struct that is no tagged union selects nothing")
 {
     Registered fixture;
     Fixture::Collider collider;
     collider.solid = false;
     const Fenrir::ValueType type{.kind = Kind::Struct, .type = &fixture.Get("Fixture::Collider")};
+
+    INFO("Collider has no alternatives, so nothing is selected or written");
+    REQUIRE_FALSE(Fenrir::ValueRef(&collider, type).SelectAlternative(0));
+    REQUIRE_FALSE(collider.solid);
+}
+
+TEST_CASE("A value reference to a scalar selects nothing")
+{
     float number = 2.0f;
     const Fenrir::ValueType f32{.kind = Kind::F32};
 
-    INFO("a struct has no alternatives and a float no description, so neither selects or writes anything");
-    REQUIRE_FALSE(Fenrir::ValueRef(&collider, type).SelectAlternative(0));
-    REQUIRE_FALSE(collider.solid);
+    INFO("a float has no description, so nothing is selected or written");
     REQUIRE_FALSE(Fenrir::ValueRef(&number, f32).SelectAlternative(0));
     REQUIRE(number == 2.0f);
 }

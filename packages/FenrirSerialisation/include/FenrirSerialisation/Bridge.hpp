@@ -102,12 +102,15 @@ namespace Fenrir::Serialisation
      * `value` must be an instance `type`'s `Construct` made, since its fields are the defaults a field absent from the
      * tree keeps. Each kind reads the form `ToTree` writes it in. Then:
      * - a value that cannot be read takes its default, with one located error, and is counted in `defaulted`. That is
-     *   a value of the wrong kind, an integer out of its kind's range, a float in an integer field, an unknown
-     *   enumerator, `null` in a field that does not admit it, and a fixed array or bound type of the wrong length;
+     *   a value of the wrong kind, an integer out of its kind's range, a float in an integer field, a finite number
+     *   beyond an `f32`'s range, an unknown enumerator, `null` in a field that does not admit it, and a fixed array
+     *   or bound type of the wrong length;
      * - a list's elements are each read so, a bad element taking the element type's default;
      * - a key matching no field and no `@formerly` name is warned, dropped and counted in `unknownFields`;
      * - a key matching a field's `@formerly` name reads into that field; when the current name is there too, the
-     *   current one is read and the former is dropped with a warning, which no count counts;
+     *   current one is read and the former is dropped with a warning, which no count counts. Of several former names
+     *   the first the field lists is read, the others dropped so. Every field's current name is claimed before any
+     *   former name, so a field keeps its own key though another field once had that name;
      * - `null` in an `optional` reads as disengaged;
      * - a `fixed-string` longer than N-1 bytes is cut by `ValueRef::SetText` on a UTF-8 boundary, with one warning
      *   (ADR-0078 §6);

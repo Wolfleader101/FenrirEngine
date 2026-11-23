@@ -4,11 +4,14 @@
 #include "FenrirTypes/FieldVisitor.hpp"
 #include "FenrirTypes/Kind.hpp"
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <format>
+#include <limits>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -82,7 +85,7 @@ namespace Fenrir::Serialisation
             return "a value";
         }
 
-        // Whether `number` is an integer that `kind`, an integer kind, holds; its value cut to 64 bits when it is.
+        // Whether `number`, an integer, is in `T`'s range; its value as a `T` in `out` when it is.
         template <typename T>
         bool IntegerFits(const Number& number, T& out) noexcept
         {
@@ -132,6 +135,15 @@ namespace Fenrir::Serialisation
             default:
                 return false;
             }
+        }
+
+        // The enumerator of `type` named `name`; null when it has none.
+        const Enumerator* FindEnumerator(const TypeDescription& type, std::string_view name) noexcept
+        {
+            for (const Enumerator& enumerator : type.enumerators)
+                if (enumerator.name == name)
+                    return &enumerator;
+            return nullptr;
         }
 
         // The name a diagnostic gives a field below `where`: `range.min`, `tags[2]`.
@@ -280,9 +292,17 @@ namespace Fenrir::Serialisation
                 case NumberWidth::Single:
                     value = static_cast<T>(number.AsSingle());
                     break;
-                case NumberWidth::Double:
-                    value = static_cast<T>(number.AsDouble());
+                case NumberWidth::Double: {
+                    const double wide = number.AsDouble();
+                    // A finite double beyond a float's range has no float; an infinity or a NaN has one.
+                    if constexpr (std::is_same_v<T, float>)
+                        if (std::isfinite(wide) && std::abs(wide) > std::numeric_limits<float>::max())
+                            return Reject(node, std::format("`{}` expected {}, found {}, which is out of its range; "
+                                                            "it keeps its default",
+                                                            where, kind, Found(node)));
+                    value = static_cast<T>(wide);
                     break;
+                }
                 }
                 *target.Get<T>() = value;
                 return true;
@@ -296,12 +316,11 @@ namespace Fenrir::Serialisation
                     return true;
                 if (node.Kind() == ValueKind::String)
                 {
-                    for (const Enumerator& enumerator : type->enumerators)
-                        if (enumerator.name == node.AsString())
-                        {
-                            target.SetEnumValue(enumerator.value);
-                            return true;
-                        }
+                    if (const Enumerator* enumerator = FindEnumerator(*type, node.AsString()))
+                    {
+                        target.SetEnumValue(enumerator->value);
+                        return true;
+                    }
                     return Reject(node, std::format("`{}` expected an enumerator of {}, found {}, which it does not "
                                                     "have; it keeps its default",
                                                     where, type->name, Found(node)));
@@ -323,11 +342,13 @@ namespace Fenrir::Serialisation
                     return Reject(node, where, "a string");
                 const std::string& text = node.AsString();
                 target.SetText(text);
+                // Measured against the array, not the text read back, which a NUL in the string also shortens.
+                const std::size_t capacity = target.Type().count - 1;
                 const std::size_t kept = target.Text().size();
-                if (kept < text.size())
+                if (text.size() > capacity)
                     Report(DiagnosticSeverity::Warning, node,
                            std::format("`{}` holds at most {} bytes, so the {}-byte string was cut to {}", where,
-                                       target.Type().count - 1, text.size(), kept));
+                                       capacity, text.size(), kept));
                 return true;
             }
 
@@ -384,7 +405,7 @@ namespace Fenrir::Serialisation
                 if (node.Kind() != ValueKind::Object)
                     return Reject(node, where.empty() ? std::string(type->name) : where, "an object");
                 if (type->IsTaggedUnion())
-                    return ReadUnion(node.AsObject(), node, target, where);
+                    return ReadUnion(node, target, where);
                 ReadFields(node.AsObject(), FieldsOf(target), where, {});
                 return true;
             }
@@ -403,8 +424,9 @@ namespace Fenrir::Serialisation
             }
 
             // `kind` first, selecting its alternative, then the alternative's fields from the members beside it.
-            bool ReadUnion(const Object& object, const Value& node, ValueRef target, const std::string& where)
+            bool ReadUnion(const Value& node, ValueRef target, const std::string& where)
             {
+                const Object& object = node.AsObject();
                 const TypeDescription& type = *target.Description();
                 const std::string kindName = Below(where, type.tag.name);
                 const Value* kind = object.Find(type.tag.name);
@@ -412,11 +434,9 @@ namespace Fenrir::Serialisation
                     return Reject(node, std::format("`{}` has no `{}`, so it keeps its default alternative", where,
                                                     type.tag.name));
                 const TypeDescription* tagType = type.tag.type.type;
-                const Enumerator* selected = nullptr;
-                if (kind->Kind() == ValueKind::String && tagType != nullptr)
-                    for (const Enumerator& enumerator : tagType->enumerators)
-                        if (enumerator.name == kind->AsString())
-                            selected = &enumerator;
+                const Enumerator* selected = kind->Kind() == ValueKind::String && tagType != nullptr
+                                                 ? FindEnumerator(*tagType, kind->AsString())
+                                                 : nullptr;
                 if (selected == nullptr || !SelectUnionAlternative(target, selected->value))
                     return Reject(*kind, std::format("`{}` expected an alternative of {}, found {}; `{}` keeps its "
                                                      "default alternative",
@@ -449,51 +469,50 @@ namespace Fenrir::Serialisation
                 return target.SelectAlternative(tagValue);
             }
 
-            // Reads each of `fields` from the member named by it, or else by one of its former names, and warns of
-            // every member neither names. `skip` is a key read already, a tagged union's `kind`.
+            // Reads each of `fields` from the member named by it, or else by the first of its former names present,
+            // and warns of every member neither reads. Every field claims its current name before any former name is
+            // tried, so a field renamed to another's old name keeps its own key. `tagKey` is a key read already, a
+            // tagged union's `kind`.
             void ReadFields(const Object& object, const std::vector<VisitedField>& fields, const std::string& where,
-                            std::string_view skip)
+                            std::string_view tagKey)
             {
+                const std::size_t none = object.members.size();
                 std::vector<bool> used(object.members.size(), false);
-                for (std::size_t m = 0; m < object.members.size(); ++m)
-                    if (!skip.empty() && object.members[m].key == skip)
-                        used[m] = true;
-
-                for (const VisitedField& field : fields)
-                {
-                    const Member* current = nullptr;
-                    std::size_t currentIndex = 0;
+                const auto claim = [&](std::string_view key) {
                     for (std::size_t m = 0; m < object.members.size(); ++m)
-                        if (!used[m] && object.members[m].key == field.info->name)
+                        if (!used[m] && object.members[m].key == key)
                         {
-                            current = &object.members[m];
-                            currentIndex = m;
-                            break;
-                        }
-                    if (current != nullptr)
-                        used[currentIndex] = true;
-
-                    const Member* former = nullptr;
-                    for (std::string_view formerName : field.info->formerly)
-                        for (std::size_t m = 0; m < object.members.size(); ++m)
-                        {
-                            if (used[m] || object.members[m].key != formerName)
-                                continue;
                             used[m] = true;
-                            if (current != nullptr)
-                                Report(DiagnosticSeverity::Warning, object.members[m].value,
-                                       std::format("`{}` is the former name of `{}`, which is here too and is read; "
-                                                   "`{}` is dropped",
-                                                   Below(where, formerName), Below(where, field.info->name),
-                                                   Below(where, formerName)));
-                            else if (former == nullptr)
-                                former = &object.members[m];
+                            return m;
                         }
+                    return none;
+                };
+                if (!tagKey.empty())
+                    claim(tagKey);
 
-                    const Member* source = current != nullptr ? current : former;
-                    if (source == nullptr || field.info->type.kind == Kind::Pointer)
-                        continue;
-                    Read(source->value, field.value, Below(where, field.info->name));
+                std::vector<std::size_t> sources(fields.size(), none);
+                for (std::size_t f = 0; f < fields.size(); ++f)
+                    sources[f] = claim(fields[f].info->name);
+
+                for (std::size_t f = 0; f < fields.size(); ++f)
+                {
+                    const FieldInfo& info = *fields[f].info;
+                    for (std::string_view formerName : info.formerly)
+                        for (std::size_t m = claim(formerName); m != none; m = claim(formerName))
+                        {
+                            if (sources[f] == none)
+                            {
+                                sources[f] = m;
+                                continue;
+                            }
+                            Report(DiagnosticSeverity::Warning, object.members[m].value,
+                                   std::format("`{}` is a former name of `{}`, which is read from `{}`; `{}` is "
+                                               "dropped",
+                                               Below(where, formerName), Below(where, info.name),
+                                               Below(where, object.members[sources[f]].key), Below(where, formerName)));
+                        }
+                    if (sources[f] != none && info.type.kind != Kind::Pointer)
+                        Read(object.members[sources[f]].value, fields[f].value, Below(where, info.name));
                 }
 
                 for (std::size_t m = 0; m < object.members.size(); ++m)
