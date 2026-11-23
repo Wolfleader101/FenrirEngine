@@ -21,9 +21,9 @@
 
 **Touches:** `packages/FenrirSerialisation/` (`include/FenrirSerialisation/`, `src/`, `Tests/`, `Tests/CMakeLists.txt`, `Tests/fixtures/json5-tests/` new)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Every valid `json5-tests` case parses. Every invalid case fails with one diagnostic whose line and column the test asserts.
-- [ ] Each golden reads then writes back its own bytes, comments included.
-- [ ] A duplicate key warns at its location and keeps the first value. A file nested 257 deep fails. A BOM and CRLF each read as if absent.
-- [ ] A diagnostic reaches the logger as `path:line:column: message` and is in the result.
+- [x] Every valid `json5-tests` case parses. Every invalid case fails with one diagnostic whose line and column the test asserts.
+- [x] Each golden reads then writes back its own bytes, comments included.
+- [x] A duplicate key warns at its location and keeps the first value. A file nested 257 deep fails. A BOM and CRLF each read as if absent.
+- [x] A diagnostic reaches the logger as `path:line:column: message` and is in the result.

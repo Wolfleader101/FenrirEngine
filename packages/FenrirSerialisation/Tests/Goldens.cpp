@@ -1,26 +1,20 @@
 // The goldens (the spec, "Testing"): the format research's sword.asset.json5 and level1.scene.json5, committed in
-// fixtures/ as the research wrote them. A tree built in code, comments included, writes each one byte for byte.
+// fixtures/ as the research wrote them. A tree built in code, comments included, writes each one byte for byte, and
+// each one read then written gives back its own bytes.
 #include "FenrirSerialisation/Text.hpp"
+
+#include "SerialisationTest.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <filesystem>
-#include <fstream>
-#include <iterator>
 #include <limits>
 #include <string>
 
 using namespace Fenrir::Serialisation;
+using SerialisationTest::ReadFixture;
 
 namespace
 {
-    std::string ReadFixture(const char* name)
-    {
-        const std::filesystem::path path = std::filesystem::path(FENRIR_SERIALISATION_FIXTURES) / name;
-        std::ifstream file(path, std::ios::binary);
-        return std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
-    }
-
     Object Row(int level, int cost, float damageBonus)
     {
         Object row;
@@ -165,6 +159,22 @@ namespace
         root.leadingComments.push_back("// Level 1: the player's start room; entities are written parent-first");
         return root;
     }
+
+    // A golden read with ReadText, then written with WriteText, is the golden file again.
+    void RequireReadThenWrittenIsUnchanged(const char* name)
+    {
+        const std::string golden = ReadFixture(name);
+        SerialisationTest::RecordingLogger logger;
+
+        const ReadTreeResult result = ReadText(golden, name, logger);
+
+        INFO(name << " reads without a diagnostic");
+        REQUIRE(result.tree.has_value());
+        REQUIRE(result.diagnostics.empty());
+
+        INFO("WriteText of the tree read from " << name << " is the golden file, its leading comment kept");
+        REQUIRE(WriteText(*result.tree) == golden);
+    }
 } // namespace
 
 TEST_CASE("The golden fixtures are the research's samples, unchanged", "[serialisation][golden]")
@@ -188,4 +198,14 @@ TEST_CASE("A scene tree built in code writes level1.scene.json5 byte for byte", 
 
     INFO("WriteText of the hand-built scene envelope is the golden file");
     REQUIRE(WriteText(Scene()) == golden);
+}
+
+TEST_CASE("sword.asset.json5 read then written gives back its own bytes, comments included", "[serialisation][golden]")
+{
+    RequireReadThenWrittenIsUnchanged("sword.asset.json5");
+}
+
+TEST_CASE("level1.scene.json5 read then written gives back its own bytes, comments included", "[serialisation][golden]")
+{
+    RequireReadThenWrittenIsUnchanged("level1.scene.json5");
 }

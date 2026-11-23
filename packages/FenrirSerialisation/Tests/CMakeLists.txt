@@ -1,5 +1,6 @@
 # FenrirSerialisation's tests, through its public interface only. The goldens in fixtures/ are the JSON5 samples of
-# the format research (branch research/format-fit, a78ddc75), committed as they were and never regenerated.
+# the format research (branch research/format-fit, a78ddc75), committed as they were and never regenerated, and
+# fixtures/json5-tests/ is the json5-tests suite (MIT), its README naming the commit taken.
 include("${CMAKE_CURRENT_LIST_DIR}/../../../cmake/FenrirCatch2.cmake")
 fenrir_add_catch2()
 
@@ -15,8 +16,8 @@ foreach(header IN LISTS fenrir_serialisation_headers)
     list(APPEND fenrir_serialisation_header_checks "${check}")
 endforeach()
 
-add_executable(FenrirSerialisationTests PublicHeaders.cpp Values.cpp WriteText.cpp Goldens.cpp
-                                        ${fenrir_serialisation_header_checks})
+add_executable(FenrirSerialisationTests PublicHeaders.cpp Values.cpp WriteText.cpp ReadText.cpp Json5Tests.cpp
+                                        Goldens.cpp SerialisationTest.hpp ${fenrir_serialisation_header_checks})
 target_link_libraries(FenrirSerialisationTests PRIVATE FenrirSerialisation Catch2::Catch2WithMain)
 target_compile_definitions(FenrirSerialisationTests
                            PRIVATE FENRIR_SERIALISATION_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
