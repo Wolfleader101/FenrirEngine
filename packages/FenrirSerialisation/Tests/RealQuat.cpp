@@ -48,9 +48,12 @@ namespace
 TEST_CASE("A struct holding FenrirMath's real Quat writes its rotation as x, y, z, w", "[serialisation][totree]")
 {
     Fenrir::TypeRegistry registry;
-    const bool registered = Fenrir::Generated::RegisterFenrirMathTypes(registry) && registry.Register(PoseDescription);
-    INFO("FenrirMath's types and the struct holding a Quat register without a refusal");
-    REQUIRE(registered);
+    {
+        const bool registered =
+            Fenrir::Generated::RegisterFenrirMathTypes(registry) && registry.Register(PoseDescription);
+        INFO("FenrirMath's types and the struct holding a Quat register without a refusal");
+        REQUIRE(registered);
+    }
 
     Pose pose;
     pose.rotation.x = -0.3826834f;

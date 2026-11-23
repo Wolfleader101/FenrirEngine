@@ -193,9 +193,11 @@ TEST_CASE("A hand-registered sword through ToTree writes sword.asset.json5 byte 
           "[serialisation][golden][totree]")
 {
     Fenrir::TypeRegistry registry;
-    const bool registered = RegisterGoldenTypes(registry);
-    INFO("FenrirMath's types and the goldens' register without a refusal");
-    REQUIRE(registered);
+    {
+        const bool registered = RegisterGoldenTypes(registry);
+        INFO("FenrirMath's types and the goldens' register without a refusal");
+        REQUIRE(registered);
+    }
 
     const std::string golden = ReadFixture("sword.asset.json5");
 
@@ -207,9 +209,11 @@ TEST_CASE("Hand-registered scene components through ToTree write level1.scene.js
           "[serialisation][golden][totree]")
 {
     Fenrir::TypeRegistry registry;
-    const bool registered = RegisterGoldenTypes(registry);
-    INFO("FenrirMath's types and the goldens' register without a refusal");
-    REQUIRE(registered);
+    {
+        const bool registered = RegisterGoldenTypes(registry);
+        INFO("FenrirMath's types and the goldens' register without a refusal");
+        REQUIRE(registered);
+    }
 
     const std::string golden = ReadFixture("level1.scene.json5");
 

@@ -26,10 +26,10 @@ namespace Fenrir::Serialisation
 
         // Keeps every field a visit pushes, in the order pushed, so a value's fields and its default's can be walked
         // side by side.
-        class Collect final : public ConstFieldVisitor
+        class FieldCollector final : public ConstFieldVisitor
         {
           public:
-            explicit Collect(std::vector<VisitedField>& fields) noexcept : m_fields(fields)
+            explicit FieldCollector(std::vector<VisitedField>& fields) noexcept : m_fields(fields)
             {
             }
 
@@ -47,8 +47,8 @@ namespace Fenrir::Serialisation
         std::vector<VisitedField> FieldsOf(ConstValueRef value)
         {
             std::vector<VisitedField> fields;
-            Collect collect(fields);
-            value.Visit(collect);
+            FieldCollector collector(fields);
+            value.Visit(collector);
             return fields;
         }
 
@@ -171,10 +171,10 @@ namespace Fenrir::Serialisation
             return false;
         }
 
-        Value ToValue(ConstValueRef value, const ConstValueRef* fallback);
+        Value ToValue(ConstValueRef value, const ConstValueRef* defaults);
 
-        // Adds to `object` each of `fields` that differs from the same field of `defaults`, and every engaged optional
-        // that does; a field with no partner in `defaults` is written whole.
+        // Adds to `object` each of `fields` that differs from the same field of `defaults`, leaving out pointers; a
+        // field with no partner in `defaults` is compared with nothing and written whole.
         void AddFields(Object& object, const std::vector<VisitedField>& fields,
                        const std::vector<VisitedField>& defaults)
         {
@@ -183,14 +183,20 @@ namespace Fenrir::Serialisation
                 const VisitedField& field = fields[i];
                 if (field.info->type.kind == Kind::Pointer)
                     continue;
-                if (field.info->type.kind == Kind::Optional && !field.value.HasValue())
-                    continue;
-                const VisitedField* fallback =
+                const VisitedField* partner =
                     i < defaults.size() && defaults[i].info == field.info ? &defaults[i] : nullptr;
-                if (fallback != nullptr && Equal(field.value, fallback->value))
+                if (field.info->type.kind == Kind::Optional && !field.value.HasValue())
+                {
+                    // Left out, a field reads back as its default: one holding a value needs the null that reads as
+                    // disengaged.
+                    if (partner != nullptr && partner->value.HasValue())
+                        object.Add(std::string(field.info->name), Value(nullptr));
+                    continue;
+                }
+                if (partner != nullptr && Equal(field.value, partner->value))
                     continue;
                 object.Add(std::string(field.info->name),
-                           ToValue(field.value, fallback != nullptr ? &fallback->value : nullptr));
+                           ToValue(field.value, partner != nullptr ? &partner->value : nullptr));
             }
         }
 
@@ -225,29 +231,30 @@ namespace Fenrir::Serialisation
                 type.SelectAlternative(selected->Get(), fields.front().value.EnumValue());
                 defaultFields = FieldsOf(ConstValueRef(selected->Get(), value.Type()));
             }
-            const VisitedField* fallback =
+            const VisitedField* liveDefault =
                 defaultFields.size() >= 2 && defaultFields[1].info == live.info ? &defaultFields[1] : nullptr;
 
             const TypeDescription* alternative = live.value.Description();
             if (live.info->type.kind == Kind::Struct && alternative != nullptr &&
                 alternative->role != Role::BoundType && !alternative->IsTaggedUnion())
             {
-                // Each field of the alternative's struct is a member of the union's own object.
+                // Spread into the union's own object, so a reader finds `kind` and the alternative's fields side by
+                // side.
                 AddFields(object, FieldsOf(live.value),
-                          fallback != nullptr ? FieldsOf(fallback->value) : std::vector<VisitedField>{});
+                          liveDefault != nullptr ? FieldsOf(liveDefault->value) : std::vector<VisitedField>{});
             }
-            else if (fallback == nullptr || !Equal(live.value, fallback->value))
+            else if (liveDefault == nullptr || !Equal(live.value, liveDefault->value))
             {
                 // An alternative that is not a plain struct has no fields to spread, so it is a member by its name.
                 object.Add(std::string(live.info->name),
-                           ToValue(live.value, fallback != nullptr ? &fallback->value : nullptr));
+                           ToValue(live.value, liveDefault != nullptr ? &liveDefault->value : nullptr));
             }
             return object;
         }
 
-        // The tree form of `value`, whose fields at the values `fallback` holds are left out; with no fallback, a
+        // The tree form of `value`, whose fields at the values `defaults` holds are left out; with no defaults, a
         // struct's fields are compared with an instance its description constructs.
-        Value ToValue(ConstValueRef value, const ConstValueRef* fallback)
+        Value ToValue(ConstValueRef value, const ConstValueRef* defaults)
         {
             switch (value.GetKind())
             {
@@ -292,9 +299,9 @@ namespace Fenrir::Serialisation
             case Kind::Optional: {
                 if (!value.HasValue())
                     return Value(nullptr);
-                const bool fallbackHolds = fallback != nullptr && fallback->HasValue();
-                const ConstValueRef held = fallbackHolds ? fallback->Value() : value.Value();
-                return ToValue(value.Value(), fallbackHolds ? &held : nullptr);
+                const bool defaultHolds = defaults != nullptr && defaults->HasValue();
+                const ConstValueRef held = defaultHolds ? defaults->Value() : value.Value();
+                return ToValue(value.Value(), defaultHolds ? &held : nullptr);
             }
             case Kind::Reference:
             case Kind::Entity:
@@ -312,16 +319,16 @@ namespace Fenrir::Serialisation
                     return components;
                 }
                 std::optional<Instance> constructed;
-                ConstValueRef defaults = fallback != nullptr ? *fallback : value;
-                if (fallback == nullptr)
+                ConstValueRef structDefaults = defaults != nullptr ? *defaults : value;
+                if (defaults == nullptr)
                 {
                     constructed.emplace(*type);
-                    defaults = ConstValueRef(constructed->Get(), value.Type());
+                    structDefaults = ConstValueRef(constructed->Get(), value.Type());
                 }
                 if (type->IsTaggedUnion())
-                    return UnionToValue(value, defaults);
+                    return UnionToValue(value, structDefaults);
                 Object object;
-                AddFields(object, FieldsOf(value), FieldsOf(defaults));
+                AddFields(object, FieldsOf(value), FieldsOf(structDefaults));
                 return object;
             }
             }

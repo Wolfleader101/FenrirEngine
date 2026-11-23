@@ -37,9 +37,10 @@ namespace Fenrir::Serialisation
      * @brief The value tree of the described value at `value`, of type `type`, walked through its description's
      * visitor (ADR-0079).
      *
-     * Fields are written in declaration order, and a field equal to its default is left out (ADR-0075 §7), as is every
-     * disengaged `optional`. A field's default is the same field of an instance `type`'s `Construct` makes, visited
-     * beside the value; a nested struct compares field by field. Each kind's form:
+     * Fields are written in declaration order, and a field equal to its default is left out (ADR-0075 §7). A disengaged
+     * `optional` is left out too, unless its default holds a value: then it is `null`, which reads as disengaged. A
+     * field's default is the same field of an instance `type`'s `Construct` makes, visited beside the value; a nested
+     * struct compares field by field. Each kind's form:
      * - a struct is an `Object`, a `list` or fixed array an `Array`, and an enum its enumerator's name;
      * - a `string`, `fixed-string` or `path` is a `String`, and a `bool` a `Bool`;
      * - a number is a `Number` of its own width, and a `char16` an unsigned one holding its code unit;
@@ -47,11 +48,13 @@ namespace Fenrir::Serialisation
      * - a tagged union is an `Object` whose first member is `kind`, its tag's enumerator name, followed by the fields
      * of its live alternative alone;
      * - a `reference` or an `entity` is `null`, until the resolvers write it;
-     * - a `pointer` is never written: its target is never described, so its bytes mean nothing in a file.
+     * - a `pointer` field is never written, since its target is never described and its bytes mean nothing in a
+     *   file; a pointer element of an array, list or optional is `null`.
      *
      * An enum value no enumerator has is written as its number.
      *
-     * @param registry The registry the value's types are registered in.
+     * @param registry The registry the value's types are registered in; not read yet, since the description reaches
+     *        every nested type itself.
      * @param resolvers Not called yet: `reference` and `entity` fields are written `null`.
      * @param prior The tree the value was read from, whose comments a rewrite keeps; not read yet.
      */

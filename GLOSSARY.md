@@ -299,6 +299,10 @@ The package that turns a described value into a value tree and back through the 
 The in-memory form of a file's contents: objects, arrays, strings, numbers, booleans and nulls, with comments kept as trivia, between a described value and its JSON5 text (ADR-0079). For a C#-typed data asset it is the store's truth, with the managed instance a view of it (ADR-0083).
 *Avoid:* DOM, document, AST, JSON object.
 
+**Serialisation bridge**
+FenrirSerialisation's `ToTree` and `FromTree` (`FenrirSerialisation/Bridge.hpp`), which turn a described value into a value tree and back through its description's visitor, leaving out every field at its default (ADR-0079). In FenrirSerialisation's code and specs "the bridge" means this. Elsewhere it means Iris's Bridge, the managed assembly.
+*Avoid:* serialiser, mapper, reflection layer.
+
 **Tree encoding**
 FenrirSerialisation's compact binary form of a value tree, used in memory to hand a data asset between C++ and C#; never written to a text file (ADR-0083).
 *Avoid:* wire format, binary JSON, BSON, MessagePack.

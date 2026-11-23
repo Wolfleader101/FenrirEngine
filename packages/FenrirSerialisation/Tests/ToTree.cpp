@@ -308,13 +308,22 @@ TEST_CASE("A list of structs leaves out each element's fields at the element typ
     REQUIRE(Tree(owned) == ObjectOf({{"ranges", ArrayOf({ObjectOf({{"max", 5.0f}}), Value(Object{})})}}));
 }
 
-TEST_CASE("A disengaged optional is left out, even when its default holds a value", "[serialisation][totree]")
+TEST_CASE("A disengaged optional whose default is disengaged is left out", "[serialisation][totree]")
+{
+    Owned owned;
+    owned.edge.reset();
+
+    INFO("edge is disengaged, as its default is, so it is not written");
+    REQUIRE(Tree(owned) == Value(Object{}));
+}
+
+TEST_CASE("A disengaged optional whose default holds a value writes null", "[serialisation][totree]")
 {
     Owned owned;
     owned.reach.reset();
 
-    INFO("reach's default holds 2, but a disengaged optional is never written; edge is disengaged by default");
-    REQUIRE(Tree(owned) == Value(Object{}));
+    INFO("reach's default holds 2, so left out it would read back as 2: null is what reads as disengaged");
+    REQUIRE(Tree(owned) == ObjectOf({{"reach", nullptr}}));
 }
 
 TEST_CASE("An engaged optional writes as its value, the one at its default left out", "[serialisation][totree]")
