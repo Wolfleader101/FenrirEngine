@@ -295,7 +295,12 @@ namespace Fenrir
          * registry (LoadFailure::NotADataAsset). The tree is upgraded from `version` through the type's upgraders,
          * then read tolerantly: an unknown key is warned and dropped, a value that does not read keeps its default with
          * an error, and either makes the load `Partial`, each in LoadResult::diagnostics with its line and column.
-         * Sub-assets (`sub`) are not read yet: a file with them warns so. A file that does not parse, or whose
+         * The file's `sub` maps names, unique within it, to embedded sub-assets of their own `type`, `version` and
+         * `data`, and `file#name` loads one (ADR-0076). One read of the file loads its top level and every sub-asset
+         * for `owner`, as a model's sub-assets are, and a later load of any gives the same handle and the file's
+         * diagnostics again. A name `sub` lacks fails with LoadFailure::LabelNotFound. A sub-asset that does not read,
+         * or holds a `sub` of its own, is left out with a located error, making the load of its siblings `Partial`,
+         * and loading it by name fails. A file that does not parse, or whose
          * `format` or `type` is wrong, fails. A path the file names (a reference) that is absolute or climbs through
          * `..` is refused, left empty with a located error (ADR-0076). The file's bytes are read through the store's
          * asset source (ADR-0085), which matches paths case-sensitively; in a development build it warns, once per

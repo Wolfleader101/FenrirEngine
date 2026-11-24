@@ -1,0 +1,21 @@
+// A sword whose second sub-asset names a type nothing registers, beside a sheath that reads.
+{
+  format: 1,
+  type: "AssetsTest::Sword",
+  version: 2,
+  data: {
+    displayName: "Chipped sword",
+  },
+  sub: {
+    sheath: {
+      type: "AssetsTest::ShieldData",
+      version: 1,
+      data: { block: 0.25 },
+    },
+    cracked: {
+      type: "AssetsTest::NoSuchType",
+      version: 1,
+      data: {},
+    },
+  },
+}

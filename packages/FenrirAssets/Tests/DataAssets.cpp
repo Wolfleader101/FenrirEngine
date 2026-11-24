@@ -317,25 +317,6 @@ TEST_CASE("A data asset file of another format version fails", "[assets][data]")
     REQUIRE(format->line == 3);
 }
 
-TEST_CASE("A data asset file's sub-assets are not read yet, with a warning", "[assets][data]")
-{
-    DataApp test;
-    INFO("the test package's data asset types register");
-    REQUIRE(test.registered);
-
-    const Fenrir::LoadResult<Sword> loaded =
-        test.store.Load<Sword>("data/with-sub.asset.json5", Fenrir::AssetOwner::App());
-
-    INFO("the sword's data loads, and the load is partial with one warning about `sub`");
-    REQUIRE(loaded.Status() == Fenrir::LoadStatus::Partial);
-    const Sword* sword = test.store.TryGet(loaded.handle);
-    REQUIRE(sword != nullptr);
-    REQUIRE(sword->displayName == "Sheathed sword");
-    REQUIRE(loaded.diagnostics.size() == 1);
-    REQUIRE(loaded.diagnostics.front().severity == Fenrir::Serialisation::DiagnosticSeverity::Warning);
-    REQUIRE(CountContaining(*test.warnings, "sub") == 1);
-}
-
 TEST_CASE("A data asset owned by a scene is freed with the scene", "[assets][data][owners]")
 {
     DataApp test;
