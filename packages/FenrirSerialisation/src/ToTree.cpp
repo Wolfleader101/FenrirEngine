@@ -11,6 +11,7 @@
 #include <new>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -355,12 +356,61 @@ namespace Fenrir::Serialisation
             }
             return Value(nullptr);
         }
+
+        // The first member of `object` named `key`; null when there is none.
+        const Member* FindMember(const Object& object, std::string_view key) noexcept
+        {
+            for (const Member& member : object.members)
+                if (member.key == key)
+                    return &member;
+            return nullptr;
+        }
+
+        // Gives `node`'s members and elements, and its own closing comments, the trivia of the same key path in
+        // `prior`, which held the node's place: a member matches by key and an element by index. A container of
+        // another kind than `prior` shares no key path below it, so takes nothing.
+        void TakeTrivia(Value& node, const Value& prior)
+        {
+            if (node.Kind() == ValueKind::Object && prior.Kind() == ValueKind::Object)
+            {
+                Object& object = node.AsObject();
+                const Object& priorObject = prior.AsObject();
+                object.closingComments = priorObject.closingComments;
+                for (Member& member : object.members)
+                    if (const Member* priorMember = FindMember(priorObject, member.key))
+                    {
+                        member.leadingComments = priorMember->leadingComments;
+                        member.trailingComment = priorMember->trailingComment;
+                        TakeTrivia(member.value, priorMember->value);
+                    }
+            }
+            else if (node.Kind() == ValueKind::Array && prior.Kind() == ValueKind::Array)
+            {
+                Array& array = node.AsArray();
+                const Array& priorArray = prior.AsArray();
+                array.closingComments = priorArray.closingComments;
+                for (std::size_t i = 0; i < array.elements.size() && i < priorArray.elements.size(); ++i)
+                {
+                    Element& element = array.elements[i];
+                    const Element& priorElement = priorArray.elements[i];
+                    element.leadingComments = priorElement.leadingComments;
+                    element.trailingComment = priorElement.trailingComment;
+                    TakeTrivia(element.value, priorElement.value);
+                }
+            }
+        }
     } // namespace
 
     Value ToTree(const void* value, const TypeDescription& type, [[maybe_unused]] const TypeRegistry& registry,
-                 const Resolvers& resolvers, [[maybe_unused]] const Value* prior)
+                 const Resolvers& resolvers, const Value* prior)
     {
         const ValueType valueType{.kind = Kind::Struct, .type = &type};
-        return ToValue(resolvers, nullptr, ConstValueRef(value, valueType), nullptr);
+        Value tree = ToValue(resolvers, nullptr, ConstValueRef(value, valueType), nullptr);
+        if (prior != nullptr)
+        {
+            tree.leadingComments = prior->leadingComments;
+            TakeTrivia(tree, *prior);
+        }
+        return tree;
     }
 } // namespace Fenrir::Serialisation

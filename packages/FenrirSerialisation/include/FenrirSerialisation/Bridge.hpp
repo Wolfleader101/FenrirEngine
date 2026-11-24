@@ -68,10 +68,22 @@ namespace Fenrir::Serialisation
      *
      * An enum value no enumerator has is written as its number.
      *
+     * With no `prior`, the tree has no comments. With one, every node of the tree whose key path is in `prior` takes
+     * that node's trivia, so a rewrite keeps a file's comments though a struct holds none (ADR-0077 §1):
+     * - a member matches the first member of the same key in `prior`'s object there, and takes its leading and
+     *   trailing comments;
+     * - an element matches the element of the same index in `prior`'s array there, and takes its comments likewise;
+     * - an object or array takes the closing comments of the container of the same kind at its path;
+     * - the root takes `prior`'s leading comments.
+     *
+     * A comment on a field no longer written, such as one now at its default, is dropped, as is one on an element past
+     * the new array's end. A container whose path holds a container of the other kind in `prior` takes nothing below
+     * it, though its member or element keeps its comments.
+     *
      * @param registry The registry the value's types are registered in; not read yet, since the description reaches
      *        every nested type itself.
      * @param resolvers Asked once for each `reference` or `entity` value written, an element apiece in an array.
-     * @param prior The tree the value was read from, whose comments a rewrite keeps; not read yet.
+     * @param prior The tree the value was read from, whose comments the new tree takes by key path; null for none.
      */
     [[nodiscard]] Value ToTree(const void* value, const TypeDescription& type, const TypeRegistry& registry,
                                const Resolvers& resolvers, const Value* prior = nullptr);
