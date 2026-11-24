@@ -404,6 +404,41 @@
       ]
     },
     {
+      "name": "GetMeshPositions",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Copies `mesh`'s positions, from the CPU copy the store keeps (MeshData::positions), into `positions`, as many as fit, in vertex order: with GetMeshLodIndices' level 0 they are the mesh's triangles, as PhysicsWorld.CreateCollisionMesh takes them. An empty span asks only how many there are.",
+      "facade": "Assets.GetMeshPositions",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "How many positions the mesh holds, so a result larger than the span says how large a span would hold them all; -1 if the mesh is unreadable, its CPU copy absent (a stale or empty handle), which writes nothing."
+      },
+      "parameters": [
+        {
+          "name": "mesh",
+          "type": "const Fenrir::AssetHandle<Fenrir::Mesh>*",
+          "kind": "pointer",
+          "pointee": "Fenrir::AssetHandle<Fenrir::Mesh>",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "positions",
+          "type": "Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct"
+        },
+        {
+          "name": "capacity",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
       "name": "AddRenderTarget",
       "namespace": "Fenrir::AssetsNatives",
       "source": "../src/AssetsScripting.cpp",

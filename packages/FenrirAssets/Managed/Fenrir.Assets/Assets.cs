@@ -3,9 +3,9 @@ using Fenrir.Math;
 namespace Fenrir.Assets;
 
 // AddMesh, ReplaceMesh, the mesh levels of detail (GenerateLods, AddMeshLod, GetMeshLodErrors, GetMeshLodIndices),
-// AddRenderTarget, ResizeRenderTarget, AddImage, ReplaceImage and the instance lists' add, replace and reads are
-// generated (Generated/Assets.cs, from the natives' @facade marks in Scripting/src/AssetsScripting.cpp), each taking the
-// owner the native takes. This part holds what a description cannot say: the class doc, the generic methods over the
+// GetMeshPositions, AddRenderTarget, ResizeRenderTarget, AddImage, ReplaceImage and the instance lists' add, replace and
+// reads are generated (Generated/Assets.cs, from the natives' @facade marks in Scripting/src/AssetsScripting.cpp), each
+// taking the owner the native takes. This part holds what a description cannot say: the class doc, the generic methods over the
 // kind-generic natives, and the overloads that default the owner to the active scene, an instance list's colours to
 // none and the level-of-detail settings to C++'s.
 

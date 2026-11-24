@@ -14,6 +14,7 @@ fenrir_scripting_tests(Assets
         Shapes.cpp
         InstanceLists.cpp
         MeshLods.cpp
+        MeshPositions.cpp
 )
 fenrir_script_fixture(Assets)
 target_compile_definitions(FenrirAssetsScriptingTests PRIVATE

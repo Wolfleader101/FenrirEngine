@@ -7,7 +7,7 @@ Spec: [C# reach: parenting, scenes, the app, C# resources and mesh positions](..
 **Blocked by:** None (can start immediately)
 **Touches:** `packages/FenrirAssets/Scripting/`, `packages/FenrirAssets/Managed/`, `packages/FenrirAssets/api/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 Runs off the base, beside the scripting stack: its files are disjoint from 02, 03, 05 and 06, and from 04.
 
