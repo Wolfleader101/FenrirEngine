@@ -1,0 +1,14 @@
+# FenrirAssets' data asset test package's selection: the header to read, relative to this file, and each type's role.
+headers = ["DataAssetsTestPackage.hpp"]
+
+[types]
+"AssetsTest::WeaponData" = "data-asset"
+"AssetsTest::Sword" = "data-asset"
+"AssetsTest::ShieldData" = "data-asset"
+
+# What tools/generate-type-registry writes for the package: FenrirAssets' tests compile it and register it.
+[registration]
+header = "Generated/DataAssetsTestPackageTypes.hpp"
+source = "Generated/DataAssetsTestPackageTypes.cpp"
+function = "Fenrir::Generated::RegisterDataAssetsTestPackageTypes"
+includes = ["DataAssetsTestPackage.hpp"]

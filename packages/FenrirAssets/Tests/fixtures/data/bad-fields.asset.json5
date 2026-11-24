@@ -1,0 +1,11 @@
+// A sword with a key no field has and an edge that is not a number.
+{
+  format: 1,
+  type: "AssetsTest::Sword",
+  version: 2,
+  data: {
+    displayName: "Odd sword",
+    colour: "red",
+    edge: "sharp",
+  },
+}

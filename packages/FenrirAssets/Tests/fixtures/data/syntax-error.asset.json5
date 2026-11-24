@@ -1,0 +1,7 @@
+// A sword missing the comma after its type.
+{
+  format: 1,
+  type: "AssetsTest::Sword"
+  version: 2,
+  data: {},
+}

@@ -4,6 +4,9 @@
 #include <cstdint>
 #include <string_view>
 
+#include "FenrirTypes/Describe.hpp"
+#include "FenrirTypes/Kind.hpp"
+
 namespace Fenrir
 {
     /** @name Asset names
@@ -48,12 +51,17 @@ namespace Fenrir
             BoneMask,
             InstanceList,
             Font,
+            /** @brief A game-defined plain struct, read from a `.asset.json5` file (ADR-0075). */
+            Data,
         };
 
         /** @brief How many kinds of asset the store holds. */
-        inline constexpr std::size_t AssetKindCount = 10;
+        inline constexpr std::size_t AssetKindCount = 11;
 
-        /** @brief What an asset name resolves to: its data type, its kind and the word log messages use for it. */
+        /**
+         * @brief What an asset name resolves to: its data type, its kind and the word log messages use for it. The
+         * engine's kinds each specialise it; every data asset type shares the one for `DataAssetType`.
+         */
         template <typename T>
         struct AssetTraits;
 
@@ -135,6 +143,22 @@ namespace Fenrir
             using Data = FontData;
             static constexpr AssetKind kind = AssetKind::Font;
             static constexpr std::string_view name = "font";
+        };
+        /**
+         * @brief A data asset type: its description, through `Describe<T>`, has the `DataAsset` role, so a game writes
+         * no specialisation of AssetTraits and a type that is not a data asset does not compile as one. Whether the
+         * store's type registry has registered it is Load's run-time check (LoadFailure::NotADataAsset).
+         */
+        template <typename T>
+        concept DataAssetType = Described<T> && Describe<T>::role == Role::DataAsset;
+
+        /** @brief Every data asset type: the data is the type itself, in the one `Data` table. */
+        template <DataAssetType T>
+        struct AssetTraits<T>
+        {
+            using Data = T;
+            static constexpr AssetKind kind = AssetKind::Data;
+            static constexpr std::string_view name = "data asset";
         };
     } // namespace Detail
 

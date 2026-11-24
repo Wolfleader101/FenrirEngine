@@ -1,0 +1,9 @@
+// A shield, which is no weapon.
+{
+  format: 1,
+  type: "AssetsTest::ShieldData",
+  version: 1,
+  data: {
+    block: 0.8,
+  },
+}

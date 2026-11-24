@@ -6,7 +6,7 @@ fenrir_add_catch2()
 add_executable(FenrirAssetsTests PublicHeaders.cpp Owners.cpp Revisions.cpp Loading.cpp Images.cpp ShaderContainers.cpp
                                  Materials.cpp Models.cpp SpawnNodes.cpp Cubemaps.cpp Skeletons.cpp Skins.cpp
                                  Clips.cpp BoneMasks.cpp SkinnedImport.cpp MeshLods.cpp Fonts.cpp ImageUpdates.cpp
-                                 AssetsTest.hpp)
+                                 DataAssets.cpp AssetsTest.hpp)
 # Models built in code, which FenrirSkeleton's spawning tests also build on.
 target_sources(FenrirAssetsTests PRIVATE ProceduralModels.cpp)
 target_link_libraries(FenrirAssetsTests PRIVATE FenrirAssets Catch2::Catch2WithMain)
@@ -24,3 +24,9 @@ endif()
 # description, holds the defaults api/FenrirAssets.api.json records (tools/generate-type-registry writes the test).
 target_sources(FenrirAssetsTests PRIVATE Generated/FenrirAssetsTypesDefaultsTests.cpp)
 target_link_libraries(FenrirAssetsTests PRIVATE FenrirTypesTesting)
+
+# The data asset test package's registration (Package/), which both real tools wrote, compiled against its header; the
+# data asset tests register it into the app's type registry. Its .asset.json5 fixtures are in fixtures/data/.
+target_sources(FenrirAssetsTests PRIVATE Package/Generated/DataAssetsTestPackageTypes.hpp
+                                         Package/Generated/DataAssetsTestPackageTypes.cpp)
+target_link_libraries(FenrirAssetsTests PRIVATE FenrirAssetsDataTestPackage)
