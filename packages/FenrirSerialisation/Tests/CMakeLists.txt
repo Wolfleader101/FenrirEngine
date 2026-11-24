@@ -25,6 +25,7 @@ target_sources(FenrirSerialisationTests PRIVATE FromTree.cpp)
 target_sources(FenrirSerialisationTests PRIVATE Resolvers.cpp)
 target_sources(FenrirSerialisationTests PRIVATE Upgraders.cpp)
 target_sources(FenrirSerialisationTests PRIVATE PriorTree.cpp)
+target_sources(FenrirSerialisationTests PRIVATE ReadTree.cpp)
 target_compile_definitions(FenrirSerialisationTests
                            PRIVATE FENRIR_SERIALISATION_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
 add_test(NAME FenrirSerialisation COMMAND FenrirSerialisationTests)
