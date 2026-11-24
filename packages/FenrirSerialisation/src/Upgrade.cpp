@@ -38,6 +38,13 @@ namespace Fenrir::Serialisation
                          typeName);
             return false;
         }
+        if (fromVersion == 0 || fromVersion >= type->version)
+        {
+            logger.Error("An upgrader from version {} for the type {} is refused: the type is at version {}, so a "
+                         "step must be from version 1 to below it.",
+                         fromVersion, type->name, type->version);
+            return false;
+        }
         if (!upgrader)
         {
             logger.Error("The upgrader from version {} for the type {} is empty; it is refused.", fromVersion,

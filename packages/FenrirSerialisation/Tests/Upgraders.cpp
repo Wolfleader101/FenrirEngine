@@ -352,3 +352,58 @@ TEST_CASE("Registering an empty upgrader is one error and adds nothing", "[seria
     INFO("the registry holds no upgraders for the type");
     REQUIRE(registry.Attachment<UpgradersTag>("MyGame::Sword") == nullptr);
 }
+
+TEST_CASE("Registering an upgrader from version 0 is one error and adds nothing", "[serialisation][upgrade]")
+{
+    Fenrir::TypeRegistry registry = SwordRegistry();
+    RecordingLogger logger;
+    std::vector<std::uint32_t> steps;
+
+    const bool registered = RegisterUpgrader(registry, "MyGame::Sword", 0, AttackToPower(steps), logger);
+    INFO("versions count from 1, so an upgrader from version 0 is refused");
+    REQUIRE_FALSE(registered);
+    INFO("one error, naming the type, the version given and the type's version");
+    REQUIRE(logger.errors.size() == 1);
+    REQUIRE(logger.errors[0].find("MyGame::Sword") != std::string::npos);
+    REQUIRE(logger.errors[0].find("version 0") != std::string::npos);
+    REQUIRE(logger.errors[0].find("version 3") != std::string::npos);
+    INFO("the registry holds no upgraders for the type");
+    REQUIRE(registry.Attachment<UpgradersTag>("MyGame::Sword") == nullptr);
+}
+
+TEST_CASE("Registering an upgrader from the type's own version is one error and adds nothing",
+          "[serialisation][upgrade]")
+{
+    Fenrir::TypeRegistry registry = SwordRegistry();
+    RecordingLogger logger;
+    std::vector<std::uint32_t> steps;
+
+    const bool registered = RegisterUpgrader(registry, "MyGame::Sword", 3, AttackToPower(steps), logger);
+    INFO("the sword is at version 3, so a step from 3 would never run and is refused");
+    REQUIRE_FALSE(registered);
+    INFO("one error, naming the type and the version, which is both the one given and the type's");
+    REQUIRE(logger.errors.size() == 1);
+    REQUIRE(logger.errors[0].find("MyGame::Sword") != std::string::npos);
+    REQUIRE(logger.errors[0].find("version 3") != std::string::npos);
+    INFO("the registry holds no upgraders for the type");
+    REQUIRE(registry.Attachment<UpgradersTag>("MyGame::Sword") == nullptr);
+}
+
+TEST_CASE("Registering an upgrader from above the type's version is one error and adds nothing",
+          "[serialisation][upgrade]")
+{
+    Fenrir::TypeRegistry registry = SwordRegistry();
+    RecordingLogger logger;
+    std::vector<std::uint32_t> steps;
+
+    const bool registered = RegisterUpgrader(registry, "MyGame::Sword", 4, AttackToPower(steps), logger);
+    INFO("the sword is at version 3, so a step from version 4 would never run and is refused");
+    REQUIRE_FALSE(registered);
+    INFO("one error, naming the type, the version given and the type's version");
+    REQUIRE(logger.errors.size() == 1);
+    REQUIRE(logger.errors[0].find("MyGame::Sword") != std::string::npos);
+    REQUIRE(logger.errors[0].find("version 4") != std::string::npos);
+    REQUIRE(logger.errors[0].find("version 3") != std::string::npos);
+    INFO("the registry holds no upgraders for the type");
+    REQUIRE(registry.Attachment<UpgradersTag>("MyGame::Sword") == nullptr);
+}
