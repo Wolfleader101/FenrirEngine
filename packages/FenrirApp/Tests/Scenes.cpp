@@ -1,6 +1,8 @@
+#include <chrono>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
@@ -157,8 +159,9 @@ TEST_CASE("Scene requests made during a frame take effect after its last phase, 
 
     app.RunFrame(0.0);
 
-    INFO("a scene request took effect before the frame's last phase");
+    INFO("a create request took effect before the frame's last phase");
     REQUIRE(seenAtRender == std::vector<std::string>{"Default"});
+    INFO("an activate request took effect before the frame's last phase");
     REQUIRE(activeAtRender == "Default");
     INFO("the requested scenes were not made at the end of the frame, in the order asked");
     REQUIRE(SceneNames(app) == std::vector<std::string>{"Default", "Title", "Level"});
@@ -253,5 +256,25 @@ TEST_CASE("The immediate scene calls take effect at once while scene requests wa
     INFO("the request did not take effect at the frame's end");
     REQUIRE(SceneNames(app) == std::vector<std::string>{"Default", "Now", "Later"});
     INFO("the immediate and requested creates logged an error");
+    REQUIRE(errors->empty());
+}
+
+TEST_CASE("Scene requests from systems run in parallel take effect in the order the systems were registered",
+          "[app][scenes]")
+{
+    auto errors = std::make_shared<std::vector<std::string>>();
+    App app(std::make_unique<RecordingLogger>(errors), 2);
+    app.AddSystems(Fenrir::SchedulePriority::Update, {[](App& running) {
+                                                          // Late, so without the hold its request would come second.
+                                                          std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                                                          running.RequestCreateScene("First");
+                                                      },
+                                                      [](App& running) { running.RequestCreateScene("Second"); }});
+
+    app.RunFrame(0.0);
+
+    INFO("parallel systems' requests did not take effect in the order the systems were registered");
+    REQUIRE(SceneNames(app) == std::vector<std::string>{"Default", "First", "Second"});
+    INFO("the parallel systems' requests logged an error");
     REQUIRE(errors->empty());
 }

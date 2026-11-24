@@ -695,9 +695,10 @@ namespace Fenrir
         /**
          * @brief A scene request to create a scene called `name`. Scene requests wait, and are applied at the end of
          * the frame, after its last phase, in the order made, so no system sees a scene change mid-frame; one made
-         * outside a frame waits for the end of the next. From a system the scheduler runs in parallel, a request is
-         * held until the system's batch has run, as an event is. At its turn, a name that exists is refused with a
-         * logged error.
+         * outside a frame waits for the end of the next, and one made in the Exit phase is never applied. From a
+         * system the scheduler runs in parallel, a request is held until the system's batch has run, as an event is,
+         * so parallel systems' requests arrive in the order the systems were registered. At its turn, a name that
+         * exists is refused with a logged error.
          */
         void RequestCreateScene(std::string name);
 
@@ -792,6 +793,9 @@ namespace Fenrir
 
         /** @brief Swaps every event queue's buffers if a tick ran since the last swap. */
         void UpdateEvents();
+
+        /** @brief The index in m_scenes of the scene called `name`, or none. */
+        [[nodiscard]] std::optional<std::size_t> FindScene(std::string_view name) const;
 
         /** @brief Queues a scene request, or holds it until a parallel system's batch has run. */
         void AddSceneRequest(SceneRequest request);

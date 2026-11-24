@@ -7,12 +7,12 @@ Spec: [C# reach: parenting, scenes, the app, C# resources and mesh positions](..
 **Blocked by:** None (can start immediately)
 **Touches:** `GLOSSARY.md`, `packages/FenrirApp/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 Runs off the base, beside the scripting stack; 05 builds on it.
 
-- [ ] FenrirApp tests: requests made during a frame take effect after its last phase, in order.
-- [ ] A restart made of create, activate and destroy in one frame leaves only the new scene, active.
-- [ ] Destroying the active scene by request is refused with an error; bad names are errors.
-- [ ] The immediate C++ calls behave as before.
-- [ ] GLOSSARY.md gains *Scene request*.
+- [x] FenrirApp tests: requests made during a frame take effect after its last phase, in order.
+- [x] A restart made of create, activate and destroy in one frame leaves only the new scene, active.
+- [x] Destroying the active scene by request is refused with an error; bad names are errors.
+- [x] The immediate C++ calls behave as before.
+- [x] GLOSSARY.md gains *Scene request*.
