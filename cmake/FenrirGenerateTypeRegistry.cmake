@@ -14,13 +14,13 @@ find_program(FENRIR_DOTNET_EXECUTABLE NAMES dotnet HINTS "$ENV{DOTNET_ROOT}"
 
 set(fenrir_generate_type_registry_project
     "${CMAKE_CURRENT_LIST_DIR}/../tools/generate-type-registry/src/GenerateTypeRegistry.csproj")
-set(fenrir_generate_type_registry_tool "${PROJECT_BINARY_DIR}/generate-type-registry/tool/generate-type-registry.dll")
+set(fenrir_generate_type_registry_tool "${FenrirEngine_BINARY_DIR}/generate-type-registry/tool/generate-type-registry.dll")
 
 add_custom_target(fenrir-generate-type-registry)
 if(FENRIR_DOTNET_EXECUTABLE)
     add_custom_target(fenrir-generate-type-registry-tool
         COMMAND "${FENRIR_DOTNET_EXECUTABLE}" build "${fenrir_generate_type_registry_project}" --configuration Release
-            --output "${PROJECT_BINARY_DIR}/generate-type-registry/tool" --nologo -v:q
+            --output "${FenrirEngine_BINARY_DIR}/generate-type-registry/tool" --nologo -v:q
         COMMENT "Building tools/generate-type-registry"
         VERBATIM
     )

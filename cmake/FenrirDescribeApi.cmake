@@ -13,13 +13,13 @@
 find_program(FENRIR_DOTNET_EXECUTABLE NAMES dotnet HINTS "$ENV{DOTNET_ROOT}" DOC "dotnet executable that builds and runs tools/describe-api")
 
 set(fenrir_describe_api_project "${CMAKE_CURRENT_LIST_DIR}/../tools/describe-api/src/DescribeApi.csproj")
-set(fenrir_describe_api_tool "${PROJECT_BINARY_DIR}/describe-api/tool/describe-api.dll")
+set(fenrir_describe_api_tool "${FenrirEngine_BINARY_DIR}/describe-api/tool/describe-api.dll")
 
 add_custom_target(fenrir-describe-api)
 if(FENRIR_DOTNET_EXECUTABLE)
     add_custom_target(fenrir-describe-api-tool
         COMMAND "${FENRIR_DOTNET_EXECUTABLE}" build "${fenrir_describe_api_project}" --configuration Release
-            --output "${PROJECT_BINARY_DIR}/describe-api/tool" --nologo -v:q
+            --output "${FenrirEngine_BINARY_DIR}/describe-api/tool" --nologo -v:q
         COMMENT "Building tools/describe-api"
         VERBATIM
     )
@@ -67,7 +67,7 @@ endfunction()
 # Writes <target>'s compile arguments for the tool, one per line, read as @file; sets <out> to the file's path. A
 # target's arguments are written once, however many times it is described.
 function(fenrir_describe_api_arguments target out)
-    set(arguments_file "${PROJECT_BINARY_DIR}/describe-api/${target}$<$<BOOL:$<CONFIG>>:-$<CONFIG>>.args")
+    set(arguments_file "${FenrirEngine_BINARY_DIR}/describe-api/${target}$<$<BOOL:$<CONFIG>>:-$<CONFIG>>.args")
     set(${out} "${arguments_file}" PARENT_SCOPE)
     get_property(written TARGET ${target} PROPERTY FENRIR_DESCRIBE_API_ARGUMENTS)
     if(written)

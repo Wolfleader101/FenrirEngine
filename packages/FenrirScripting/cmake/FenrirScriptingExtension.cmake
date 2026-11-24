@@ -10,7 +10,7 @@
 # and a package passes a keyword only where it deviates:
 #
 #   fenrir_scripting_contract(<Pkg> [ASSEMBLY <name>] [USES <Pkg>...] [SHARED_BY <Pkg>...] [DEPENDS <files>...])
-#       Builds ../Managed/<assembly>/<assembly>.csproj into ${PROJECT_BINARY_DIR}/fenrir-<pkg>/contract with the .NET SDK
+#       Builds ../Managed/<assembly>/<assembly>.csproj into ${FenrirEngine_BINARY_DIR}/fenrir-<pkg>/contract with the .NET SDK
 #       Iris found, against the scripting SDK (Fenrir.Scripting and Fenrir.Math) and each used contract
 #       (-p:Fenrir<Used>ContractDir=), rebuilt whenever any of them is, or a file in DEPENDS (one the project copies
 #       into its folder) changes. The assembly is Fenrir.<Pkg> unless ASSEMBLY names another: a contract a package
@@ -98,7 +98,7 @@ function(fenrir_scripting_contract pkg)
         set_property(GLOBAL PROPERTY FENRIR_SCRIPTING_CONTRACT_ASSEMBLY_${pkg} "${arg_ASSEMBLY}")
     endif()
     fenrir_scripting_contract_assembly(${pkg} assembly)
-    set(contract_dir "${PROJECT_BINARY_DIR}/fenrir-${pkg_lower}/contract")
+    set(contract_dir "${FenrirEngine_BINARY_DIR}/fenrir-${pkg_lower}/contract")
     set(FENRIR_${PKG}_CONTRACT_DIR "${contract_dir}" CACHE INTERNAL "Where the ${assembly} contract is built")
     set(managed_dir "${CMAKE_CURRENT_SOURCE_DIR}/../Managed/${assembly}")
     file(GLOB sources CONFIGURE_DEPENDS "${managed_dir}/*.cs" "${managed_dir}/Generated/*.cs")

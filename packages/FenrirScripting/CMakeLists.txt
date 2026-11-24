@@ -8,7 +8,7 @@
 # analyzers/, and Fenrir.Scripting.props, which a script project imports to get them. fenrir_deploy_scripting copies the
 # two contracts next to an executable; script projects use the folder as it is (-p:FenrirScriptingSdk=<folder>/).
 # A cache variable, so it works from any directory of the build.
-set(FENRIR_SCRIPTING_CONTRACT_DIR "${PROJECT_BINARY_DIR}/fenrir-scripting/contract" CACHE INTERNAL "Where the Fenrir.Scripting SDK is built")
+set(FENRIR_SCRIPTING_CONTRACT_DIR "${FenrirEngine_BINARY_DIR}/fenrir-scripting/contract" CACHE INTERNAL "Where the Fenrir.Scripting SDK is built")
 set(fenrir_managed_dir "${CMAKE_CURRENT_SOURCE_DIR}/Managed")
 file(GLOB fenrir_contract_sources CONFIGURE_DEPENDS "${fenrir_managed_dir}/Fenrir.Scripting/*.cs"
     "${fenrir_managed_dir}/Fenrir.Scripting/Generated/*.cs")

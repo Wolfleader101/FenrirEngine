@@ -55,7 +55,8 @@ logged as an error and the app runs without scripts (`HasScripts()` is false).
 
 A script project needs only the scripting SDK: one folder holding `Fenrir.Scripting.dll` (the contract),
 `Fenrir.Math.dll` (the math contract it is built on), `analyzers/Fenrir.Scripting.Generators.dll` (the source generator) and `Fenrir.Scripting.props`. CMake builds it into
-`<build>/fenrir-scripting/contract/`. Import the props file and nothing else is needed:
+`fenrir-scripting/contract/` under the engine's binary directory (the build directory itself when the engine is the
+top-level project). Import the props file and nothing else is needed:
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">

@@ -16,12 +16,12 @@ fenrir_scripting_contract(RazorComponents ASSEMBLY Microsoft.AspNetCore.Componen
 # FenrirUI's Razor generator (ADR-0070), under analyzers/ in the Fenrir.UI.Razor folder, where the props find it; built
 # by its own command first, so it and the contract never write the same files at once.
 set(razor_generator_dir "${CMAKE_CURRENT_SOURCE_DIR}/Fenrir.UI.Razor.Generators")
-set(razor_generator_dll "${PROJECT_BINARY_DIR}/fenrir-uirazor/contract/analyzers/Fenrir.UI.Razor.Generators.dll")
+set(razor_generator_dll "${FenrirEngine_BINARY_DIR}/fenrir-uirazor/contract/analyzers/Fenrir.UI.Razor.Generators.dll")
 file(GLOB razor_generator_sources CONFIGURE_DEPENDS "${razor_generator_dir}/*.cs")
 add_custom_command(
     OUTPUT "${razor_generator_dll}"
     COMMAND "${IRIS_DOTNET_EXECUTABLE}" build "${razor_generator_dir}/Fenrir.UI.Razor.Generators.csproj"
-        --configuration Release --output "${PROJECT_BINARY_DIR}/fenrir-uirazor/contract/analyzers" -nologo -v:q
+        --configuration Release --output "${FenrirEngine_BINARY_DIR}/fenrir-uirazor/contract/analyzers" -nologo -v:q
         "-p:BaseIntermediateOutputPath=${CMAKE_CURRENT_BINARY_DIR}/generator-obj/"
     DEPENDS ${razor_generator_sources} "${razor_generator_dir}/Fenrir.UI.Razor.Generators.csproj"
     COMMENT "Building FenrirUI's Razor generator"
