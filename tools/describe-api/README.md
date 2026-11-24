@@ -42,6 +42,15 @@ private-members = ["MyPackage::Hit", "Other::Entity"]
 
 A bound type may be a class template's specialisation, named by an alias (`"Math::Quat"`) or with its arguments (`"MyPackage::Handle<MyPackage::Mesh>"`); the tool instantiates one the headers never do to read its layout.
 
+A bound type's components are recorded in storage order unless a `[components]` table names another: each entry maps a selected bound type to its component names in the order its components visit and files write them, every component once. Each keeps its own offset, so the layout does not change, nor does any binding. glm stores a quaternion `w` first; files, glTF and C#'s `Quaternion` write it `x` first:
+
+```toml
+[components]
+"Math::Quat" = ["x", "y", "z", "w"]
+```
+
+A type `[types]` does not select as a `bound-type`, or an order that is not a list of names, fails the tool, as does a bound type with no components.
+
 A `[registration]` table is accepted and left alone: it configures `tools/generate-type-registry`, which reads it. Any other key fails the tool.
 
 ### Type registrations
@@ -82,6 +91,9 @@ Everything the tool cannot describe fails it, naming the type and member, and ev
 | `@version takes a whole number from 1: ...`, `@range takes two numbers, ...`, `@<command> is written twice; ...` | A malformed doc command, or a second of one given once. |
 | `has no default member initialiser` | A number, enum, pointer or array of them with no initialiser. |
 | `cannot tell which component of <T> each argument sets: ...` | A bound type's constructor whose parameters are not named after its components. |
+| `[components] names '<name>', which is not one of its components (...)`, `[components] names '<name>' twice`, `[components] leaves out its component '<name>'` | A bound type's `[components]` order that does not name each of its components once. |
+| `[components] names an order, but it holds something other than scalars, so it has no components` | A `[components]` order for a bound type that has no `components`. |
+| `[components] names <T>, which [types] does not select`, `[components] names <T>, which [types] selects as <a role>, not a bound type`, `[components] gives <T> '...'; an order is a list of its component names` | A `[components]` entry for a type that is not a selected bound type, or whose order is not a list of names. |
 | `a private data member outside the tagged-union shape (one enum tag followed by one anonymous union); ...` | A private (or protected) member of a class that is not a tagged union, unless `private-members` names it. |
 | `'private-members' names <T>, which [types] does not select and no selected type holds` | A `private-members` entry that is neither a selected type nor a nested type a selected type holds. |
 | `an anonymous struct or union outside the tagged-union shape (...)` | The same, for an anonymous member. |

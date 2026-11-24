@@ -1,0 +1,65 @@
+// Level 1: the player's start room; entities are written parent-first
+{
+  format: 1,
+  type: "Fenrir::Scene",
+  version: 1,
+  resources: {
+    "Fenrir::Sky": {
+      cubemap: "textures/sky/day.ktx2",
+      exposure: 1.2,
+    },
+  },
+  entities: [
+    {
+      id: "a7k2q",
+      components: {
+        "Fenrir::Name": {value: "Level"},
+      },
+    },
+    {
+      id: "d4e5f",
+      parent: "a7k2q",
+      components: {
+        "Fenrir::Name": {value: "Player"},
+        "Fenrir::Transform": {
+          position: [0, 1.8, 0],
+          rotation: [0, 0.7071068, 0, 0.7071068],
+        },
+        "Fenrir::MeshRenderer": {
+          mesh: "models/player.glb#Mesh0",
+          material: "materials/player.mat",
+        },
+      },
+    },
+    {
+      id: "m9x1p",
+      parent: "d4e5f",
+      components: {
+        "Fenrir::Name": {value: "Sword"},
+        "Fenrir::MeshRenderer": {
+          mesh: "models/sword.glb#Mesh0",
+          material: "materials/iron.mat",
+        },
+        "MyGame::BoneAttachment": {
+          skeleton: "d4e5f",
+          bone: "hand_r",
+        },
+      },
+    },
+    {
+      id: "s3w8c",
+      parent: "a7k2q",
+      components: {
+        "Fenrir::Name": {value: "Sun"},
+        "Fenrir::Transform": {
+          rotation: [-0.3826834, 0, 0, 0.9238795],
+        },
+        "Fenrir::DirectionalLight": {
+          color: [1, 0.95, 0.8],
+          intensity: 3.5,
+          shadows: "Soft",
+        },
+      },
+    },
+  ],
+}

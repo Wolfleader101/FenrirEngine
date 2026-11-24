@@ -63,7 +63,7 @@ A class whose only non-static data members are an enum tag followed by one anony
 
 ### `bound-type`
 
-A type every binding has its own of (a vector, a quaternion, an entity handle). Its `size` and `alignment` are recorded, and it need not be plain data. When every value it holds is a scalar, `components` lists them in storage order, each with `name`, `offset` and `kind` (a number kind, `bool` or `char16`): a member of an anonymous union is its first member's, and a nested struct's members and an array's elements (a `std::array`'s as its C array's) are named by path (`value[0].x`), so a vector is its three `f32` and a 4x4 matrix its sixteen. Private members are read too: they are the layout. A bound type holding anything else (a pointer, an enum) has no `components`. A bound type that is a class template's specialisation the headers never instantiate (glm's quaternion, when nothing in them holds one) is instantiated to read its layout.
+A type every binding has its own of (a vector, a quaternion, an entity handle). Its `size` and `alignment` are recorded, and it need not be plain data. When every value it holds is a scalar, `components` lists them in storage order, or in the order the selection's `[components]` names (`Quat` as `x, y, z, w` where glm stores `w` first; a bound type it does not name keeps storage order), each with `name`, `offset` and `kind` (a number kind, `bool` or `char16`), the offset being the component's own in either order: a member of an anonymous union is its first member's, and a nested struct's members and an array's elements (a `std::array`'s as its C array's) are named by path (`value[0].x`), so a vector is its three `f32` and a 4x4 matrix its sixteen. Private members are read too: they are the layout. A bound type holding anything else (a pointer, an enum) has no `components`. A bound type that is a class template's specialisation the headers never instantiate (glm's quaternion, when nothing in them holds one) is instantiated to read its layout.
 
 ### `enum`
 
@@ -113,7 +113,7 @@ Each field's `default` is the value its default member initialiser gives, record
 | `enum` | The enumerator's name, as a string. |
 | `pointer` | `null` (only a null pointer is recorded). |
 | `struct` of a described struct or tagged union | An object of the members the initialiser sets, in storage order, each with its own `default` value; `{}` when it sets none, which is the type's own defaults (C++ `T{}`). |
-| `struct` of a bound type | An object of every component's value, by component name, in storage order; `{}` for the bound type's own default. |
+| `struct` of a bound type | An object of every component's value, by component name, in storage order whatever order `components` takes; `{}` for the bound type's own default. |
 | `array` | A list of `length` element defaults. |
 | `entity`, `reference` | `null`: the empty entity or handle, the only default recorded. |
 | `fixed-string` | The text, as a string: `""` when empty. |

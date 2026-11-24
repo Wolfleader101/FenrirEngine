@@ -562,8 +562,8 @@ namespace Fenrir::Generated::FixtureTypes
     static_assert(sizeof(Fixture::Size) == 8 && alignof(Fixture::Size) == 4,
                   "Fixture::Size is not the layout Fixture.api.json describes: regenerate the description, then this registration");
     constexpr Fenrir::FieldInfo Fixture_Size_Fields[] = {
-        {.name = "first", .type = {.kind = Fenrir::Kind::F32}, .offset = 0},
         {.name = "second", .type = {.kind = Fenrir::Kind::F32}, .offset = 4},
+        {.name = "first", .type = {.kind = Fenrir::Kind::F32}, .offset = 0},
     };
     constexpr Fenrir::TypeDescription Fixture_Size{
         .name = "Fixture::Size",

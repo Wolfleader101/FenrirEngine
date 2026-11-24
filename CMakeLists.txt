@@ -97,6 +97,9 @@ add_subdirectory(packages/FenrirECS)
 add_subdirectory(packages/FenrirTime)
 add_subdirectory(packages/FenrirScheduler)
 add_subdirectory(packages/FenrirLogger)
+# Always built: the value tree, its JSON5 text and tree encoding, and the bridge to described values, on the type registry
+# and the logger alone (ADR-0079).
+add_subdirectory(packages/FenrirSerialisation)
 add_subdirectory(packages/FenrirScene)
 
 add_subdirectory(packages/FenrirCore)

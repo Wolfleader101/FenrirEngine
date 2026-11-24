@@ -178,6 +178,82 @@ public sealed class DescribeTests
     }
 
     [Fact]
+    public void ABoundTypesComponentsVisitInTheOrderItsSelectionNamesEachKeepingItsOffset()
+    {
+        var types = Describer.Describe(Selection.Read(FixtureSelection), []).Types;
+        BoundTypeDescription Of(string name) => (BoundTypeDescription)types.Single(type => type.Name == name);
+
+        // Fixture::Size's [components] order is second, first; Fixture::Pair<double>, named in none, keeps storage order.
+        Assert.Equal([new BoundComponent("second", 4, "f32"), new BoundComponent("first", 0, "f32")],
+                     Of("Fixture::Size").Components!);
+        Assert.Equal(["first", "second"], Of("Fixture::Pair<double>").Components!.Select(component => component.Name));
+    }
+
+    [Theory]
+    [InlineData("[\"x\", \"y\", \"q\"]",
+                "Fixture::Vec3: [components] names 'q', which is not one of its components (x, y, z)")]
+    [InlineData("[\"x\", \"z\"]", "Fixture::Vec3: [components] leaves out its component 'y'")]
+    [InlineData("[\"x\", \"y\", \"y\", \"z\"]", "Fixture::Vec3: [components] names 'y' twice")]
+    public void AComponentOrderNamingAnUnknownMissingOrRepeatedComponentFailsNamingTheTypeAndTheName(string order,
+                                                                                                    string diagnostic)
+    {
+        var exception = Assert.Throws<DescribeException>(() => DescribeWithComponents(
+                                                             "\"Fixture::Vec3\" = \"bound-type\"",
+                                                             $"\"Fixture::Vec3\" = {order}"));
+
+        Assert.True(exception.Message.Contains("error: " + diagnostic, StringComparison.Ordinal),
+                    $"The order {order} should fail with\n  {diagnostic}\nbut failed with\n  {exception.Message}");
+    }
+
+    [Fact]
+    public void AComponentOrderForABoundTypeWithNoComponentsFailsNamingTheType()
+    {
+        var exception = Assert.Throws<DescribeException>(() => DescribeWithComponents(
+                                                             "\"Fixture::Handle\" = \"bound-type\"",
+                                                             "\"Fixture::Handle\" = [\"value\"]"));
+
+        Assert.Contains("error: Fixture::Handle: [components] names an order, but it holds something other than " +
+                        "scalars, so it has no components", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("\"Fixture::Hit\" = \"shared-struct\"", "\"Fixture::Hit\" = [\"x\"]",
+                "[components] names Fixture::Hit, which [types] selects as a shared struct, not a bound type")]
+    [InlineData("\"Fixture::Vec3\" = \"bound-type\"", "\"Fixture::Quat\" = [\"x\", \"y\", \"z\", \"w\"]",
+                "[components] names Fixture::Quat, which [types] does not select")]
+    public void AComponentOrderForATypeTheSelectionDoesNotSelectAsABoundTypeFailsNamingIt(string types,
+                                                                                          string components,
+                                                                                          string diagnostic)
+    {
+        var exception = Assert.Throws<DescribeException>(() => DescribeWithComponents(types, components));
+
+        Assert.True(exception.Message.Contains(diagnostic, StringComparison.Ordinal),
+                    $"The order\n  {components}\nshould fail with\n  {diagnostic}\nbut failed with\n  {exception.Message}");
+    }
+
+    [Fact]
+    public void AComponentOrderThatIsNotAListOfNamesFailsNamingTheType()
+    {
+        var exception = Assert.Throws<DescribeException>(() => DescribeWithComponents(
+                                                             "\"Fixture::Vec3\" = \"bound-type\"",
+                                                             "\"Fixture::Vec3\" = \"x, y, z\""));
+
+        Assert.Contains("[components] gives Fixture::Vec3 'x, y, z'; an order is a list of its component names",
+                        exception.Message, StringComparison.Ordinal);
+    }
+
+    // Describes Fixture.hpp under a selection of the given [types] and [components] rows.
+    private static Description DescribeWithComponents(string types, string components)
+    {
+        using var directory = new TemporaryDirectory();
+        var header = Path.Combine(FixtureDirectory(), "Fixture.hpp").Replace('\\', '/');
+        var selection = Path.Combine(directory.Path, "Ordered.api.toml");
+        File.WriteAllText(selection,
+                          $"headers = [\"{header}\"]\n\n[types]\n{types}\n\n[components]\n{components}\n");
+        return Describer.Describe(Selection.Read(selection), []);
+    }
+
+    [Fact]
     public void ADataAssetRecordsTheDataAssetItExtendsAndASettingsTypeNone()
     {
         var types = Describer.Describe(Selection.Read(FixtureSelection), []).Types;
