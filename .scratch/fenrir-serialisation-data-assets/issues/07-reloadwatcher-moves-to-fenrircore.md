@@ -10,8 +10,8 @@
 
 **Touches:** `packages/FenrirCore/` (`CMakeLists.txt`, `include/FenrirCore/ReloadWatcher.hpp`, `src/ReloadWatcher.cpp`, a new `Tests/`), `packages/FenrirScripting/` (`src/ReloadWatcher.*` removed, `src/GenerationLifecycle.*`, `CMakeLists.txt`, `Tests/CMakeLists.txt`, `Tests/Rules/ReloadWatcherTests.cpp` removed), the root `CMakeLists.txt` if FenrirCore's tests need adding
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `ReloadWatcher`'s fake-clock tests pass in FenrirCore, unchanged in substance.
-- [ ] FenrirScripting builds and its tests pass with the watcher included from FenrirCore. `PublicHeaders` passes for FenrirCore.
-- [ ] Nothing in FenrirScripting still defines a reload watcher.
+- [x] `ReloadWatcher`'s fake-clock tests pass in FenrirCore, unchanged in substance.
+- [x] FenrirScripting builds and its tests pass with the watcher included from FenrirCore. `PublicHeaders` passes for FenrirCore.
+- [x] Nothing in FenrirScripting still defines a reload watcher.

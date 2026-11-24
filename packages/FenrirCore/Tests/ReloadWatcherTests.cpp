@@ -1,6 +1,6 @@
-// The reload watcher's decision, with no file and no clock: when does a changed file (a script assembly, a data asset)
-// count as a finished build? The watcher is told the time, what the file looks like, and whether it can be opened, and
-// says Idle, Settling or Ready.
+// The reload watcher's decision, with no file and no clock: when has a changed file (a script assembly, a data asset)
+// finished being written? A "build" below is one version of the file. The watcher is told the time, what the file looks
+// like, and whether it can be opened, and says Idle, Settling or Ready.
 #include <catch2/catch_test_macros.hpp>
 
 #include "FenrirCore/ReloadWatcher.hpp"
