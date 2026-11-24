@@ -22,18 +22,11 @@
 using namespace Fenrir::Serialisation;
 using namespace BridgeTest;
 using SerialisationTest::RecordingLogger;
+using SerialisationTest::TreeOf;
 
 namespace
 {
     constexpr std::string_view Path = "test.json5";
-
-    // The tree `text` reads as; the text must be valid JSON5.
-    Value TreeOf(std::string_view text)
-    {
-        RecordingLogger logger;
-        ReadTreeResult read = ReadText(text, Path, logger);
-        return read.tree.value_or(Value{});
-    }
 
     // Reads `text` into `value`, of type `type`, against a registry holding the bridge's test types.
     BridgeResult Read(std::string_view text, const Fenrir::TypeDescription& type, void* value, RecordingLogger& logger)

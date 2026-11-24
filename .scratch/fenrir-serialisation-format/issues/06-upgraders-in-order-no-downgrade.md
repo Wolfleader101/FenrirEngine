@@ -13,8 +13,8 @@
 
 **Touches:** `packages/FenrirSerialisation/` (`include/FenrirSerialisation/`, `src/`, `Tests/`, `Tests/CMakeLists.txt`)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A `sword` tree at `version: 1` with a renamed field reaches version 3 through two registered upgraders, run in order, and `FromTree` then reads it.
-- [ ] A missing step gives one error and leaves the tree at the version it reached. A tree newer than the type gives one warning and stays unchanged.
-- [ ] Registering for an unknown type, or registering twice for one `fromVersion`, is one error and changes nothing.
+- [x] A `sword` tree at `version: 1` with a renamed field reaches version 3 through two registered upgraders, run in order, and `FromTree` then reads it.
+- [x] A missing step gives one error and leaves the tree at the version it reached. A tree newer than the type gives one warning and stays unchanged.
+- [x] Registering for an unknown type, or registering twice for one `fromVersion`, is one error and changes nothing.

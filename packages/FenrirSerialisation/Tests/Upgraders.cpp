@@ -1,4 +1,4 @@
-// Upgraders (the spec, "Upgraders"): a tree written at an older version of its type is migrated to the type's version,
+// Upgraders (the spec, "Upgraders"): a tree written at an older version of its type is upgraded to the type's version,
 // one step at a time, by the upgraders the type registered, before FromTree reads it. There is no downgrade.
 #include "FenrirSerialisation/Bridge.hpp"
 #include "FenrirSerialisation/Diagnostic.hpp"
@@ -24,6 +24,7 @@
 
 using namespace Fenrir::Serialisation;
 using SerialisationTest::RecordingLogger;
+using SerialisationTest::TreeOf;
 
 namespace
 {
@@ -65,13 +66,6 @@ namespace
         return registry;
     }
 
-    // The tree `text` reads as; the text must be valid JSON5.
-    Value TreeOf(std::string_view text)
-    {
-        RecordingLogger logger;
-        return ReadText(text, "sword.json5", logger).tree.value_or(Value{});
-    }
-
     // Renames the member `from` of an object tree to `to`, keeping its value and place.
     void Rename(Value& tree, std::string_view from, std::string_view to)
     {
@@ -80,22 +74,25 @@ namespace
                 member.key = std::string(to);
     }
 
-    // The version 1 to 2 step: `attack` became `power`. Records its step in `steps`.
-    Upgrader AttackToPower(std::vector<std::uint32_t>& steps)
+    // The step that renames the member `from` to `to`, recording the version it stepped from in `steps`.
+    Upgrader RenameStep(std::vector<std::uint32_t>& steps, std::string from, std::string to)
     {
-        return [&steps](std::uint32_t fromVersion, Value& tree) {
+        return [&steps, from = std::move(from), to = std::move(to)](std::uint32_t fromVersion, Value& tree) {
             steps.push_back(fromVersion);
-            Rename(tree, "attack", "power");
+            Rename(tree, from, to);
         };
     }
 
-    // The version 2 to 3 step: `power` became `damage`. Records its step in `steps`.
+    // The version 1 to 2 step: `attack` became `power`.
+    Upgrader AttackToPower(std::vector<std::uint32_t>& steps)
+    {
+        return RenameStep(steps, "attack", "power");
+    }
+
+    // The version 2 to 3 step: `power` became `damage`.
     Upgrader PowerToDamage(std::vector<std::uint32_t>& steps)
     {
-        return [&steps](std::uint32_t fromVersion, Value& tree) {
-            steps.push_back(fromVersion);
-            Rename(tree, "power", "damage");
-        };
+        return RenameStep(steps, "power", "damage");
     }
 
     // The sword at version 1, as a file of that time holds its data.
@@ -108,6 +105,7 @@ TEST_CASE("A version 1 sword reaches version 3 through its two upgraders and Fro
     Fenrir::TypeRegistry registry = SwordRegistry();
     RecordingLogger logger;
     std::vector<std::uint32_t> steps;
+    INFO("each upgrader registers, for a registered type and a version not yet taken");
     REQUIRE(RegisterUpgrader(registry, "MyGame::Sword", 1, AttackToPower(steps), logger));
     REQUIRE(RegisterUpgrader(registry, "MyGame::Sword", 2, PowerToDamage(steps), logger));
     Value tree = TreeOf(SwordAtVersion1);
@@ -138,12 +136,13 @@ TEST_CASE("Upgraders run in version order whatever order they were registered in
     Fenrir::TypeRegistry registry = SwordRegistry();
     RecordingLogger logger;
     std::vector<std::uint32_t> steps;
+    INFO("each upgrader registers, for a registered type and a version not yet taken");
     REQUIRE(RegisterUpgrader(registry, "MyGame::Sword", 2, PowerToDamage(steps), logger));
     REQUIRE(RegisterUpgrader(registry, "MyGame::Sword", 1, AttackToPower(steps), logger));
     Value tree = TreeOf(SwordAtVersion1);
 
     const UpgradeResult upgraded = Upgrade(registry, "MyGame::Sword", 1, tree, logger);
-    INFO("the version 1 step ran before the version 2 step, registered first");
+    INFO("the version 1 step ran before the version 2 step, though the version 2 step was registered first");
     REQUIRE(steps == std::vector<std::uint32_t>{1, 2});
     INFO("so `attack` became `power` and then `damage`");
     REQUIRE(Equals(tree, TreeOf("{damage: 12.5, weight: 3}")));
@@ -156,6 +155,7 @@ TEST_CASE("A tree at its type's version runs no upgrader", "[serialisation][upgr
     Fenrir::TypeRegistry registry = SwordRegistry();
     RecordingLogger logger;
     std::vector<std::uint32_t> steps;
+    INFO("each upgrader registers, for a registered type and a version not yet taken");
     REQUIRE(RegisterUpgrader(registry, "MyGame::Sword", 1, AttackToPower(steps), logger));
     REQUIRE(RegisterUpgrader(registry, "MyGame::Sword", 2, PowerToDamage(steps), logger));
     Value tree = TreeOf("{damage: 12.5}");
@@ -177,6 +177,7 @@ TEST_CASE("A missing step is one error and leaves the tree at the version it rea
     Fenrir::TypeRegistry registry = SwordRegistry();
     RecordingLogger logger;
     std::vector<std::uint32_t> steps;
+    INFO("each upgrader registers, for a registered type and a version not yet taken");
     REQUIRE(RegisterUpgrader(registry, "MyGame::Sword", 1, AttackToPower(steps), logger));
     Value tree = TreeOf(SwordAtVersion1);
 
@@ -194,11 +195,12 @@ TEST_CASE("A missing step is one error and leaves the tree at the version it rea
     REQUIRE(logger.warnings.empty());
 }
 
-TEST_CASE("A tree newer than its type is read as it is with one warning", "[serialisation][upgrade]")
+TEST_CASE("A tree newer than its type is left as it is with one warning", "[serialisation][upgrade]")
 {
     Fenrir::TypeRegistry registry = SwordRegistry();
     RecordingLogger logger;
     std::vector<std::uint32_t> steps;
+    INFO("each upgrader registers, for a registered type and a version not yet taken");
     REQUIRE(RegisterUpgrader(registry, "MyGame::Sword", 1, AttackToPower(steps), logger));
     Value tree = TreeOf("{damage: 12.5, edge: 4}");
 
@@ -273,6 +275,7 @@ TEST_CASE("A second upgrader for one version is one error and the first is kept"
     RecordingLogger logger;
     std::vector<std::uint32_t> firstSteps;
     std::vector<std::uint32_t> secondSteps;
+    INFO("each upgrader registers, for a registered type and a version not yet taken");
     REQUIRE(RegisterUpgrader(registry, "MyGame::Sword", 1, AttackToPower(firstSteps), logger));
 
     const bool registered = RegisterUpgrader(registry, "MyGame::Sword", 1, AttackToPower(secondSteps), logger);
@@ -293,4 +296,19 @@ TEST_CASE("A second upgrader for one version is one error and the first is kept"
     INFO("the first upgrader is the one that runs");
     REQUIRE(firstSteps == std::vector<std::uint32_t>{1});
     REQUIRE(secondSteps.empty());
+}
+
+TEST_CASE("Registering an empty upgrader is one error and adds nothing", "[serialisation][upgrade]")
+{
+    Fenrir::TypeRegistry registry = SwordRegistry();
+    RecordingLogger logger;
+
+    const bool registered = RegisterUpgrader(registry, "MyGame::Sword", 1, Upgrader{}, logger);
+    INFO("an upgrader with no function to call is refused, so Upgrade never calls it");
+    REQUIRE_FALSE(registered);
+    INFO("one error, naming the type");
+    REQUIRE(logger.errors.size() == 1);
+    REQUIRE(logger.errors[0].find("MyGame::Sword") != std::string::npos);
+    INFO("the registry holds no upgraders for the type");
+    REQUIRE(registry.Attachment<UpgradersTag>("MyGame::Sword") == nullptr);
 }

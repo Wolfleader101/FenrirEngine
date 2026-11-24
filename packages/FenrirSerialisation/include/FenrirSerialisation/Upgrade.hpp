@@ -36,8 +36,9 @@ namespace Fenrir::Serialisation
      * @brief Adds `upgrader` to the upgraders of the type registered under `typeName`, its canonical or a former name,
      * as the step from `fromVersion` to the next.
      *
-     * Refused with one error through `logger`, adding nothing, when the registry has no type under `typeName` or the
-     * type already has an upgrader from `fromVersion`. The C# side registers through this door too.
+     * Refused with one error through `logger`, adding nothing, when the registry has no type under `typeName`, when the
+     * type already has an upgrader from `fromVersion`, or when `upgrader` is empty. The C# side registers through this
+     * door too.
      *
      * @return Whether it was added.
      */
@@ -70,7 +71,7 @@ namespace Fenrir::Serialisation
     };
 
     /**
-     * @brief Migrates `tree`, a value of the type registered under `typeName` written at `fromVersion`, to the type's
+     * @brief Upgrades `tree`, a value of the type registered under `typeName` written at `fromVersion`, to the type's
      * version, running the type's upgraders one step at a time in version order (ADR-0077 §6), before `FromTree`
      * reads it. Text and encoded trees alike (ADR-0085 §2).
      *

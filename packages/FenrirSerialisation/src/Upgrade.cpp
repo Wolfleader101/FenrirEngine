@@ -17,9 +17,16 @@ namespace Fenrir::Serialisation
                          typeName);
             return false;
         }
+        if (!upgrader)
+        {
+            logger.Error("The upgrader from version {} for the type {} is empty; it is refused.", fromVersion,
+                         type->name);
+            return false;
+        }
         UpgradersTag::Value* upgraders = registry.Attachment<UpgradersTag>(typeName);
         if (upgraders == nullptr)
         {
+            // Find found the type just above, so the attachment is hung and found again.
             registry.Attach<UpgradersTag>(typeName, {});
             upgraders = registry.Attachment<UpgradersTag>(typeName);
         }
