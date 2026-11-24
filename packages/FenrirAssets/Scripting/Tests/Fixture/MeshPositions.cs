@@ -26,16 +26,24 @@ public static class PositionCalls
         return Assets.GetMeshPositions(TestHandle.To<Mesh>(mesh), positions);
     }
 
-    // Component `axis` of entry `at` of a span of `room` entries, each first set to -7 on every axis, after
+    // What EntryAfterRead fills each entry's every axis with first (Untouched in MeshPositions.cpp).
+    private const float Untouched = -7.0f;
+
+    // Component `axis` of entry `at` of a span of `room` entries, each first set to Untouched on every axis, after
     // GetMeshPositions reads into it.
     public static float EntryAfterRead(ulong mesh, int room, int at, int axis)
     {
         Span<Vector3> positions = stackalloc Vector3[room];
-        positions.Fill(new Vector3(-7.0f, -7.0f, -7.0f));
+        positions.Fill(new Vector3(Untouched, Untouched, Untouched));
         Assets.GetMeshPositions(TestHandle.To<Mesh>(mesh), positions);
         return Component(positions[at], axis);
     }
 
-    private static float Component(Vector3 position, int axis) =>
-        axis switch { 0 => position.X, 1 => position.Y, _ => position.Z };
+    private static float Component(Vector3 position, int axis) => axis switch
+    {
+        0 => position.X,
+        1 => position.Y,
+        2 => position.Z,
+        _ => throw new ArgumentOutOfRangeException(nameof(axis), axis, "an axis is 0, 1 or 2"),
+    };
 }
