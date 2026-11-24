@@ -14,10 +14,10 @@
 
 **Touches:** `packages/FenrirAssets/` (`include/FenrirAssets/AssetStore.hpp`, `src/AssetStore.cpp`, a new private `src/AssetSource.hpp` and `src/DirectorySource.cpp`, `src/Envelope.cpp`, `Tests/` (`Loading.cpp`, `DataAssets.cpp`, a new `AssetPaths.cpp`))
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A data asset loads through the directory source, and a test double source serves the same bytes from memory with no file on disk.
-- [ ] An absolute path under the root and its relative form give one handle. An absolute path outside the root fails with `OutsideRoot`, and the old "taken as given" test is changed to match.
-- [ ] A `..` path in a file is refused with a located diagnostic.
-- [ ] A path matching a file only case-insensitively warns once in a development build.
-- [ ] `PathOf` answers for a loaded data asset, a loaded image and a sub-asset label. It is empty for an unnamed `Add` and for a stale handle.
+- [x] A data asset loads through the directory source, and a test double source serves the same bytes from memory with no file on disk.
+- [x] An absolute path under the root and its relative form give one handle. An absolute path outside the root fails with `OutsideRoot`, and the old "taken as given" test is changed to match. *Decided with the user on 2026-11-24:* `OutsideRoot` is for data assets only. Imported kinds still take an absolute path outside the root as given, since six other packages' tests load their fixtures that way, so the old test is renamed to say it covers imported kinds, and ADR-0021's amendment says so.
+- [x] A `..` path in a file is refused with a located diagnostic.
+- [x] A path matching a file only case-insensitively warns once in a development build.
+- [x] `PathOf` answers for a loaded data asset, a loaded image and a sub-asset label. It is empty for an unnamed `Add` and for a stale handle.

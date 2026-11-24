@@ -29,24 +29,17 @@
 
 namespace Fenrir
 {
-    class AssetStore;
     class ILogger;
     class Scene;
     class TypeRegistry;
+    /** @brief FenrirAssets's tests' way inside the store (Tests/AssetsProbe.hpp): no part of its interface. */
+    struct AssetsProbe;
 
     namespace Detail
     {
         /** @brief What the store set up. Defined in FenrirAssets's private headers; nothing else can use it. */
         struct AssetStoreState;
         struct AssetRecord;
-        /** @brief Where data asset envelopes are read from (ADR-0085). Defined in FenrirAssets's private headers. */
-        class AssetSource;
-
-        /**
-         * @brief Makes `store` read data asset envelopes through `source` from now on, in place of its directory
-         * source: for FenrirAssets's own tests, which serve files from memory. Defined in FenrirAssets.
-         */
-        void UseAssetSource(AssetStore& store, std::unique_ptr<AssetSource> source);
 
         /** @brief An asset handle without its type: what the store's untyped core works with. */
         struct AssetSlot
@@ -451,8 +444,9 @@ namespace Fenrir
         /**
          * @brief The asset path of the asset `handle` names (ADR-0076): for a loaded asset, its path relative to the
          * asset root with forward slashes and its extension, then `#` and its label for a sub-asset (`models/hero.glb#
-         * Mesh0`); for a built-in, its `builtin:` name. An imported asset loaded from outside the root gives its
-         * absolute path. Empty for an asset added with no name, and when the handle is empty or stale.
+         * Mesh0`); for a built-in, its `builtin:` name, even before its data is registered. An imported asset loaded
+         * from outside the root gives its absolute path. Empty for an asset added with no name, and when the handle is
+         * empty or stale.
          */
         template <typename T>
         [[nodiscard]] std::optional<std::string> PathOf(AssetHandle<T> handle) const
@@ -683,7 +677,7 @@ namespace Fenrir
                                                                  ShaderParameterType type) const;
         void WarnOverridesShaderLacks(AssetHandle<Shader> shader);
 
-        friend void Detail::UseAssetSource(AssetStore& store, std::unique_ptr<Detail::AssetSource> source);
+        friend struct AssetsProbe;
 
         // Shared with the scenes that own assets, which hold it weakly: a scene that ends after the store frees
         // nothing.

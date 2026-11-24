@@ -4,7 +4,6 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
-#include <string>
 #include <string_view>
 #include <vector>
 
@@ -42,11 +41,4 @@ namespace Fenrir::Detail
      * `logger` must outlive it.
      */
     [[nodiscard]] std::unique_ptr<AssetSource> MakeDirectorySource(std::filesystem::path root, ILogger& logger);
-
-    /**
-     * @brief Why `path`, an asset path written in a file, is refused, or empty when it is not (ADR-0076 §1, ADR-0085
-     * §1): it is absolute, or it climbs through `..`. Only the part before a `#label` is checked; a `builtin:` name and
-     * a bare `#label` pass.
-     */
-    [[nodiscard]] std::string FilePathProblem(std::string_view path);
 } // namespace Fenrir::Detail

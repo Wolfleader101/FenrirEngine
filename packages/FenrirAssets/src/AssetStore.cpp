@@ -41,6 +41,10 @@ namespace Fenrir
 {
     namespace
     {
+        using Detail::BuiltinPrefix;
+        using Detail::Utf8Path;
+        using Detail::Utf8Text;
+
         // The words log messages use for each kind, in AssetKind's order.
         constexpr std::array<std::string_view, Detail::AssetKindCount> kindNames = {
             "mesh", "image",     "material",      "shader", "model",     "skeleton",
@@ -89,18 +93,6 @@ namespace Fenrir
             const auto path = std::filesystem::read_symlink("/proc/self/exe", error);
             return error ? std::filesystem::current_path() : path.parent_path();
 #endif
-        }
-
-        std::filesystem::path Utf8Path(std::string_view text)
-        {
-            return std::filesystem::path(
-                std::u8string_view(reinterpret_cast<const char8_t*>(text.data()), text.size()));
-        }
-
-        std::string Utf8Text(const std::filesystem::path& path)
-        {
-            const std::u8string text = path.generic_u8string();
-            return {reinterpret_cast<const char*>(text.data()), text.size()};
         }
 
         // A load request taken apart: the file resolved against the root, its label, and the key both make.
@@ -154,9 +146,6 @@ namespace Fenrir
             return Utf8Text(relative);
         }
 
-        // The prefix of a built-in asset's name, which is its key rather than a path.
-        constexpr std::string_view BuiltinPrefix = "builtin:";
-
         std::string_view ReasonText(LoadFailure reason)
         {
             if (reason == LoadFailure::FileNotFound)
@@ -193,6 +182,18 @@ namespace Fenrir
 
     namespace Detail
     {
+        std::filesystem::path Utf8Path(std::string_view text)
+        {
+            return std::filesystem::path(
+                std::u8string_view(reinterpret_cast<const char8_t*>(text.data()), text.size()));
+        }
+
+        std::string Utf8Text(const std::filesystem::path& path)
+        {
+            const std::u8string text = path.generic_u8string();
+            return {reinterpret_cast<const char*>(text.data()), text.size()};
+        }
+
         bool ReadAssetFile(const std::filesystem::path& file, std::vector<std::byte>& bytes)
         {
             std::ifstream stream(file, std::ios::binary);
@@ -329,11 +330,6 @@ namespace Fenrir
             config.root.empty() ? ExecutableDirectory() / "assets" : std::filesystem::absolute(config.root);
         m_state->root = root.lexically_normal();
         m_state->source = Detail::MakeDirectorySource(m_state->root, logger);
-    }
-
-    void Detail::UseAssetSource(AssetStore& store, std::unique_ptr<AssetSource> source)
-    {
-        store.m_state->source = std::move(source);
     }
 
     AssetStore::~AssetStore() = default;
@@ -546,14 +542,11 @@ namespace Fenrir
             return fail(LoadFailure::LabelNotFound, "a data asset's sub-assets are not read yet");
         }
         Detail::AssetSource& source = *m_state->source;
-        if (!source.Exists(*assetPath))
-        {
-            return fail(LoadFailure::FileNotFound, "there is no file at this path");
-        }
         const std::optional<std::vector<std::byte>> bytes = source.Read(*assetPath);
         if (!bytes)
         {
-            return fail(LoadFailure::ImportFailed, "the file could not be read");
+            return source.Exists(*assetPath) ? fail(LoadFailure::ImportFailed, "the file could not be read")
+                                             : fail(LoadFailure::FileNotFound, "there is no file at this path");
         }
 
         // No references resolve yet: a later ticket gives the store's resolvers.
@@ -717,15 +710,19 @@ namespace Fenrir
     std::optional<std::string> AssetStore::PathOfSlot(Detail::AssetKind kind, Detail::AssetSlot slot) const
     {
         const Detail::AssetRecord* record = m_state->Find(kind, slot);
-        if (record == nullptr || record->data == nullptr || record->key.empty())
+        if (record == nullptr || record->key.empty())
         {
             return std::nullopt;
         }
-        // A loaded asset's key is its file resolved against the root, then `#` and its label for a sub-asset; a
-        // built-in's is its name.
+        // A built-in's key is its name, which a material names before the renderer registers its data.
         if (record->key.starts_with(BuiltinPrefix))
         {
             return record->key;
+        }
+        // A loaded asset's key is its file resolved against the root, then `#` and its label for a sub-asset.
+        if (record->data == nullptr)
+        {
+            return std::nullopt;
         }
         const std::size_t hash = record->key.find('#');
         const std::string_view file = std::string_view(record->key).substr(0, hash);

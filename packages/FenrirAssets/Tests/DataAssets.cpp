@@ -10,43 +10,17 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
-#include "AssetsTest.hpp"
+#include "DataAssetsTest.hpp"
 #include "FenrirSerialisation/Upgrade.hpp"
 #include "FenrirSerialisation/Value.hpp"
-#include "FenrirTypes/TypeRegistry.hpp"
-#include "Generated/DataAssetsTestPackageTypes.hpp"
 
 using AssetsTest::AssetsApp;
+using AssetsTest::CountContaining;
+using AssetsTest::DataApp;
+using AssetsTest::FindDiagnostic;
 using AssetsTest::Sword;
 using AssetsTest::WeaponData;
 using Catch::Matchers::WithinAbs;
-
-namespace
-{
-    // An App with assets installed and the test package's data asset types registered, as a game registers its own.
-    struct DataApp : AssetsApp
-    {
-        bool registered =
-            Fenrir::Generated::RegisterDataAssetsTestPackageTypes(app.GetResource<Fenrir::TypeRegistry>());
-    };
-
-    // How many of `messages` contain `part`.
-    std::size_t CountContaining(const std::vector<std::string>& messages, std::string_view part)
-    {
-        return static_cast<std::size_t>(std::ranges::count_if(
-            messages, [&](const std::string& message) { return message.find(part) != std::string::npos; }));
-    }
-
-    // The diagnostic whose message contains `part`, or null.
-    const Fenrir::Serialisation::Diagnostic* FindDiagnostic(const std::vector<Fenrir::Serialisation::Diagnostic>& all,
-                                                            std::string_view part)
-    {
-        const auto found = std::ranges::find_if(all, [&](const Fenrir::Serialisation::Diagnostic& diagnostic) {
-            return diagnostic.message.find(part) != std::string::npos;
-        });
-        return found != all.end() ? &*found : nullptr;
-    }
-} // namespace
 
 TEST_CASE("Loading a data asset reads every field of its file", "[assets][data]")
 {

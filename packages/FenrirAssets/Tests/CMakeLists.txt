@@ -6,7 +6,7 @@ fenrir_add_catch2()
 add_executable(FenrirAssetsTests PublicHeaders.cpp Owners.cpp Revisions.cpp Loading.cpp Images.cpp ShaderContainers.cpp
                                  Materials.cpp Models.cpp SpawnNodes.cpp Cubemaps.cpp Skeletons.cpp Skins.cpp
                                  Clips.cpp BoneMasks.cpp SkinnedImport.cpp MeshLods.cpp Fonts.cpp ImageUpdates.cpp
-                                 DataAssets.cpp AssetPaths.cpp AssetsTest.hpp)
+                                 DataAssets.cpp AssetPaths.cpp AssetsTest.hpp DataAssetsTest.hpp AssetsProbe.hpp)
 # Models built in code, which FenrirSkeleton's spawning tests also build on.
 target_sources(FenrirAssetsTests PRIVATE ProceduralModels.cpp)
 target_link_libraries(FenrirAssetsTests PRIVATE FenrirAssets Catch2::Catch2WithMain)

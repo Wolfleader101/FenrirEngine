@@ -1,5 +1,7 @@
 #include "Envelope.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <format>
 #include <iterator>
@@ -10,7 +12,6 @@
 #include <utility>
 #include <vector>
 
-#include "AssetSource.hpp"
 #include "AssetStoreState.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirSerialisation/ReadTree.hpp"
@@ -146,7 +147,44 @@ namespace Fenrir::Detail
             std::string field;
             std::string problem;
         };
+
+        // Whether `part`, one name of a path, is a drive (`C:`), as a Windows path's first is.
+        bool IsDrive(std::string_view part)
+        {
+            return part.size() == 2 && part[1] == ':' && std::isalpha(static_cast<unsigned char>(part[0])) != 0;
+        }
     } // namespace
+
+    std::optional<std::string> FilePathProblem(std::string_view path)
+    {
+        if (path.starts_with(BuiltinPrefix))
+        {
+            return std::nullopt;
+        }
+        // The label is after the last `#`, as Load splits a path.
+        path = path.substr(0, path.rfind('#'));
+        constexpr std::string_view absolute = "is absolute: a path in a file is relative to the asset root";
+        // Either slash counts, so a path written on Windows is checked as it would be read there.
+        if (path.starts_with('/') || path.starts_with('\\'))
+        {
+            return std::string(absolute);
+        }
+        for (std::size_t start = 0; start <= path.size();)
+        {
+            const std::size_t end = std::min(path.find_first_of("/\\", start), path.size());
+            const std::string_view part = path.substr(start, end - start);
+            if (start == 0 && IsDrive(part))
+            {
+                return std::string(absolute);
+            }
+            if (part == "..")
+            {
+                return "climbs through `..`: a path in a file stays under the asset root";
+            }
+            start = end + 1;
+        }
+        return std::nullopt;
+    }
 
     EnvelopeRead ReadDataEnvelope(std::span<const std::byte> bytes, std::string_view path,
                                   const TypeDescription& expected, const TypeRegistry& registry,
@@ -248,10 +286,10 @@ namespace Fenrir::Detail
         Ser::Resolvers checked = resolvers;
         checked.readReference = [&](std::string_view reference,
                                     const FieldInfo& field) -> std::optional<ReferenceValue> {
-            if (std::string problem = FilePathProblem(reference); !problem.empty())
+            if (std::optional<std::string> problem = FilePathProblem(reference))
             {
                 refused.push_back(
-                    {reference.data(), std::string(reference), std::string(field.name), std::move(problem)});
+                    {reference.data(), std::string(reference), std::string(field.name), std::move(*problem)});
                 return ReferenceValue{};
             }
             if (!resolvers.readReference)

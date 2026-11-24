@@ -15,28 +15,18 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "AssetSource.hpp"
-#include "AssetsTest.hpp"
-#include "FenrirTypes/TypeRegistry.hpp"
-#include "Generated/DataAssetsTestPackageTypes.hpp"
+#include "AssetsProbe.hpp"
+#include "DataAssetsTest.hpp"
 
 using AssetsTest::AssetsApp;
+using AssetsTest::CountContaining;
+using AssetsTest::DataApp;
+using AssetsTest::FindDiagnostic;
 using AssetsTest::Fixtures;
 using AssetsTest::Sword;
 
 namespace
 {
-    // An App with assets installed and the test package's data asset types registered, as a game registers its own.
-    struct DataApp : AssetsApp
-    {
-        bool registered =
-            Fenrir::Generated::RegisterDataAssetsTestPackageTypes(app.GetResource<Fenrir::TypeRegistry>());
-
-        DataApp() = default;
-        explicit DataApp(Fenrir::AssetsConfig config) : AssetsApp(std::move(config))
-        {
-        }
-    };
-
     // A source holding its files in memory, by asset path: what a pack source will be, with no file on disk.
     class MemorySource : public Fenrir::Detail::AssetSource
     {
@@ -66,38 +56,28 @@ namespace
         std::unordered_map<std::string, std::string> m_files;
     };
 
-    // How many of `messages` contain `part`.
-    std::size_t CountContaining(const std::vector<std::string>& messages, std::string_view part)
-    {
-        return static_cast<std::size_t>(std::ranges::count_if(
-            messages, [&](const std::string& message) { return message.find(part) != std::string::npos; }));
-    }
-
-    // The diagnostic whose message contains `part`, or null.
-    const Fenrir::Serialisation::Diagnostic* FindDiagnostic(const std::vector<Fenrir::Serialisation::Diagnostic>& all,
-                                                            std::string_view part)
-    {
-        const auto found = std::ranges::find_if(all, [&](const Fenrir::Serialisation::Diagnostic& diagnostic) {
-            return diagnostic.message.find(part) != std::string::npos;
-        });
-        return found != all.end() ? &*found : nullptr;
-    }
 } // namespace
 
-TEST_CASE("A data asset loads through the directory source over the asset root", "[assets][paths][source]")
+TEST_CASE("The directory source serves the bytes of a file under its root", "[assets][paths][source]")
 {
-    DataApp test;
-    INFO("the test package's data asset types register");
-    REQUIRE(test.registered);
+    AssetsApp test;
     const std::unique_ptr<Fenrir::Detail::AssetSource> source =
         Fenrir::Detail::MakeDirectorySource(Fixtures(), test.store.Logger());
 
-    INFO("the directory source finds a file by its root-relative path, and serves its bytes");
+    INFO("it finds a file by its root-relative path, and serves all of its bytes");
     REQUIRE(source->Exists("data/sword.asset.json5"));
     const std::optional<std::vector<std::byte>> bytes = source->Read("data/sword.asset.json5");
     REQUIRE(bytes.has_value());
     REQUIRE(bytes->size() == std::filesystem::file_size(Fixtures() / "data/sword.asset.json5"));
-    INFO("a path with no file is not there");
+}
+
+TEST_CASE("The directory source finds nothing at a path with no file", "[assets][paths][source]")
+{
+    AssetsApp test;
+    const std::unique_ptr<Fenrir::Detail::AssetSource> source =
+        Fenrir::Detail::MakeDirectorySource(Fixtures(), test.store.Logger());
+
+    INFO("a path naming no file under the root is not there, and has no bytes");
     REQUIRE_FALSE(source->Exists("data/no-such.asset.json5"));
     REQUIRE_FALSE(source->Read("data/no-such.asset.json5").has_value());
 }
@@ -107,7 +87,7 @@ TEST_CASE("A data asset loads from a source's bytes with no file on disk", "[ass
     DataApp test;
     INFO("the test package's data asset types register");
     REQUIRE(test.registered);
-    Fenrir::Detail::UseAssetSource(
+    Fenrir::AssetsProbe::UseSource(
         test.store, std::make_unique<MemorySource>(std::unordered_map<std::string, std::string>{
                         {"packed/dagger.asset.json5",
                          R"({ format: 1, type: "AssetsTest::Sword", version: 2, data: { displayName: "Dagger" } })"}}));
@@ -129,7 +109,7 @@ TEST_CASE("A data asset path its source lacks fails with FileNotFound", "[assets
     DataApp test;
     INFO("the test package's data asset types register");
     REQUIRE(test.registered);
-    Fenrir::Detail::UseAssetSource(test.store,
+    Fenrir::AssetsProbe::UseSource(test.store,
                                    std::make_unique<MemorySource>(std::unordered_map<std::string, std::string>{}));
 
     const Fenrir::LoadResult<Sword> loaded =
@@ -137,6 +117,7 @@ TEST_CASE("A data asset path its source lacks fails with FileNotFound", "[assets
 
     INFO("the file on disk is not the source's, so the store does not find it");
     REQUIRE_FALSE(loaded.Ok());
+    REQUIRE(loaded.diagnostic.has_value());
     REQUIRE(loaded.diagnostic->reason == Fenrir::LoadFailure::FileNotFound);
 }
 
@@ -170,6 +151,7 @@ TEST_CASE("A data asset's absolute path outside the root fails with OutsideRoot"
     REQUIRE(std::filesystem::exists(Fixtures() / "data/sword.asset.json5"));
     REQUIRE_FALSE(outside.Ok());
     REQUIRE(outside.handle.IsEmpty());
+    REQUIRE(outside.diagnostic.has_value());
     REQUIRE(outside.diagnostic->reason == Fenrir::LoadFailure::OutsideRoot);
     INFO("the failure is logged once");
     REQUIRE(test.errors->size() == 1);
@@ -186,6 +168,7 @@ TEST_CASE("A data asset's relative path climbing out of the root fails with Outs
 
     INFO("`..` resolves beside the root, not under it");
     REQUIRE_FALSE(outside.Ok());
+    REQUIRE(outside.diagnostic.has_value());
     REQUIRE(outside.diagnostic->reason == Fenrir::LoadFailure::OutsideRoot);
 }
 
@@ -242,6 +225,7 @@ TEST_CASE("A path matching a file only when case is ignored warns once in a deve
     REQUIRE(test.registered);
 
     const Fenrir::LoadResult<Sword> first = test.store.Load<Sword>("data/SWORD.asset.json5", Fenrir::AssetOwner::App());
+    INFO("the file is found by its path ignoring case, so it loads and unloads");
     REQUIRE(test.store.Unload(first.handle));
     const Fenrir::LoadResult<Sword> again = test.store.Load<Sword>("data/SWORD.asset.json5", Fenrir::AssetOwner::App());
 
@@ -265,6 +249,21 @@ TEST_CASE("A path matching its file's case exactly warns nothing", "[assets][pat
     INFO("no warning for a path spelled as the disk spells it");
     REQUIRE(loaded.Ok());
     REQUIRE(test.warnings->empty());
+}
+#else
+TEST_CASE("A path matching a file only when case is ignored finds nothing in a release build", "[assets][paths][case]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+
+    const Fenrir::LoadResult<Sword> loaded =
+        test.store.Load<Sword>("data/SWORD.asset.json5", Fenrir::AssetOwner::App());
+
+    INFO("paths compare case-sensitively, whatever the file system does");
+    REQUIRE_FALSE(loaded.Ok());
+    REQUIRE(loaded.diagnostic.has_value());
+    REQUIRE(loaded.diagnostic->reason == Fenrir::LoadFailure::FileNotFound);
 }
 #endif
 
@@ -304,6 +303,17 @@ TEST_CASE("PathOf gives a sub-asset's path with its label", "[assets][paths][pat
     REQUIRE(test.store.PathOf(mesh.handle) == "models/scene.glb#Mesh0");
 }
 
+TEST_CASE("PathOf gives a built-in asset's name", "[assets][paths][pathof]")
+{
+    AssetsApp test;
+    const Fenrir::AssetHandle<Fenrir::Mesh> mesh =
+        test.store.AddBuiltin<Fenrir::Mesh>("builtin:triangle", AssetsTest::Triangle());
+
+    INFO("a built-in's path is its builtin: name");
+    REQUIRE(test.store.IsValid(mesh));
+    REQUIRE(test.store.PathOf(mesh) == "builtin:triangle");
+}
+
 TEST_CASE("PathOf is empty for an asset added with no name", "[assets][paths][pathof]")
 {
     AssetsApp test;
@@ -322,6 +332,7 @@ TEST_CASE("PathOf is empty for a stale handle", "[assets][paths][pathof]")
     REQUIRE(test.registered);
     const Fenrir::LoadResult<Sword> loaded =
         test.store.Load<Sword>("data/sword.asset.json5", Fenrir::AssetOwner::App());
+    INFO("the sword loads, then is freed");
     REQUIRE(test.store.Unload(loaded.handle));
 
     INFO("a freed asset's handle names no path");

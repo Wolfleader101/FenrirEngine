@@ -118,6 +118,15 @@ namespace Fenrir::Detail
      */
     AssetSlot InsertAsset(AssetTable& table, AssetBox data, OwnerId owner, std::string key);
 
+    /** @brief The prefix of a built-in asset's name, which is its key rather than a path. */
+    inline constexpr std::string_view BuiltinPrefix = "builtin:";
+
+    /** @brief The path UTF-8 `text` spells. */
+    [[nodiscard]] std::filesystem::path Utf8Path(std::string_view text);
+
+    /** @brief `path` as UTF-8 text, with forward slashes. */
+    [[nodiscard]] std::string Utf8Text(const std::filesystem::path& path);
+
     /** @brief Reads the whole file into `bytes`; false if it could not be read. */
     bool ReadAssetFile(const std::filesystem::path& file, std::vector<std::byte>& bytes);
 
