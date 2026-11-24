@@ -7,12 +7,12 @@ Spec: [Building a game against the engine](../spec.md).
 **Blocked by:** None (can start immediately)
 **Touches:** `cmake/FenrirShaders.cmake`, `cmake/FenrirDescribeApi.cmake`, `cmake/FenrirCatch2.cmake`, `packages/Iris/CMakeLists.txt`, `packages/Iris/cmake/`, `packages/FenrirScripting/CMakeLists.txt`, `packages/FenrirScripting/cmake/`, `packages/FenrirUI/Managed/CMakeLists.txt`, the packages' `CMakeLists.txt` where the C++ standard is set, `CMakeLists.txt`, `cmake/Tests/OutsideProject/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 Bottom of the stack 01, 02, 03, 05; 04 runs beside it off the base.
 
-- [ ] The outside project configures and builds with the engine as a subdirectory and no workaround in its own CMake (the throwaway version on the local `prototype/engine-as-subdirectory` branch is the starting point, with its two workarounds removed).
-- [ ] Its own material shader compiles with the engine's shader function, called from its own directory.
-- [ ] A target that links only the app package compiles as C++20 without setting the standard itself.
-- [ ] No engine output lands directly in the outside project's build root.
-- [ ] The engine still configures, builds and tests as the top-level project (`msvc-x64-debug`), the demo apps and their smoke runs included.
+- [x] The outside project configures and builds with the engine as a subdirectory and no workaround in its own CMake (the throwaway version on the local `prototype/engine-as-subdirectory` branch is the starting point, with its two workarounds removed).
+- [x] Its own material shader compiles with the engine's shader function, called from its own directory.
+- [x] A target that links only the app package compiles as C++20 without setting the standard itself.
+- [x] No engine output lands directly in the outside project's build root.
+- [x] The engine still configures, builds and tests as the top-level project (`msvc-x64-debug`), the demo apps and their smoke runs included.
