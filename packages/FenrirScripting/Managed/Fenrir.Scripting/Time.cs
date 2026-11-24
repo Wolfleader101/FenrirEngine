@@ -9,7 +9,8 @@ public static class Time
     /// <summary>Seconds between fixed steps (the Tick phase).</summary>
     public static unsafe float TickRate => Native.TimeTickRate();
 
-    /// <summary>Seconds since the app started, read from the clock each time it is asked for.</summary>
+    /// <summary>Seconds since the app started, on the wall clock and read each time it is asked for: init and loading
+    /// count, and it is not the sum of <see cref="DeltaTime"/>.</summary>
     public static unsafe double Elapsed => Native.TimeElapsed();
 
     /// <summary>The frames begun so far: during a frame, its number, from 1.</summary>

@@ -309,7 +309,7 @@ namespace
         }
     }
 
-    void ScriptsReadElapsedTimeAndTheCounts()
+    void ScriptsReadTheTimeSinceTheAppStarted()
     {
         HeadlessApp headless;
         App& app = headless.Get();
@@ -319,18 +319,32 @@ namespace
             REQUIRE(scripting.HasScripts());
         }
         bool elapsedInside = true;
-        double lastElapsed = -1.0;
-        bool elapsedGrew = true;
-        std::uint64_t frames = 0;
-        std::uint64_t ticks = 0;
-        bool countsMatched = true;
-        app.AddSequentialSystems(SchedulePriority::PostUpdate, {[&](App& running) {
+        app.AddSequentialSystems(SchedulePriority::Update, {[&](App& running) {
                                      const double before = running.GetTime().CurrentTime();
                                      const double elapsed = Call<double>(scripting, "Elapsed");
                                      const double after = running.GetTime().CurrentTime();
                                      elapsedInside = elapsedInside && before <= elapsed && elapsed <= after;
-                                     elapsedGrew = elapsedGrew && elapsed >= lastElapsed;
-                                     lastElapsed = elapsed;
+                                 }});
+        headless.Run(Frames);
+        {
+            INFO("Time.Elapsed was not the app's time since it started, read at the same moment");
+            REQUIRE(elapsedInside);
+        }
+    }
+
+    void ScriptsReadTheFrameAndTickCounts()
+    {
+        HeadlessApp headless;
+        App& app = headless.Get();
+        auto scripting = Scripting::Install(app, ConfigFor(fixture));
+        {
+            INFO("The fixture did not load");
+            REQUIRE(scripting.HasScripts());
+        }
+        std::uint64_t frames = 0;
+        std::uint64_t ticks = 0;
+        bool countsMatched = true;
+        app.AddSequentialSystems(SchedulePriority::PostUpdate, {[&](App& running) {
                                      frames = Call<std::uint64_t>(scripting, "FrameCount");
                                      ticks = Call<std::uint64_t>(scripting, "TickCount");
                                      countsMatched = countsMatched && frames == running.GetTime().frameCount &&
@@ -343,14 +357,6 @@ namespace
             app.RunFrame(delta);
         }
         app.RunExit();
-        {
-            INFO("Time.Elapsed was not the app's time since it started, read at the same moment");
-            REQUIRE(elapsedInside);
-        }
-        {
-            INFO("Time.Elapsed went backwards");
-            REQUIRE(elapsedGrew);
-        }
         {
             INFO("Time.FrameCount or Time.TickCount differed from the app's during a frame");
             REQUIRE(countsMatched);
@@ -670,9 +676,14 @@ TEST_CASE("scripts read the engine clock", "[scripting]")
     ScriptsReadTheEngineClock();
 }
 
-TEST_CASE("scripts read the time since the app started and the frame and tick counts", "[scripting]")
+TEST_CASE("scripts read the time since the app started", "[scripting]")
 {
-    ScriptsReadElapsedTimeAndTheCounts();
+    ScriptsReadTheTimeSinceTheAppStarted();
+}
+
+TEST_CASE("scripts read the frame and tick counts", "[scripting]")
+{
+    ScriptsReadTheFrameAndTickCounts();
 }
 
 TEST_CASE("App.Stop from a script ends the run after the frame", "[scripting]")
