@@ -393,13 +393,79 @@ namespace BridgeTest
         .fields = RenamedFields,
     };
 
+    // References and entities as the elements of fixed arrays, whose resolvers are handed each element apart.
+    struct Linked
+    {
+        HandleLayout parts[2];
+        EntityLayout crew[2];
+    };
+
+    inline constexpr ValueType PartType{.kind = Kind::Reference, .target = "BridgeTest::Mesh"};
+    inline constexpr ValueType CrewType{.kind = Kind::Entity};
+
+    inline const FieldInfo LinkedFields[] = {
+        {.name = "parts",
+         .type = {.kind = Kind::Array, .element = &PartType, .count = 2},
+         .offset = offsetof(Linked, parts)},
+        {.name = "crew",
+         .type = {.kind = Kind::Array, .element = &CrewType, .count = 2},
+         .offset = offsetof(Linked, crew)},
+    };
+
+    inline const TypeDescription LinkedDescription{
+        .name = "BridgeTest::Linked",
+        .package = "FenrirSerialisationTests",
+        .role = Role::Component,
+        .size = sizeof(Linked),
+        .alignment = alignof(Linked),
+        .construct = Fenrir::ConstructValue<Linked>,
+        .destroy = Fenrir::DestroyValue<Linked>,
+        .fields = LinkedFields,
+    };
+
+    // A reference in a list and an entity in an optional: owning, so walked by a visit function.
+    struct Roster
+    {
+        std::vector<HandleLayout> meshes;
+        std::optional<EntityLayout> leader;
+    };
+
+    inline const FieldInfo RosterFields[] = {
+        {.name = "meshes",
+         .type = {.kind = Kind::List, .element = &PartType, .list = &Fenrir::ListOperationsOf<HandleLayout>}},
+        {.name = "leader",
+         .type = {.kind = Kind::Optional,
+                  .element = &CrewType,
+                  .optional = &Fenrir::OptionalOperationsOf<EntityLayout>}},
+    };
+
+    inline void VisitRoster(void* instance, Fenrir::FieldVisitor& visitor)
+    {
+        auto& roster = *static_cast<Roster*>(instance);
+        visitor.Field(RosterFields[0], Fenrir::ValueRef(&roster.meshes, RosterFields[0].type));
+        visitor.Field(RosterFields[1], Fenrir::ValueRef(&roster.leader, RosterFields[1].type));
+    }
+
+    inline const TypeDescription RosterDescription{
+        .name = "BridgeTest::Roster",
+        .package = "FenrirSerialisationTests",
+        .role = Role::DataAsset,
+        .size = sizeof(Roster),
+        .alignment = alignof(Roster),
+        .construct = Fenrir::ConstructValue<Roster>,
+        .destroy = Fenrir::DestroyValue<Roster>,
+        .fields = RosterFields,
+        .visit = VisitRoster,
+    };
+
     // Adds the types above to `registry`, as a package's generated registration would; whether every one was added.
     inline bool RegisterBridgeTypes(Fenrir::TypeRegistry& registry)
     {
         bool registered = true;
         for (const TypeDescription* description :
              {&MobilityDescription, &Vec3Description, &RangeDescription, &ShapeKindDescription, &BoxShapeDescription,
-              &SphereShapeDescription, &ShapeDescription, &FixedDescription, &OwnedDescription, &RenamedDescription})
+              &SphereShapeDescription, &ShapeDescription, &FixedDescription, &OwnedDescription, &RenamedDescription,
+              &LinkedDescription, &RosterDescription})
             registered = registry.Register(*description) && registered;
         return registered;
     }

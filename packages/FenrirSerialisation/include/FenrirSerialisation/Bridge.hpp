@@ -26,8 +26,14 @@ namespace Fenrir::Serialisation
      * @brief How the bridge turns `reference` and `entity` fields into the strings a file holds and back (ADR-0076 §2,
      * ADR-0078 §3): the caller's, since the bridge never knows an asset path's meaning, a store or an id map.
      *
-     * Each callback is handed the field, whose `type.target` names a reference's target type. A missing callback leaves
-     * the field empty on read and writes `null`.
+     * Each callback is handed the field, whose `type.target` names a reference's target type. For an element of an
+     * array, list or optional, it is a copy of the field holding it whose `type` is the element's, so `type.target`
+     * names the target there too; its name and offset are the field's. `null` in a file is none both ways: the bridge
+     * writes the empty handle, the null entity and an empty string from a callback as `null`, and reads `null` as the
+     * empty handle or the null entity, with no callback asked and no diagnostic. A missing callback
+     * writes `null`, and on read leaves the field empty, counted in `unresolved` with no diagnostic, since a caller may
+     * pass no resolvers on purpose. A read callback returning nothing leaves the field empty too, with one error,
+     * counted in `unresolved`.
      */
     struct Resolvers
     {
@@ -55,7 +61,8 @@ namespace Fenrir::Serialisation
      * - a bound type is an `Array` of its components in the order its description visits them (`[0, 1.8, 0]`);
      * - a tagged union is an `Object` whose first member is `kind`, its tag's enumerator name, followed by the fields
      * of its live alternative alone;
-     * - a `reference` or an `entity` is `null`, until the resolvers write it;
+     * - a `reference` or an `entity` is the string `writeReference` or `writeEntity` gives it, or `null` when that is
+     *   empty, the callback is missing or the value is the empty handle or the null entity;
      * - a `pointer` field is never written, since its target is never described and its bytes mean nothing in a
      *   file; a pointer element of an array, list or optional is `null`.
      *
@@ -63,7 +70,7 @@ namespace Fenrir::Serialisation
      *
      * @param registry The registry the value's types are registered in; not read yet, since the description reaches
      *        every nested type itself.
-     * @param resolvers Not called yet: `reference` and `entity` fields are written `null`.
+     * @param resolvers Asked once for each `reference` or `entity` value written, an element apiece in an array.
      * @param prior The tree the value was read from, whose comments a rewrite keeps; not read yet.
      */
     [[nodiscard]] Value ToTree(const void* value, const TypeDescription& type, const TypeRegistry& registry,
@@ -89,7 +96,9 @@ namespace Fenrir::Serialisation
         std::size_t defaulted = 0;
         /** @brief Keys that matched no field and no former name, warned and dropped. */
         std::size_t unknownFields = 0;
-        /** @brief `reference` and `entity` fields left empty because no resolver named their target. */
+        /** @brief `reference` and `entity` values left empty because no callback named their string; each a
+         * callback ran for has one
+         * diagnostic. */
         std::size_t unresolved = 0;
         /** @brief Every diagnostic, in the order found, each already logged once. */
         std::vector<Diagnostic> diagnostics;
@@ -116,14 +125,19 @@ namespace Fenrir::Serialisation
      *   (ADR-0078 §6);
      * - a tagged union reads `kind` first and selects that alternative before filling it. A missing or unknown `kind`
      *   keeps the union at its default, alternative and fields, with one error counted in `defaulted`;
-     * - a `pointer` field is never read, and a `reference` or `entity` field not yet: both are left at their defaults.
+     * - a `reference` or `entity` reads `null` as the empty handle or the null entity, and a string as what
+     *   `readReference` or `readEntity` names it; a string the callback names nothing for leaves the value empty
+     *   with one error, counted in `unresolved`, and with no callback to ask it is left empty and counted with no
+     *   diagnostic. Any other node takes its default, counted
+     *   in `defaulted`;
+     * - a `pointer` field is never read, and is left at its default.
      *
      * An enum read from a number takes that number, as `ToTree` writes a value no enumerator has. A diagnostic is at
      * the node it is about, or at line 1, column 1 for a node built in code.
      *
      * @param registry When it lacks `type`, by canonical or former name, the result is `UnknownType`: nothing is read
      *        or logged, and the caller keeps the tree to write back unchanged (ADR-0077 §6).
-     * @param resolvers Not called yet.
+     * @param resolvers Asked once for each `reference` or `entity` value the tree holds as a string.
      * @param path The path diagnostics name the tree's file by, as `ReadText`'s does.
      */
     [[nodiscard]] BridgeResult FromTree(const Value& tree, const TypeDescription& type, const TypeRegistry& registry,

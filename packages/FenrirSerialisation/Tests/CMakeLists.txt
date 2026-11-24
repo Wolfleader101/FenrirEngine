@@ -22,6 +22,7 @@ target_sources(FenrirSerialisationTests PRIVATE Encoding.cpp)
 target_link_libraries(FenrirSerialisationTests PRIVATE FenrirSerialisation Catch2::Catch2WithMain)
 target_sources(FenrirSerialisationTests PRIVATE ToTree.cpp BridgeTypes.hpp)
 target_sources(FenrirSerialisationTests PRIVATE FromTree.cpp)
+target_sources(FenrirSerialisationTests PRIVATE Resolvers.cpp)
 target_compile_definitions(FenrirSerialisationTests
                            PRIVATE FENRIR_SERIALISATION_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
 add_test(NAME FenrirSerialisation COMMAND FenrirSerialisationTests)

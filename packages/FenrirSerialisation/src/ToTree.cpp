@@ -1,5 +1,7 @@
 #include "FenrirSerialisation/Bridge.hpp"
 
+#include "ResolverField.hpp"
+
 #include "FenrirTypes/FieldVisitor.hpp"
 #include "FenrirTypes/Kind.hpp"
 
@@ -171,11 +173,25 @@ namespace Fenrir::Serialisation
             return false;
         }
 
-        Value ToValue(ConstValueRef value, const ConstValueRef* defaults);
+        // A reference or an entity, `resolved` from the value by `write`, the caller's callback: `null` for the
+        // kind's empty value, which the callback is not asked about, for an empty string it gives, and when there is
+        // no callback.
+        template <typename Resolved, typename Write>
+        Value WriteResolved(const Write& write, const FieldInfo* field, const ValueType& type, Resolved resolved)
+        {
+            if (!write || field == nullptr || resolved == Resolved{})
+                return Value(nullptr);
+            std::string text =
+                CallWithResolverField(*field, type, [&](const FieldInfo& handed) { return write(resolved, handed); });
+            return text.empty() ? Value(nullptr) : Value(std::move(text));
+        }
+
+        Value ToValue(const Resolvers& resolvers, const FieldInfo* field, ConstValueRef value,
+                      const ConstValueRef* defaults);
 
         // Adds to `object` each of `fields` that differs from the same field of `defaults`, leaving out pointers; a
         // field with no partner in `defaults` is compared with nothing and written whole.
-        void AddFields(Object& object, const std::vector<VisitedField>& fields,
+        void AddFields(const Resolvers& resolvers, Object& object, const std::vector<VisitedField>& fields,
                        const std::vector<VisitedField>& defaults)
         {
             for (std::size_t i = 0; i < fields.size(); ++i)
@@ -196,7 +212,7 @@ namespace Fenrir::Serialisation
                 if (partner != nullptr && Equal(field.value, partner->value))
                     continue;
                 object.Add(std::string(field.info->name),
-                           ToValue(field.value, partner != nullptr ? &partner->value : nullptr));
+                           ToValue(resolvers, field.info, field.value, partner != nullptr ? &partner->value : nullptr));
             }
         }
 
@@ -213,7 +229,7 @@ namespace Fenrir::Serialisation
 
         // A tagged union: `kind`, then the live alternative's fields alone, each compared with the same field of the
         // alternative as the default instance holds it, or as selecting it in a fresh instance makes it.
-        Value UnionToValue(ConstValueRef value, ConstValueRef defaults)
+        Value UnionToValue(const Resolvers& resolvers, ConstValueRef value, ConstValueRef defaults)
         {
             const TypeDescription& type = *value.Description();
             const std::vector<VisitedField> fields = FieldsOf(value);
@@ -240,21 +256,24 @@ namespace Fenrir::Serialisation
             {
                 // Spread into the union's own object, so a reader finds `kind` and the alternative's fields side by
                 // side.
-                AddFields(object, FieldsOf(live.value),
+                AddFields(resolvers, object, FieldsOf(live.value),
                           liveDefault != nullptr ? FieldsOf(liveDefault->value) : std::vector<VisitedField>{});
             }
             else if (liveDefault == nullptr || !Equal(live.value, liveDefault->value))
             {
                 // An alternative that is not a plain struct has no fields to spread, so it is a member by its name.
-                object.Add(std::string(live.info->name),
-                           ToValue(live.value, liveDefault != nullptr ? &liveDefault->value : nullptr));
+                object.Add(
+                    std::string(live.info->name),
+                    ToValue(resolvers, live.info, live.value, liveDefault != nullptr ? &liveDefault->value : nullptr));
             }
             return object;
         }
 
         // The tree form of `value`, whose fields at the values `defaults` holds are left out; with no defaults, a
-        // struct's fields are compared with an instance its description constructs.
-        Value ToValue(ConstValueRef value, const ConstValueRef* defaults)
+        // struct's fields are compared with an instance its description constructs. `field` is the field holding
+        // `value`, or holding the array, list or optional it is an element of; null for the value `ToTree` was given.
+        Value ToValue(const Resolvers& resolvers, const FieldInfo* field, ConstValueRef value,
+                      const ConstValueRef* defaults)
         {
             switch (value.GetKind())
             {
@@ -293,7 +312,7 @@ namespace Fenrir::Serialisation
                 // An element has no default of its own place, so a struct element is compared with a constructed one.
                 Array array;
                 for (std::size_t i = 0; i < value.Size(); ++i)
-                    array.Add(ToValue(value.Element(i), nullptr));
+                    array.Add(ToValue(resolvers, field, value.Element(i), nullptr));
                 return array;
             }
             case Kind::Optional: {
@@ -301,10 +320,12 @@ namespace Fenrir::Serialisation
                     return Value(nullptr);
                 const bool defaultHolds = defaults != nullptr && defaults->HasValue();
                 const ConstValueRef held = defaultHolds ? defaults->Value() : value.Value();
-                return ToValue(value.Value(), defaultHolds ? &held : nullptr);
+                return ToValue(resolvers, field, value.Value(), defaultHolds ? &held : nullptr);
             }
             case Kind::Reference:
+                return WriteResolved(resolvers.writeReference, field, value.Type(), value.Reference());
             case Kind::Entity:
+                return WriteResolved(resolvers.writeEntity, field, value.Type(), value.Entity());
             case Kind::Pointer:
                 return Value(nullptr);
             case Kind::Struct: {
@@ -315,7 +336,7 @@ namespace Fenrir::Serialisation
                 {
                     Array components;
                     for (const VisitedField& component : FieldsOf(value))
-                        components.Add(ToValue(component.value, nullptr));
+                        components.Add(ToValue(resolvers, component.info, component.value, nullptr));
                     return components;
                 }
                 std::optional<Instance> constructed;
@@ -326,9 +347,9 @@ namespace Fenrir::Serialisation
                     structDefaults = ConstValueRef(constructed->Get(), value.Type());
                 }
                 if (type->IsTaggedUnion())
-                    return UnionToValue(value, structDefaults);
+                    return UnionToValue(resolvers, value, structDefaults);
                 Object object;
-                AddFields(object, FieldsOf(value), FieldsOf(structDefaults));
+                AddFields(resolvers, object, FieldsOf(value), FieldsOf(structDefaults));
                 return object;
             }
             }
@@ -337,9 +358,9 @@ namespace Fenrir::Serialisation
     } // namespace
 
     Value ToTree(const void* value, const TypeDescription& type, [[maybe_unused]] const TypeRegistry& registry,
-                 [[maybe_unused]] const Resolvers& resolvers, [[maybe_unused]] const Value* prior)
+                 const Resolvers& resolvers, [[maybe_unused]] const Value* prior)
     {
         const ValueType valueType{.kind = Kind::Struct, .type = &type};
-        return ToValue(ConstValueRef(value, valueType), nullptr);
+        return ToValue(resolvers, nullptr, ConstValueRef(value, valueType), nullptr);
     }
 } // namespace Fenrir::Serialisation

@@ -1,9 +1,9 @@
 #pragma once
 
 // Hand-written descriptions of the types the goldens hold (the spec, "Testing"): the sword data asset and its particle
-// effect sub-asset, and test components named as the scene's. They are the test's own types, not the engine's: until
-// the resolvers write references and entities (ticket 05), the fields a file names an asset or an entity by are fixed
-// strings or strings here. The transform holds FenrirMath's real Vec3 and Quat, through their registered descriptions.
+// effect sub-asset, and test components named as the scene's. They are the test's own types, not the engine's: the
+// fields a file names an asset by are fixed strings or strings here, so the goldens need no resolvers (Resolvers.cpp
+// tests those). The transform holds FenrirMath's real Vec3 and Quat, through their registered descriptions.
 
 #include "FenrirMath/Generated/FenrirMathTypes.hpp"
 #include "FenrirMath/Math.hpp"

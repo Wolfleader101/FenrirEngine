@@ -202,7 +202,7 @@ TEST_CASE("A fixed string writes as a string, the one at its default left out", 
     REQUIRE(Tree(fixed) == ObjectOf({{"title", "Sun"}}));
 }
 
-TEST_CASE("A reference off its default writes null until the resolvers write it", "[serialisation][totree]")
+TEST_CASE("A reference off its default writes null with no writeReference", "[serialisation][totree]")
 {
     Fixed fixed;
     fixed.mesh = HandleLayout{1, 1};
@@ -211,7 +211,7 @@ TEST_CASE("A reference off its default writes null until the resolvers write it"
     REQUIRE(Tree(fixed) == ObjectOf({{"mesh", nullptr}}));
 }
 
-TEST_CASE("An entity off its default writes null until the resolvers write it", "[serialisation][totree]")
+TEST_CASE("An entity off its default writes null with no writeEntity", "[serialisation][totree]")
 {
     Fixed fixed;
     fixed.target = EntityLayout{4, nullptr};
