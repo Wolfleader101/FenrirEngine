@@ -267,6 +267,10 @@ A scene file whose single root is an instance of another scene file, so it is th
 What a changed scene file or instance source does to a running scene: entities matched by entity id have their written components, parent and order rewritten from the file, new ones are added, ones the file dropped are destroyed with their children, and run-time entities and unwritten components are left alone (ADR-0081).
 *Avoid:* scene reload (destroying and recreating, which is the caller's), live sync, diff apply.
 
+**Scene request**
+A create, activate or destroy of a scene by name, asked of the App and applied at the end of the frame, after its last phase, in the order made, so no system sees a scene change mid-frame (`App::RequestCreateScene`, `RequestChangeActiveScene`, `RequestDestroyScene`). One that cannot be done at its turn (a name that exists to create, one that does not to activate or destroy, the active scene to destroy) is refused with a logged error. C++'s immediate `CreateScene`, `ChangeActiveScene` and `DestroyScene` are not requests.
+*Avoid:* deferred scene change, scene command, scene transition (a game's fade or loading screen).
+
 **Hot reload**
 A file the running app loaded changing on disk and the app taking the change between frames: a data asset or imported asset replaced under its handle with its revision bumped, a scene or instance patched, a script assembly's generation swapped. A development feature, off in a cooked build (ADR-0081).
 *Avoid:* live reload, watch mode, auto-refresh.

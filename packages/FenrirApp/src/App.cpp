@@ -5,6 +5,7 @@
 #include "FenrirMath/Generated/FenrirMathTypes.hpp"
 #include "FenrirTypes/TypeRegistry.hpp"
 
+#include <optional>
 #include <string_view>
 #include <thread>
 
@@ -301,6 +302,8 @@ namespace Fenrir
         RunPhase(SchedulePriority::Render);
 
         UpdateEvents();
+
+        ApplySceneRequests();
     }
 
     const Time& App::GetTime() const
@@ -313,19 +316,26 @@ namespace Fenrir
         return *m_scenes.at(activeSceneIndex);
     }
 
-    void App::ChangeActiveScene(const std::string& name)
+    std::optional<std::size_t> App::FindScene(std::string_view name) const
     {
-
-        for (size_t i = 0; i < m_scenes.size(); i++)
+        for (std::size_t i = 0; i < m_scenes.size(); ++i)
         {
-            if (m_scenes.at(i)->GetName() == name)
+            if (m_scenes[i]->GetName() == name)
             {
-                activeSceneIndex = i;
-                return;
+                return i;
             }
         }
+        return std::nullopt;
+    }
 
-        //! if we get here, the scene doesnt exist
+    void App::ChangeActiveScene(const std::string& name)
+    {
+        if (const std::optional<std::size_t> index = FindScene(name))
+        {
+            activeSceneIndex = *index;
+            return;
+        }
+
         m_logger->Error("Scene with name {0} does not exist", name);
     }
 
@@ -337,37 +347,83 @@ namespace Fenrir
 
     void App::DestroyScene(const std::string& name)
     {
-        for (size_t i = 0; i < m_scenes.size(); i++)
+        const std::optional<std::size_t> index = FindScene(name);
+        if (!index)
         {
-            if (m_scenes.at(i)->GetName() == name)
+            m_logger->Error("Scene with name {0} does not exist", name);
+            return;
+        }
+        if (*index == activeSceneIndex)
+        {
+            m_logger->Error("Scene {0} is active and cannot be destroyed; change the active scene first", name);
+            return;
+        }
+        m_scenes.erase(m_scenes.begin() + static_cast<std::ptrdiff_t>(*index));
+        if (*index < activeSceneIndex)
+        {
+            --activeSceneIndex;
+        }
+    }
+
+    void App::RequestCreateScene(std::string name)
+    {
+        AddSceneRequest({SceneRequest::Kind::Create, std::move(name)});
+    }
+
+    void App::RequestChangeActiveScene(std::string name)
+    {
+        AddSceneRequest({SceneRequest::Kind::ChangeActive, std::move(name)});
+    }
+
+    void App::RequestDestroyScene(std::string name)
+    {
+        AddSceneRequest({SceneRequest::Kind::Destroy, std::move(name)});
+    }
+
+    void App::AddSceneRequest(SceneRequest request)
+    {
+        // Through the same hold as events, so requests from parallel systems arrive in the order the systems were
+        // registered, every run.
+        Detail::SendOrHold([this, request = std::move(request)]() mutable {
+            const std::lock_guard lock(m_sceneRequestsMutex);
+            m_sceneRequests.push_back(std::move(request));
+        });
+    }
+
+    void App::ApplySceneRequests()
+    {
+        std::vector<SceneRequest> requests;
+        {
+            const std::lock_guard lock(m_sceneRequestsMutex);
+            requests.swap(m_sceneRequests);
+        }
+        for (const SceneRequest& request : requests)
+        {
+            switch (request.kind)
             {
-                if (i == activeSceneIndex)
+            case SceneRequest::Kind::Create:
+                if (FindScene(request.name))
                 {
-                    m_logger->Error("Scene {0} is active and cannot be destroyed; change the active scene first", name);
-                    return;
+                    m_logger->Error("Scene {0} already exists; the request to create it was refused", request.name);
+                    break;
                 }
-                m_scenes.erase(m_scenes.begin() + static_cast<std::ptrdiff_t>(i));
-                if (i < activeSceneIndex)
-                {
-                    --activeSceneIndex;
-                }
-                return;
+                CreateScene(request.name);
+                break;
+            case SceneRequest::Kind::ChangeActive:
+                ChangeActiveScene(request.name);
+                break;
+            case SceneRequest::Kind::Destroy:
+                DestroyScene(request.name);
+                break;
             }
         }
-
-        //! if we get here, the scene doesnt exist
-        m_logger->Error("Scene with name {0} does not exist", name);
     }
 
     Scene& App::GetScene(const std::string& name)
     {
-
-        for (size_t i = 0; i < m_scenes.size(); i++)
+        if (const std::optional<std::size_t> index = FindScene(name))
         {
-            if (m_scenes.at(i)->GetName() == name)
-            {
-                return *m_scenes.at(i);
-            }
+            return *m_scenes[*index];
         }
 
         //! if we get here, the scene doesnt exist
