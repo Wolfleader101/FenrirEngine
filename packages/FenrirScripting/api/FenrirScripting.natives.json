@@ -50,6 +50,54 @@
       "parameters": []
     },
     {
+      "name": "TimeElapsed",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "Seconds since the app started (Time::CurrentTime), read from the clock on each call.",
+      "returns": {
+        "type": "double",
+        "kind": "f64"
+      },
+      "parameters": []
+    },
+    {
+      "name": "TimeFrameCount",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "The frames begun so far: during a frame, its number, from 1 (Time::frameCount).",
+      "returns": {
+        "type": "std::uint64_t",
+        "kind": "u64"
+      },
+      "parameters": []
+    },
+    {
+      "name": "TimeTickCount",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "The fixed steps begun so far: during a step, its number, from 1 (Time::tickCount).",
+      "returns": {
+        "type": "std::uint64_t",
+        "kind": "u64"
+      },
+      "parameters": []
+    },
+    {
+      "name": "AppStop",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "Stops the app (App::Stop): the frame being run finishes, and no other begins.",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": []
+    },
+    {
       "name": "EntityIsValid",
       "namespace": "Fenrir::ScriptingNatives",
       "source": "../src/Bindings.cpp",

@@ -19,6 +19,10 @@ namespace Fenrir::ScriptingNatives
     void Log(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::int32_t level, std::string_view text);
     float TimeDeltaTime(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&);
     float TimeTickRate(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&);
+    double TimeElapsed(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&);
+    std::uint64_t TimeFrameCount(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&);
+    std::uint64_t TimeTickCount(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&);
+    void AppStop(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&);
     bool EntityIsValid(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, const Fenrir::Entity* entity);
     bool EntityWorldTransform(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, const Fenrir::Entity* entity, Fenrir::Transform* world);
     bool EntitySetWorldTransform(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, const Fenrir::Entity* entity, const Fenrir::Transform* world);

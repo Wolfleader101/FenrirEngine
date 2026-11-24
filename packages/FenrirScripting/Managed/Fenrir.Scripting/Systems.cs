@@ -98,6 +98,15 @@ public readonly partial struct SystemContext
 
         /// <summary>Seconds between fixed steps.</summary>
         public float TickRate => Fenrir.Scripting.Time.TickRate;
+
+        /// <summary>Seconds since the app started, on the wall clock.</summary>
+        public double Elapsed => Fenrir.Scripting.Time.Elapsed;
+
+        /// <summary>The frames begun so far.</summary>
+        public ulong FrameCount => Fenrir.Scripting.Time.FrameCount;
+
+        /// <summary>The fixed steps begun so far.</summary>
+        public ulong TickCount => Fenrir.Scripting.Time.TickCount;
     }
 
     public readonly struct LogView

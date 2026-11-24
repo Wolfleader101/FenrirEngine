@@ -7,10 +7,10 @@ Spec: [C# reach: parenting, scenes, the app, C# resources and mesh positions](..
 **Blocked by:** None (can start immediately)
 **Touches:** `packages/FenrirScripting/src/`, `packages/FenrirScripting/api/`, `packages/FenrirScripting/Managed/Fenrir.Scripting/`, `packages/FenrirScripting/Tests/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 Bottom of the stack 02, 03, 05, 06 (they share FenrirScripting's bindings, API description and generated code).
 
-- [ ] A FenrirScripting test calls `App.Stop()` from the script fixture and checks the headless app stops after that frame.
-- [ ] A test reads elapsed time and the frame and tick counts from C# and checks them against the app's own after some frames and ticks.
-- [ ] The API description and generated bindings are current.
+- [x] A FenrirScripting test calls `App.Stop()` from the script fixture and checks the headless app stops after that frame.
+- [x] A test reads elapsed time and the frame and tick counts from C# and checks them against the app's own after some frames and ticks.
+- [x] The API description and generated bindings are current.

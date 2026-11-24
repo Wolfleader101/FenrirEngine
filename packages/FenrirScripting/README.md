@@ -24,7 +24,7 @@ logged as an error and the app runs without scripts (`HasScripts()` is false).
   in `ScriptingConfig::bridgeDirectory`. In CMake, call `fenrir_deploy_scripting(<target> [EXTENSIONS <Pkg>...])` on
   the executable, naming the package extensions it adds, whose contracts go beside it too.
 - **The contract.** `Fenrir.Scripting` (`Managed/Fenrir.Scripting`) is the C# API scripts compile against: `Entity`,
-  `Log` and `Time` so far. `Scripting::Install` always shares it with Iris, as one copy in the default load context
+  components, queries and systems, `Events`, `Resources`, `Log`, `Time` and `App`. `Scripting::Install` always shares it with Iris, as one copy in the default load context
   that is never reloaded, so its types have one identity across every load and reload of the script assembly. A
   script project references it with `<Private>false</Private>` (compile against it, do not copy it). The version is
   part of the contract: a script built against a newer minor than the host's fails to load.

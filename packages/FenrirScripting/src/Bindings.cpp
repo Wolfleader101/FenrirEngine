@@ -67,6 +67,30 @@ namespace Fenrir::ScriptingNatives
         return static_cast<float>(context.GetApp().GetTime().tickRate);
     }
 
+    /** @brief Seconds since the app started (Time::CurrentTime), read from the clock on each call. */
+    double TimeElapsed(const CallContext& context, Detail::EngineContext&)
+    {
+        return context.GetApp().GetTime().CurrentTime();
+    }
+
+    /** @brief The frames begun so far: during a frame, its number, from 1 (Time::frameCount). */
+    std::uint64_t TimeFrameCount(const CallContext& context, Detail::EngineContext&)
+    {
+        return context.GetApp().GetTime().frameCount;
+    }
+
+    /** @brief The fixed steps begun so far: during a step, its number, from 1 (Time::tickCount). */
+    std::uint64_t TimeTickCount(const CallContext& context, Detail::EngineContext&)
+    {
+        return context.GetApp().GetTime().tickCount;
+    }
+
+    /** @brief Stops the app (App::Stop): the frame being run finishes, and no other begins. */
+    void AppStop(const CallContext& context, Detail::EngineContext&)
+    {
+        context.GetApp().Stop();
+    }
+
     /**
      * @brief Whether the entity is alive in the active scene.
      * @param entity The entity; one another scene's list owns is not alive here.
