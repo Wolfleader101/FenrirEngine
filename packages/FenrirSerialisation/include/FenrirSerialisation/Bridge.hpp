@@ -31,8 +31,9 @@ namespace Fenrir::Serialisation
      * names the target there too; its name and offset are the field's. `null` in a file is none both ways: the bridge
      * writes the empty handle, the null entity and an empty string from a callback as `null`, and reads `null` as the
      * empty handle or the null entity, with no callback asked and no diagnostic. A missing callback
-     * writes `null`, and on read leaves the field empty with one error, counted in `unresolved`, as a read callback
-     * returning nothing does.
+     * writes `null`, and on read leaves the field empty, counted in `unresolved` with no diagnostic, since a caller may
+     * pass no resolvers on purpose. A read callback returning nothing leaves the field empty too, with one error,
+     * counted in `unresolved`.
      */
     struct Resolvers
     {
@@ -95,7 +96,8 @@ namespace Fenrir::Serialisation
         std::size_t defaulted = 0;
         /** @brief Keys that matched no field and no former name, warned and dropped. */
         std::size_t unknownFields = 0;
-        /** @brief `reference` and `entity` values left empty because no callback named their string: each has one
+        /** @brief `reference` and `entity` values left empty because no callback named their string; each a
+         * callback ran for has one
          * diagnostic. */
         std::size_t unresolved = 0;
         /** @brief Every diagnostic, in the order found, each already logged once. */
@@ -124,8 +126,9 @@ namespace Fenrir::Serialisation
      * - a tagged union reads `kind` first and selects that alternative before filling it. A missing or unknown `kind`
      *   keeps the union at its default, alternative and fields, with one error counted in `defaulted`;
      * - a `reference` or `entity` reads `null` as the empty handle or the null entity, and a string as what
-     *   `readReference` or `readEntity` names it; a string the callback names nothing for, or with no callback to
-     *   ask, leaves the value empty with one error, counted in `unresolved`. Any other node takes its default, counted
+     *   `readReference` or `readEntity` names it; a string the callback names nothing for leaves the value empty
+     *   with one error, counted in `unresolved`, and with no callback to ask it is left empty and counted with no
+     *   diagnostic. Any other node takes its default, counted
      *   in `defaulted`;
      * - a `pointer` field is never read, and is left at its default.
      *

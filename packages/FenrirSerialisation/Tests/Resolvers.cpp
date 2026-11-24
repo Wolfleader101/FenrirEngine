@@ -451,8 +451,10 @@ TEST_CASE("A reference read with no readReference is left empty, counted in unre
     REQUIRE(result.unresolved == 1);
     INFO("an unresolved field makes the read partial");
     REQUIRE(result.status == BridgeStatus::Partial);
-    INFO("with one diagnostic naming the missing callback");
-    REQUIRE(result.diagnostics.size() == 1);
+    INFO("with no diagnostic, since a caller may pass no resolvers on purpose");
+    REQUIRE(result.diagnostics.empty());
+    INFO("so nothing was logged");
+    REQUIRE((logger.errors.empty() && logger.warnings.empty()));
 }
 
 TEST_CASE("An entity read with no readEntity is left null, counted in unresolved", "[serialisation][resolvers]")
@@ -469,8 +471,10 @@ TEST_CASE("An entity read with no readEntity is left null, counted in unresolved
     REQUIRE(result.unresolved == 1);
     INFO("an unresolved field makes the read partial");
     REQUIRE(result.status == BridgeStatus::Partial);
-    INFO("with one diagnostic naming the missing callback");
-    REQUIRE(result.diagnostics.size() == 1);
+    INFO("with no diagnostic, since a caller may pass no resolvers on purpose");
+    REQUIRE(result.diagnostics.empty());
+    INFO("so nothing was logged");
+    REQUIRE((logger.errors.empty() && logger.warnings.empty()));
 }
 
 TEST_CASE("A reference that is neither a string nor null takes its default", "[serialisation][resolvers]")
