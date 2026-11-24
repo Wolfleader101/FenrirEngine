@@ -17,6 +17,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace BridgeTest
@@ -363,13 +364,42 @@ namespace BridgeTest
         .visit = VisitOwned,
     };
 
+    // Renamed fields: `health` was `hp` and before that `life`; `armour` was once `shield`, a name the later `shield`
+    // field now holds, so a field's current name must win over another field's former one.
+    struct Renamed
+    {
+        std::int32_t health = 100;
+        std::int32_t armour = 0;
+        std::int32_t shield = 0;
+    };
+
+    inline constexpr std::string_view HealthFormerly[] = {"hp", "life"};
+    inline constexpr std::string_view ArmourFormerly[] = {"shield"};
+
+    inline const FieldInfo RenamedFields[] = {
+        {.name = "health", .type = I32, .offset = offsetof(Renamed, health), .formerly = HealthFormerly},
+        {.name = "armour", .type = I32, .offset = offsetof(Renamed, armour), .formerly = ArmourFormerly},
+        {.name = "shield", .type = I32, .offset = offsetof(Renamed, shield)},
+    };
+
+    inline const TypeDescription RenamedDescription{
+        .name = "BridgeTest::Renamed",
+        .package = "FenrirSerialisationTests",
+        .role = Role::Component,
+        .size = sizeof(Renamed),
+        .alignment = alignof(Renamed),
+        .construct = Fenrir::ConstructValue<Renamed>,
+        .destroy = Fenrir::DestroyValue<Renamed>,
+        .fields = RenamedFields,
+    };
+
     // Adds the types above to `registry`, as a package's generated registration would; whether every one was added.
     inline bool RegisterBridgeTypes(Fenrir::TypeRegistry& registry)
     {
         bool registered = true;
         for (const TypeDescription* description :
              {&MobilityDescription, &Vec3Description, &RangeDescription, &ShapeKindDescription, &BoxShapeDescription,
-              &SphereShapeDescription, &ShapeDescription, &FixedDescription, &OwnedDescription})
+              &SphereShapeDescription, &ShapeDescription, &FixedDescription, &OwnedDescription, &RenamedDescription})
             registered = registry.Register(*description) && registered;
         return registered;
     }

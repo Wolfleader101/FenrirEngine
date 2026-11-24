@@ -1,5 +1,6 @@
 #pragma once
 
+#include "FenrirSerialisation/Diagnostic.hpp"
 #include "FenrirSerialisation/Value.hpp"
 
 #include "FenrirTypes/FieldInfo.hpp"
@@ -7,10 +8,17 @@
 #include "FenrirTypes/TypeRegistry.hpp"
 #include "FenrirTypes/ValueRef.hpp"
 
+#include <cstddef>
 #include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
+
+namespace Fenrir
+{
+    class ILogger;
+}
 
 namespace Fenrir::Serialisation
 {
@@ -60,4 +68,65 @@ namespace Fenrir::Serialisation
      */
     [[nodiscard]] Value ToTree(const void* value, const TypeDescription& type, const TypeRegistry& registry,
                                const Resolvers& resolvers, const Value* prior = nullptr);
+
+    /** @brief How a `FromTree` read went. */
+    enum class BridgeStatus
+    {
+        /** @brief Every value in the tree read, and no key was dropped. */
+        Succeeded,
+        /** @brief The value read as far as it could: at least one of `BridgeResult`'s counts is non-zero. */
+        Partial,
+        /** @brief The registry lacks the type, so nothing was read; the caller keeps the tree and writes it back. */
+        UnknownType,
+    };
+
+    /** @brief What `FromTree` gives: the status, what it counted and its diagnostics (ADR-0077 §7, ADR-0079 §3). */
+    struct BridgeResult
+    {
+        /** @brief `Partial` whenever a count is non-zero. */
+        BridgeStatus status = BridgeStatus::Succeeded;
+        /** @brief Values that could not be read, so took their defaults: each has one diagnostic. */
+        std::size_t defaulted = 0;
+        /** @brief Keys that matched no field and no former name, warned and dropped. */
+        std::size_t unknownFields = 0;
+        /** @brief `reference` and `entity` fields left empty because no resolver named their target. */
+        std::size_t unresolved = 0;
+        /** @brief Every diagnostic, in the order found, each already logged once. */
+        std::vector<Diagnostic> diagnostics;
+    };
+
+    /**
+     * @brief Fills the described value at `value`, of type `type`, from `tree`, field by field through its
+     * description's visitor (ADR-0079). The read is tolerant: what reads is kept, and what does not takes its default.
+     *
+     * `value` must be an instance `type`'s `Construct` made, since its fields are the defaults a field absent from the
+     * tree keeps. Each kind reads the form `ToTree` writes it in. Then:
+     * - a value that cannot be read takes its default, with one located error, and is counted in `defaulted`. That is
+     *   a value of the wrong kind, an integer out of its kind's range, a float in an integer field, a finite number
+     *   beyond an `f32`'s range, an unknown enumerator, `null` in a field that does not admit it, and a fixed array
+     *   or bound type of the wrong length;
+     * - a list's elements are each read so, a bad element taking the element type's default;
+     * - a key matching no field and no `@formerly` name is warned, dropped and counted in `unknownFields`;
+     * - a key matching a field's `@formerly` name reads into that field; when the current name is there too, the
+     *   current one is read and the former is dropped with a warning, which no count counts. Of several former names
+     *   the first the field lists is read, the others dropped so. Every field's current name is claimed before any
+     *   former name, so a field keeps its own key though another field once had that name;
+     * - `null` in an `optional` reads as disengaged;
+     * - a `fixed-string` longer than N-1 bytes is cut by `ValueRef::SetText` on a UTF-8 boundary, with one warning
+     *   (ADR-0078 §6);
+     * - a tagged union reads `kind` first and selects that alternative before filling it. A missing or unknown `kind`
+     *   keeps the union at its default, alternative and fields, with one error counted in `defaulted`;
+     * - a `pointer` field is never read, and a `reference` or `entity` field not yet: both are left at their defaults.
+     *
+     * An enum read from a number takes that number, as `ToTree` writes a value no enumerator has. A diagnostic is at
+     * the node it is about, or at line 1, column 1 for a node built in code.
+     *
+     * @param registry When it lacks `type`, by canonical or former name, the result is `UnknownType`: nothing is read
+     *        or logged, and the caller keeps the tree to write back unchanged (ADR-0077 §6).
+     * @param resolvers Not called yet.
+     * @param path The path diagnostics name the tree's file by, as `ReadText`'s does.
+     */
+    [[nodiscard]] BridgeResult FromTree(const Value& tree, const TypeDescription& type, const TypeRegistry& registry,
+                                        const Resolvers& resolvers, void* value, std::string_view path,
+                                        ILogger& logger);
 } // namespace Fenrir::Serialisation

@@ -168,6 +168,15 @@ namespace Fenrir
         /** @brief For a `Struct`: pushes each of its fields to `visitor` once, through its own description. */
         void Visit(FieldVisitor& visitor) const;
 
+        /**
+         * @brief For a tagged union: makes the alternative `tagValue` selects live, through its description's
+         * `SelectAlternative`, so a reader that reached a nested union through a field visitor can switch it.
+         *
+         * @return Whether it was selected: false, changing nothing, for any other kind or type, and for a tag value
+         * that selects no alternative.
+         */
+        bool SelectAlternative(std::int64_t tagValue) const;
+
       private:
         void* m_value;
         const ValueType* m_type;

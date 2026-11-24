@@ -6,6 +6,7 @@ add_library(FenrirSerialisation STATIC
     src/Text.cpp
     src/ReadText.cpp
     src/ToTree.cpp
+    src/FromTree.cpp
     src/Encoding.cpp
     include/FenrirSerialisation/Bridge.hpp
     include/FenrirSerialisation/Diagnostic.hpp

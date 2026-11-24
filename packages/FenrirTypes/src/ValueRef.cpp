@@ -286,6 +286,13 @@ namespace Fenrir
             m_type->type->Visit(m_value, visitor);
     }
 
+    bool ValueRef::SelectAlternative(std::int64_t tagValue) const
+    {
+        if (m_type->kind != Kind::Struct || m_type->type == nullptr)
+            return false;
+        return m_type->type->SelectAlternative(m_value, tagValue);
+    }
+
     void ConstValueRef::Visit(ConstFieldVisitor& visitor) const
     {
         if (m_ref.m_type->kind == Kind::Struct && m_ref.m_type->type != nullptr)
