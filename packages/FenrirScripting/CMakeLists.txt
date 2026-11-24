@@ -69,8 +69,6 @@ add_library(FenrirScripting STATIC
     src/SystemHost.hpp
     src/GeneratedNames.hpp
     src/GenerationLifecycle.cpp
-    src/ReloadWatcher.cpp
-    src/ReloadWatcher.hpp
     src/ScriptAssemblyLoader.hpp
     src/GenerationLifecycle.hpp
     src/ScriptData.hpp
@@ -93,6 +91,9 @@ add_library(FenrirScripting STATIC
 
 target_include_directories(FenrirScripting PUBLIC include)
 target_link_libraries(FenrirScripting PUBLIC FenrirApp FenrirLogger Iris::Iris)
+# The reload watcher that decides when a rebuilt script assembly is ready is FenrirCore's, shared with the asset store
+# (ADR-0081). Only the private GenerationLifecycle uses it.
+target_link_libraries(FenrirScripting PRIVATE FenrirCore)
 
 # The built-in extension's binding (ADR-0042): the engine's components (Transform, Name, Relationship) and the entity
 # link they hold are written once, in FenrirECS's headers (../FenrirECS/api/FenrirECS.api.json, with FenrirMath's vector

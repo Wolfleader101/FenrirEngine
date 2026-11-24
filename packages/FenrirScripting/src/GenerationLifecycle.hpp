@@ -11,8 +11,8 @@
 
 #include <Iris/Iris.hpp>
 
+#include "FenrirCore/ReloadWatcher.hpp"
 #include "FenrirLogger/ILogger.hpp"
-#include "ReloadWatcher.hpp"
 #include "ScriptAssemblyLoader.hpp"
 
 namespace Fenrir::Detail
