@@ -3,6 +3,7 @@ add_library(FenrirScene STATIC
 
     src/Scene.cpp
 )
+target_compile_features(FenrirScene PUBLIC cxx_std_20)
 
 target_link_libraries(FenrirScene PUBLIC FenrirECS)
 # A scene resource type's named doors hang on the type registry (ADR-0074): Scene.hpp defines the hook a generated

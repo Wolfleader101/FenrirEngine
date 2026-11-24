@@ -14,7 +14,8 @@ option(IRIS_INSTALL "Generate install rules and a find_package(Iris) package" ${
 
 # A parent project adds Iris only when it wants .NET, so pack discovery runs unconditionally here.
 include(cmake/Nethost.cmake)
-# IRIS_BRIDGE_DIR holds Iris.Bridge.dll with its .runtimeconfig.json and .deps.json.
+# IRIS_BRIDGE_DIR holds Iris.Bridge.dll with its .runtimeconfig.json and .deps.json. It is a cache variable, so a parent
+# project that adds Iris has it in every directory, for iris_deploy.
 if(IRIS_BUILD_BRIDGE)
     include(cmake/Bridge.cmake)
 else()
@@ -23,15 +24,11 @@ else()
         message(FATAL_ERROR "IRIS_BUILD_BRIDGE is OFF: set IRIS_PREBUILT_BRIDGE_DIR to a directory holding "
             "Iris.Bridge.dll, Iris.Bridge.runtimeconfig.json and Iris.Bridge.deps.json.")
     endif()
-    set(IRIS_BRIDGE_DIR "${IRIS_PREBUILT_BRIDGE_DIR}")
+    set(IRIS_BRIDGE_DIR "${IRIS_PREBUILT_BRIDGE_DIR}" CACHE INTERNAL "Where the Iris managed bridge is")
 endif()
 include(cmake/IrisDeploy.cmake)
 # iris_generate_binding() and the bindings target (Tools/Iris.Bindings).
 include(cmake/IrisBindings.cmake)
-if(NOT iris_is_top_level)
-    # A parent project that adds Iris needs the bridge location to call iris_deploy.
-    set(IRIS_BRIDGE_DIR "${IRIS_BRIDGE_DIR}" PARENT_SCOPE)
-endif()
 include(GNUInstallDirs)
 
 add_subdirectory(Native)

@@ -50,6 +50,7 @@ add_library(FenrirAssets STATIC
     src/Importers/Cgltf/CgltfModelImporter.cpp
     src/Importers/Ufbx/UfbxModelImporter.cpp
 )
+target_compile_features(FenrirAssets PUBLIC cxx_std_20)
 
 target_link_libraries(FenrirAssets PUBLIC FenrirApp FenrirScene FenrirMath FenrirShaderContainer PRIVATE FenrirStbImage FenrirCgltf FenrirUfbx meshoptimizer)
 

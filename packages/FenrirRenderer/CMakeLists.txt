@@ -30,6 +30,7 @@ add_library(FenrirRendererDevice STATIC
     src/Backend/Null/NullDevice.hpp
     src/Backend/Null/NullDevice.cpp
 )
+target_compile_features(FenrirRendererDevice PUBLIC cxx_std_20)
 target_include_directories(FenrirRendererDevice PUBLIC src)
 # The shader container's data types only: pipelines are made from its variants.
 target_link_libraries(FenrirRendererDevice PUBLIC FenrirShaderContainer)
@@ -38,6 +39,7 @@ add_library(FenrirRendererOpenGL STATIC
     src/Backend/OpenGL/OpenGLDevice.hpp
     src/Backend/OpenGL/OpenGLDevice.cpp
 )
+target_compile_features(FenrirRendererOpenGL PUBLIC cxx_std_20)
 target_link_libraries(FenrirRendererOpenGL PUBLIC FenrirRendererDevice FenrirLogger PRIVATE FenrirGlad)
 
 add_library(FenrirRendererCore STATIC
@@ -117,6 +119,7 @@ add_library(FenrirRendererCore STATIC
     src/Core/UniformBlocks.hpp
     src/Core/UniformBlocks.cpp
 )
+target_compile_features(FenrirRendererCore PUBLIC cxx_std_20)
 target_link_libraries(FenrirRendererCore PUBLIC FenrirRendererDevice FenrirMath FenrirLogger PRIVATE FenrirStbTruetype)
 # The debug font (ADR-0025), an OFL monospace TrueType font checked in with its licence (Resources/Fonts), embedded as a
 # byte array generated at build time, so the renderer runs with no files beside it.
@@ -229,6 +232,7 @@ add_library(FenrirRenderer STATIC
     src/Facade/RendererState.hpp
     src/Facade/SpawnModel.cpp
 )
+target_compile_features(FenrirRenderer PUBLIC cxx_std_20)
 target_include_directories(FenrirRenderer PUBLIC include PRIVATE src)
 target_link_libraries(FenrirRenderer PUBLIC FenrirAssets FenrirDraw2D FenrirInput FenrirMath PRIVATE FenrirRendererCore FenrirRendererOpenGL
                                                                             FenrirWindow FenrirDebugDraw)

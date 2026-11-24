@@ -19,6 +19,7 @@ add_library(FenrirSkeleton STATIC
     src/Attachments.cpp
     src/BoneName.cpp
 )
+target_compile_features(FenrirSkeleton PUBLIC cxx_std_20)
 
 target_link_libraries(FenrirSkeleton PUBLIC FenrirAssets FenrirECS FenrirScene FenrirApp FenrirMath FenrirTime)
 

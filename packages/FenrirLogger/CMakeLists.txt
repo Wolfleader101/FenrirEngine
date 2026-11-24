@@ -4,6 +4,7 @@ add_library(FenrirLogger STATIC
     src/ConsoleLogger.cpp
     include/FenrirLogger/ConsoleLogger.hpp
 )
+target_compile_features(FenrirLogger PUBLIC cxx_std_20)
 
 add_subdirectory(libs)
 

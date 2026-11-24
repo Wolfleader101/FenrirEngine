@@ -16,6 +16,7 @@ add_library(FenrirInput STATIC
     include/FenrirInput/InputRouter.hpp
     include/FenrirInput/InputTypes.hpp
 )
+target_compile_features(FenrirInput PUBLIC cxx_std_20)
 
 target_link_libraries(FenrirInput PUBLIC FenrirApp FenrirMath)
 

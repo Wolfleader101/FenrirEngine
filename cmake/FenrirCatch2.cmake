@@ -16,7 +16,7 @@ function(fenrir_add_catch2)
         # the tests use, because Catch2 offers std::string_view and friends only when it was compiled with C++17 or later.
         set(BUILD_SHARED_LIBS OFF)
         set(CMAKE_CXX_STANDARD 20)
-        add_subdirectory("${catch2_source}" "${CMAKE_BINARY_DIR}/catch2")
+        add_subdirectory("${catch2_source}" "${PROJECT_BINARY_DIR}/catch2")
     else()
         find_package(Catch2 3 REQUIRED)
     endif()

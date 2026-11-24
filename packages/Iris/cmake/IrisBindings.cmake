@@ -14,7 +14,7 @@ if(NOT IRIS_DOTNET_EXECUTABLE)
         DOC "dotnet executable used to build the managed bridge and the bindings tool")
 endif()
 
-set(iris_bindings_tool "${CMAKE_BINARY_DIR}/iris-bindings/tool/iris-bindings.dll")
+set(iris_bindings_tool "${PROJECT_BINARY_DIR}/iris-bindings/tool/iris-bindings.dll")
 # The function runs in its callers' scopes, so what it needs is kept where every directory sees it.
 set_property(GLOBAL PROPERTY IRIS_GENERATE_BINDINGS_TARGET "${IRIS_GENERATE_BINDINGS_TARGET}")
 set_property(GLOBAL PROPERTY IRIS_BINDINGS_TOOL "${iris_bindings_tool}")
@@ -23,7 +23,7 @@ add_custom_target(${IRIS_GENERATE_BINDINGS_TARGET})
 if(IRIS_DOTNET_EXECUTABLE)
     add_custom_target(iris-bindings-tool
         COMMAND "${IRIS_DOTNET_EXECUTABLE}" build "${CMAKE_CURRENT_LIST_DIR}/../Tools/Iris.Bindings/src/Iris.Bindings.csproj"
-            --configuration Release --output "${CMAKE_BINARY_DIR}/iris-bindings/tool" --nologo -v:q
+            --configuration Release --output "${PROJECT_BINARY_DIR}/iris-bindings/tool" --nologo -v:q
         COMMENT "Building Iris.Bindings"
         VERBATIM
     )

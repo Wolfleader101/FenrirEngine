@@ -15,6 +15,7 @@ add_library(FenrirWindow STATIC
     src/Window.cpp
     src/WindowState.hpp
 )
+target_compile_features(FenrirWindow PUBLIC cxx_std_20)
 
 target_link_libraries(FenrirWindow PUBLIC FenrirApp FenrirInput PRIVATE SDL3::SDL3-static)
 

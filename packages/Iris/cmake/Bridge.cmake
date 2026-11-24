@@ -11,7 +11,8 @@ if(NOT IRIS_DOTNET_EXECUTABLE)
         "or set IRIS_BUILD_BRIDGE=OFF and IRIS_PREBUILT_BRIDGE_DIR to a directory holding a built bridge.")
 endif()
 
-set(IRIS_BRIDGE_DIR "${CMAKE_BINARY_DIR}/iris/bridge")
+# A cache variable, so a parent project that adds Iris sees it from any of its directories to call iris_deploy.
+set(IRIS_BRIDGE_DIR "${PROJECT_BINARY_DIR}/iris/bridge" CACHE INTERNAL "Where the Iris managed bridge is built")
 set(iris_bridge_project "${CMAKE_CURRENT_LIST_DIR}/../Managed/Iris.Bridge/Iris.Bridge.csproj")
 file(GLOB iris_bridge_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_LIST_DIR}/../Managed/Iris.Bridge/*.cs")
 

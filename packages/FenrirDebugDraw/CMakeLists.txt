@@ -10,6 +10,7 @@ add_library(FenrirDebugDraw STATIC
     src/Shapes.cpp
     src/Shapes.hpp
 )
+target_compile_features(FenrirDebugDraw PUBLIC cxx_std_20)
 
 target_link_libraries(FenrirDebugDraw PUBLIC FenrirApp FenrirScene FenrirMath)
 

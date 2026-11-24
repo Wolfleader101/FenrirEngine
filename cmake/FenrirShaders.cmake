@@ -17,8 +17,10 @@
 # declares `Fenrir::Shaders::<name>`, an `inline constexpr std::uint8_t[]` holding the container's bytes.
 include_guard(GLOBAL)
 
-set(FENRIR_SHADER_INCLUDE_DIR "${CMAKE_CURRENT_LIST_DIR}/../packages/FenrirRenderer/Shaders/include")
-cmake_path(NORMAL_PATH FENRIR_SHADER_INCLUDE_DIR)
+# A cache variable, so fenrir_add_shaders finds it when called from any directory, a parent project's among them.
+set(fenrir_shader_include_dir "${CMAKE_CURRENT_LIST_DIR}/../packages/FenrirRenderer/Shaders/include")
+cmake_path(NORMAL_PATH fenrir_shader_include_dir)
+set(FENRIR_SHADER_INCLUDE_DIR "${fenrir_shader_include_dir}" CACHE INTERNAL "The engine's shared shader include directory")
 
 function(fenrir_add_shaders target)
     cmake_parse_arguments(PARSE_ARGV 1 ARG "EMBED" "PROGRAM;VERTEX;FRAGMENT;COMPUTE;OUTPUT_DIRECTORY"
