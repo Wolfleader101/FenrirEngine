@@ -202,8 +202,9 @@ namespace Fenrir
         /**
          * @brief For a data asset, the located diagnostics of its file's read, each already logged once: those of the
          * read of its text, its upgrade and its fields (an unknown key dropped, a wrong-typed value left at its
-         * default), and the store's own about its envelope. Kept when the load failed too, as a syntax error's. Empty
-         * for a later load of a path already loaded.
+         * default), and the store's own about its envelope. Kept when the load failed too, as a syntax error's. A
+         * later load of a path already loaded gives its first load's again, not logged again, as a model's
+         * failedUnits are.
          */
         std::vector<Serialisation::Diagnostic> diagnostics;
         /**

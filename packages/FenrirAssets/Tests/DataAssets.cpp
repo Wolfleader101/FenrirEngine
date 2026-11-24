@@ -51,6 +51,7 @@ namespace
 TEST_CASE("Loading a data asset reads every field of its file", "[assets][data]")
 {
     DataApp test;
+    INFO("the test package's data asset types register");
     REQUIRE(test.registered);
 
     const Fenrir::LoadResult<Sword> loaded =
@@ -74,6 +75,7 @@ TEST_CASE("Loading a data asset reads every field of its file", "[assets][data]"
 TEST_CASE("Loading a data asset already loaded gives the same handle", "[assets][data]")
 {
     DataApp test;
+    INFO("the test package's data asset types register");
     REQUIRE(test.registered);
 
     const Fenrir::LoadResult<Sword> first = test.store.Load<Sword>("data/sword.asset.json5", Fenrir::AssetOwner::App());
@@ -89,6 +91,7 @@ TEST_CASE("Loading a data asset already loaded gives the same handle", "[assets]
 TEST_CASE("A handle of a base type loads a file of a type extending it", "[assets][data]")
 {
     DataApp test;
+    INFO("the test package's data asset types register");
     REQUIRE(test.registered);
 
     const Fenrir::LoadResult<WeaponData> loaded =
@@ -104,6 +107,7 @@ TEST_CASE("A handle of a base type loads a file of a type extending it", "[asset
 TEST_CASE("Loading a file of a base type as a type extending it fails with WrongType", "[assets][data]")
 {
     DataApp test;
+    INFO("the test package's data asset types register");
     REQUIRE(test.registered);
 
     const Fenrir::LoadResult<Sword> loaded =
@@ -113,13 +117,62 @@ TEST_CASE("Loading a file of a base type as a type extending it fails with Wrong
     REQUIRE(loaded.Status() == Fenrir::LoadStatus::Failed);
     REQUIRE(loaded.handle.IsEmpty());
     REQUIRE(loaded.diagnostic->reason == Fenrir::LoadFailure::WrongType);
-    INFO("the failure is logged once");
+}
+
+TEST_CASE("A failed data asset load is logged once", "[assets][data]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+
+    const Fenrir::LoadResult<Sword> loaded =
+        test.store.Load<Sword>("data/weapon.asset.json5", Fenrir::AssetOwner::App());
+
+    INFO("the wrong type is one error, naming the type the file holds");
+    REQUIRE_FALSE(loaded.Ok());
+    REQUIRE(test.errors->size() == 1);
     REQUIRE(CountContaining(*test.errors, "AssetsTest::WeaponData") == 1);
+}
+
+TEST_CASE("Loading a data asset already loaded as a type extending T gives the same handle", "[assets][data]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+
+    const Fenrir::LoadResult<Sword> asSword =
+        test.store.Load<Sword>("data/sword.asset.json5", Fenrir::AssetOwner::App());
+    const Fenrir::LoadResult<WeaponData> asWeapon =
+        test.store.Load<WeaponData>("data/sword.asset.json5", Fenrir::AssetOwner::App());
+
+    INFO("the loaded Sword is a WeaponData, so the second load shares its slot");
+    REQUIRE(asSword.Ok());
+    REQUIRE(asWeapon.Ok());
+    REQUIRE(asWeapon.handle.index == asSword.handle.index);
+    REQUIRE(asWeapon.handle.generation == asSword.handle.generation);
+}
+
+TEST_CASE("Loading a data asset already loaded as a type that is not T fails with WrongType", "[assets][data]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+
+    const Fenrir::LoadResult<WeaponData> asWeapon =
+        test.store.Load<WeaponData>("data/weapon.asset.json5", Fenrir::AssetOwner::App());
+    const Fenrir::LoadResult<Sword> asSword =
+        test.store.Load<Sword>("data/weapon.asset.json5", Fenrir::AssetOwner::App());
+
+    INFO("the loaded WeaponData is no Sword, so the second load fails though the path is loaded");
+    REQUIRE(asWeapon.Ok());
+    REQUIRE(asSword.Status() == Fenrir::LoadStatus::Failed);
+    REQUIRE(asSword.diagnostic->reason == Fenrir::LoadFailure::WrongType);
 }
 
 TEST_CASE("Loading a file whose type is unrelated fails with WrongType", "[assets][data]")
 {
     DataApp test;
+    INFO("the test package's data asset types register");
     REQUIRE(test.registered);
 
     const Fenrir::LoadResult<WeaponData> loaded =
@@ -133,6 +186,7 @@ TEST_CASE("Loading a file whose type is unrelated fails with WrongType", "[asset
 TEST_CASE("Loading a file whose type nothing registers fails with WrongType", "[assets][data]")
 {
     DataApp test;
+    INFO("the test package's data asset types register");
     REQUIRE(test.registered);
 
     const Fenrir::LoadResult<WeaponData> loaded =
@@ -151,7 +205,7 @@ TEST_CASE("Loading a type the registry lacks fails with NotADataAsset", "[assets
     const Fenrir::LoadResult<Sword> loaded =
         test.store.Load<Sword>("data/sword.asset.json5", Fenrir::AssetOwner::App());
 
-    INFO("nothing registered the test package, so the store knows no Sword");
+    INFO("nothing registered the test package, so the store knows no Sword, and says so in one error");
     REQUIRE(loaded.Status() == Fenrir::LoadStatus::Failed);
     REQUIRE(loaded.diagnostic->reason == Fenrir::LoadFailure::NotADataAsset);
     REQUIRE(test.errors->size() == 1);
@@ -160,6 +214,7 @@ TEST_CASE("Loading a type the registry lacks fails with NotADataAsset", "[assets
 TEST_CASE("A file with an unknown and a wrong-typed field loads in part, saying where each is", "[assets][data]")
 {
     DataApp test;
+    INFO("the test package's data asset types register");
     REQUIRE(test.registered);
 
     const Fenrir::LoadResult<Sword> loaded =
@@ -191,10 +246,12 @@ TEST_CASE("A file with an unknown and a wrong-typed field loads in part, saying 
 TEST_CASE("A data asset's diagnostics are each logged once", "[assets][data]")
 {
     DataApp test;
+    INFO("the test package's data asset types register");
     REQUIRE(test.registered);
 
     const Fenrir::LoadResult<Sword> loaded =
         test.store.Load<Sword>("data/bad-fields.asset.json5", Fenrir::AssetOwner::App());
+    INFO("the sword loads in part");
     REQUIRE(loaded.Ok());
 
     INFO("the unknown key is warned once, and the wrong-typed value is an error once");
@@ -203,9 +260,29 @@ TEST_CASE("A data asset's diagnostics are each logged once", "[assets][data]")
     REQUIRE(test.errors->size() == 1);
 }
 
+TEST_CASE("A later load of a data asset that loaded in part is in part too, logging nothing again", "[assets][data]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+    const Fenrir::LoadResult<Sword> first =
+        test.store.Load<Sword>("data/bad-fields.asset.json5", Fenrir::AssetOwner::App());
+    const std::size_t logged = test.errors->size() + test.warnings->size();
+
+    const Fenrir::LoadResult<Sword> second =
+        test.store.Load<Sword>("data/bad-fields.asset.json5", Fenrir::AssetOwner::App());
+
+    INFO("the second load reports the first one's diagnostics, as a model's failed units repeat, and logs none");
+    REQUIRE(second.handle == first.handle);
+    REQUIRE(second.Status() == Fenrir::LoadStatus::Partial);
+    REQUIRE(second.diagnostics == first.diagnostics);
+    REQUIRE(test.errors->size() + test.warnings->size() == logged);
+}
+
 TEST_CASE("A file at an older version loads through its type's upgrader", "[assets][data]")
 {
     DataApp test;
+    INFO("the test package's data asset types register");
     REQUIRE(test.registered);
     const bool upgraderAdded = Fenrir::Serialisation::RegisterUpgrader(
         test.app.GetResource<Fenrir::TypeRegistry>(), "AssetsTest::Sword", 1,
@@ -219,6 +296,7 @@ TEST_CASE("A file at an older version loads through its type's upgrader", "[asse
             }
         },
         *test.app.Logger());
+    INFO("the upgrader from version 1 registers");
     REQUIRE(upgraderAdded);
 
     const Fenrir::LoadResult<Sword> loaded =
@@ -234,6 +312,7 @@ TEST_CASE("A file at an older version loads through its type's upgrader", "[asse
 TEST_CASE("A data asset file with a syntax error fails with one located diagnostic", "[assets][data]")
 {
     DataApp test;
+    INFO("the test package's data asset types register");
     REQUIRE(test.registered);
 
     const Fenrir::LoadResult<Sword> loaded =
@@ -250,6 +329,7 @@ TEST_CASE("A data asset file with a syntax error fails with one located diagnost
 TEST_CASE("A data asset file of another format version fails", "[assets][data]")
 {
     DataApp test;
+    INFO("the test package's data asset types register");
     REQUIRE(test.registered);
 
     const Fenrir::LoadResult<Sword> loaded =
@@ -266,6 +346,7 @@ TEST_CASE("A data asset file of another format version fails", "[assets][data]")
 TEST_CASE("A data asset file's sub-assets are not read yet, with a warning", "[assets][data]")
 {
     DataApp test;
+    INFO("the test package's data asset types register");
     REQUIRE(test.registered);
 
     const Fenrir::LoadResult<Sword> loaded =
@@ -273,7 +354,9 @@ TEST_CASE("A data asset file's sub-assets are not read yet, with a warning", "[a
 
     INFO("the sword's data loads, and the load is partial with one warning about `sub`");
     REQUIRE(loaded.Status() == Fenrir::LoadStatus::Partial);
-    REQUIRE(test.store.TryGet(loaded.handle)->displayName == "Sheathed sword");
+    const Sword* sword = test.store.TryGet(loaded.handle);
+    REQUIRE(sword != nullptr);
+    REQUIRE(sword->displayName == "Sheathed sword");
     REQUIRE(loaded.diagnostics.size() == 1);
     REQUIRE(loaded.diagnostics.front().severity == Fenrir::Serialisation::DiagnosticSeverity::Warning);
     REQUIRE(CountContaining(*test.warnings, "sub") == 1);
@@ -282,6 +365,7 @@ TEST_CASE("A data asset file's sub-assets are not read yet, with a warning", "[a
 TEST_CASE("A data asset owned by a scene is freed with the scene", "[assets][data][owners]")
 {
     DataApp test;
+    INFO("the test package's data asset types register");
     REQUIRE(test.registered);
     Fenrir::Scene& level = test.app.CreateScene("Level");
     const Fenrir::LoadResult<Sword> loaded = test.store.Load<Sword>("data/sword.asset.json5", level);
@@ -299,11 +383,13 @@ TEST_CASE("A data asset owned by a scene is freed with the scene", "[assets][dat
 TEST_CASE("A data asset owned by a scene and the app outlives the scene", "[assets][data][owners]")
 {
     DataApp test;
+    INFO("the test package's data asset types register");
     REQUIRE(test.registered);
     Fenrir::Scene& level = test.app.CreateScene("Level");
     const Fenrir::LoadResult<Sword> forLevel = test.store.Load<Sword>("data/sword.asset.json5", level);
     const Fenrir::LoadResult<Sword> forApp =
         test.store.Load<Sword>("data/sword.asset.json5", Fenrir::AssetOwner::App());
+    INFO("both loads name the one sword");
     REQUIRE(forApp.handle == forLevel.handle);
 
     test.app.DestroyScene("Level");
@@ -312,18 +398,41 @@ TEST_CASE("A data asset owned by a scene and the app outlives the scene", "[asse
     REQUIRE(test.store.IsValid(forLevel.handle));
 }
 
-TEST_CASE("TryGet of a data asset as a type it is not gives null, logged once per handle", "[assets][data]")
+namespace
+{
+    // A Sword handle made from the numbers of a loaded plain WeaponData's handle: one naming a record of a type that
+    // is not a Sword.
+    Fenrir::AssetHandle<Sword> SwordHandleToAWeapon(DataApp& test)
+    {
+        const Fenrir::LoadResult<WeaponData> loaded =
+            test.store.Load<WeaponData>("data/weapon.asset.json5", Fenrir::AssetOwner::App());
+        INFO("the plain weapon loads");
+        REQUIRE(loaded.Ok());
+        return {loaded.handle.index, loaded.handle.generation};
+    }
+} // namespace
+
+TEST_CASE("TryGet of a data asset as a type it is not gives null", "[assets][data]")
 {
     DataApp test;
+    INFO("the test package's data asset types register");
     REQUIRE(test.registered);
-    const Fenrir::LoadResult<WeaponData> loaded =
-        test.store.Load<WeaponData>("data/weapon.asset.json5", Fenrir::AssetOwner::App());
-    REQUIRE(loaded.Ok());
-    const Fenrir::AssetHandle<Sword> asSword{loaded.handle.index, loaded.handle.generation};
+    const Fenrir::AssetHandle<Sword> asSword = SwordHandleToAWeapon(test);
 
     INFO("a WeaponData record does not read as a Sword");
     REQUIRE(test.store.TryGet(asSword) == nullptr);
-    REQUIRE(test.store.TryGet(asSword) == nullptr);
+}
+
+TEST_CASE("TryGet of a data asset as a type it is not is logged once per handle", "[assets][data]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+    const Fenrir::AssetHandle<Sword> asSword = SwordHandleToAWeapon(test);
+
+    (void)test.store.TryGet(asSword);
+    (void)test.store.TryGet(asSword);
+
     INFO("the mismatch is logged the first time only");
     REQUIRE(CountContaining(*test.errors, "AssetsTest::Sword") == 1);
 }

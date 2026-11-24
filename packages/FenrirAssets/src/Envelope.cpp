@@ -5,6 +5,7 @@
 #include <iterator>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -23,7 +24,7 @@ namespace Fenrir::Detail
         namespace Ser = Serialisation;
 
         // The envelope's file format version (ADR-0077 §2): the one this reader reads.
-        constexpr std::int64_t EnvelopeFormat = 1;
+        constexpr std::uint64_t EnvelopeFormat = 1;
 
         // How a diagnostic names what it found: the node's kind, with a string's or number's text.
         std::string Found(const Ser::Value* node)
@@ -60,13 +61,13 @@ namespace Fenrir::Detail
             return "a value";
         }
 
-        // A whole number from 1 up to `max`, as text reads it signed and code may build it unsigned; 0 for any other
+        // A whole number from 1 up to `max`, as text reads it signed and code may build it unsigned; none for any other
         // node.
-        std::uint64_t PositiveWhole(const Ser::Value* node, std::uint64_t max)
+        std::optional<std::uint64_t> PositiveWhole(const Ser::Value* node, std::uint64_t max)
         {
             if (node == nullptr || node->Kind() != Ser::ValueKind::Number)
             {
-                return 0;
+                return std::nullopt;
             }
             const Ser::Number& number = node->AsNumber();
             if (number.Width() == Ser::NumberWidth::Signed && number.AsSigned() >= 1 &&
@@ -78,12 +79,13 @@ namespace Fenrir::Detail
             {
                 return number.AsUnsigned();
             }
-            return 0;
+            return std::nullopt;
         }
 
-        // A diagnostic of the reader's own, at `node`, or at `fallback` when the node is missing or built in code.
-        Ser::Diagnostic At(Ser::DiagnosticSeverity severity, std::string_view path, const Ser::Value* node,
-                           const Ser::Value& fallback, std::string message)
+        // A located diagnostic of the reader's own, at `node`, or at `fallback` when the node is missing or built in
+        // code.
+        Ser::Diagnostic LocatedAt(Ser::DiagnosticSeverity severity, std::string_view path, const Ser::Value* node,
+                                  const Ser::Value& fallback, std::string message)
         {
             const Ser::Value& at = node != nullptr && node->location ? *node : fallback;
             Ser::Diagnostic diagnostic{.severity = severity, .path = std::string(path), .message = std::move(message)};
@@ -126,8 +128,8 @@ namespace Fenrir::Detail
         if (root.Kind() != Ser::ValueKind::Object)
         {
             return fail(LoadFailure::ImportFailed,
-                        At(Ser::DiagnosticSeverity::Error, path, &root, root,
-                           std::format("expected a data asset's envelope object, found {}", Found(&root))));
+                        LocatedAt(Ser::DiagnosticSeverity::Error, path, &root, root,
+                                  std::format("expected a data asset's envelope object, found {}", Found(&root))));
         }
         Ser::Object& envelope = tree.tree->AsObject();
 
@@ -135,59 +137,62 @@ namespace Fenrir::Detail
         if (PositiveWhole(format, EnvelopeFormat) != EnvelopeFormat)
         {
             return fail(LoadFailure::ImportFailed,
-                        At(Ser::DiagnosticSeverity::Error, path, format, root,
-                           std::format("expected `format` {}, found {}", EnvelopeFormat, Found(format))));
+                        LocatedAt(Ser::DiagnosticSeverity::Error, path, format, root,
+                                  std::format("expected `format` {}, found {}", EnvelopeFormat, Found(format))));
         }
 
         const Ser::Value* typeName = envelope.Find("type");
         if (typeName == nullptr || typeName->Kind() != Ser::ValueKind::String)
         {
             return fail(LoadFailure::ImportFailed,
-                        At(Ser::DiagnosticSeverity::Error, path, typeName, root,
-                           std::format("expected `type`, a type's name, found {}", Found(typeName))));
+                        LocatedAt(Ser::DiagnosticSeverity::Error, path, typeName, root,
+                                  std::format("expected `type`, a type's name, found {}", Found(typeName))));
         }
         const TypeDescription* type = registry.Find(typeName->AsString());
         if (type == nullptr)
         {
-            return fail(LoadFailure::WrongType,
-                        At(Ser::DiagnosticSeverity::Error, path, typeName, root,
-                           std::format("expected `{}` or a type extending it, found `{}`, which no package registers",
-                                       expected.name, typeName->AsString())));
+            return fail(
+                LoadFailure::WrongType,
+                LocatedAt(Ser::DiagnosticSeverity::Error, path, typeName, root,
+                          std::format("expected `{}` or a type extending it, found `{}`, which no package registers",
+                                      expected.name, typeName->AsString())));
         }
         if (!registry.IsA(type->name, expected.name))
         {
-            return fail(LoadFailure::WrongType,
-                        At(Ser::DiagnosticSeverity::Error, path, typeName, root,
-                           std::format("expected `{}` or a type extending it, found `{}`", expected.name, type->name)));
+            return fail(
+                LoadFailure::WrongType,
+                LocatedAt(Ser::DiagnosticSeverity::Error, path, typeName, root,
+                          std::format("expected `{}` or a type extending it, found `{}`", expected.name, type->name)));
         }
 
         const Ser::Value* version = envelope.Find("version");
-        const std::uint64_t fromVersion = PositiveWhole(version, std::numeric_limits<std::uint32_t>::max());
-        if (fromVersion == 0)
+        const std::optional<std::uint64_t> fromVersion =
+            PositiveWhole(version, std::numeric_limits<std::uint32_t>::max());
+        if (!fromVersion)
         {
             return fail(LoadFailure::ImportFailed,
-                        At(Ser::DiagnosticSeverity::Error, path, version, root,
-                           std::format("expected `version`, a whole number from 1, found {}", Found(version))));
+                        LocatedAt(Ser::DiagnosticSeverity::Error, path, version, root,
+                                  std::format("expected `version`, a whole number from 1, found {}", Found(version))));
         }
 
         Ser::Value* data = envelope.Find("data");
         if (data == nullptr)
         {
-            return fail(LoadFailure::ImportFailed, At(Ser::DiagnosticSeverity::Error, path, data, root,
-                                                      "expected `data`, the asset's fields, found none"));
+            return fail(LoadFailure::ImportFailed, LocatedAt(Ser::DiagnosticSeverity::Error, path, data, root,
+                                                             "expected `data`, the asset's fields, found none"));
         }
 
         // Embedded sub-assets are a later ticket's: the asset's own data still reads.
         if (const Ser::Value* sub = envelope.Find("sub"); sub != nullptr)
         {
-            Ser::Diagnostic warning = At(Ser::DiagnosticSeverity::Warning, path, sub, root,
-                                         "expected no `sub`, found sub-assets, which are not read yet: skipped");
+            Ser::Diagnostic warning = LocatedAt(Ser::DiagnosticSeverity::Warning, path, sub, root,
+                                                "expected no `sub`, found sub-assets, which are not read yet: skipped");
             logger.Warn("{}", Ser::FormatDiagnostic(warning));
             read.diagnostics.push_back(std::move(warning));
         }
 
         Ser::UpgradeResult upgraded =
-            Ser::Upgrade(registry, type->name, static_cast<std::uint32_t>(fromVersion), *data, path, logger);
+            Ser::Upgrade(registry, type->name, static_cast<std::uint32_t>(*fromVersion), *data, path, logger);
         Append(read.diagnostics, std::move(upgraded.diagnostics));
 
         auto instance = std::make_unique<DataValue>(*type);

@@ -270,6 +270,9 @@ namespace Fenrir
                 record.key.clear();
             }
             record.typeName = {};
+            record.loadDiagnostics.clear();
+            record.loadIncomplete = false;
+            record.logged.clear();
             // Generation zero is the empty handle's, so a slot that wraps around skips it.
             if (++record.generation == 0)
             {
@@ -504,6 +507,8 @@ namespace Fenrir
                                                                 record.typeName, type.name));
             }
             Detail::AddOwner(record, Detail::OwnerIdOf(m_state, owner));
+            diagnostics = record.loadDiagnostics;
+            incomplete = record.loadIncomplete;
             return {loaded->second, record.generation};
         }
 
@@ -533,7 +538,10 @@ namespace Fenrir
         incomplete = read.incomplete;
         const Detail::AssetSlot slot =
             Detail::InsertAsset(table, std::move(read.value), Detail::OwnerIdOf(m_state, owner), resolved.key);
-        m_state->Find(Detail::AssetKind::Data, slot)->typeName = read.type->name;
+        Detail::AssetRecord& record = *m_state->Find(Detail::AssetKind::Data, slot);
+        record.typeName = read.type->name;
+        record.loadDiagnostics = diagnostics;
+        record.loadIncomplete = incomplete;
         return slot;
     }
 
@@ -645,16 +653,16 @@ namespace Fenrir
 
     const void* AssetStore::FindData(Detail::AssetSlot slot, const TypeDescription& type) const
     {
-        const Detail::AssetRecord* record = m_state->Find(Detail::AssetKind::Data, slot);
+        Detail::AssetRecord* record = m_state->Find(Detail::AssetKind::Data, slot);
         if (record == nullptr || record->data == nullptr)
         {
             return nullptr;
         }
         if (!m_state->types->IsA(record->typeName, type.name))
         {
-            const std::string reported = std::format("{}:{}:{}", slot.index, slot.generation, type.name);
-            const std::scoped_lock lock(m_state->wrongTypeReadsMutex);
-            if (m_state->wrongTypeReads.insert(reported).second)
+            // The record's own log, which Free clears, so it is once per handle: a new asset in the slot starts afresh.
+            const std::scoped_lock lock(m_state->readLogMutex);
+            if (record->logged.insert(std::format("read as {}", type.name)).second)
             {
                 m_state->logger->Error("Could not read a data asset as `{}`: its handle names a `{}`", type.name,
                                        record->typeName);

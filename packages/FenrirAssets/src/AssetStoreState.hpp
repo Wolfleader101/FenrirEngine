@@ -62,7 +62,12 @@ namespace Fenrir::Detail
         std::string key;
         // For a data asset, the canonical name of its value's type (its description's, so it outlives the record).
         std::string_view typeName;
-        // The problems already logged for this asset (a material's unknown parameter names), so each is logged once.
+        // For a data asset, what its file's read reported, which every later load of its path reports again, as a
+        // model's left-out units are: the located diagnostics, and whether the bridge read its fields in part.
+        std::vector<Serialisation::Diagnostic> loadDiagnostics;
+        bool loadIncomplete = false;
+        // The problems already logged for this asset (a material's unknown parameter names, a data asset read as a
+        // type it is not), so each is logged once. Cleared when the slot is freed, so the next asset starts afresh.
         std::unordered_set<std::string> logged;
         // An image's last region updates (AssetStore::UpdateImage), each with the revision it made, oldest first.
         // Cleared whenever the whole image changes, so a revision before the first is one a copy cannot catch up from.
@@ -88,12 +93,10 @@ namespace Fenrir::Detail
         /** @brief By model file key, the units its last import left out, for the files that left any out. */
         std::unordered_map<std::string, std::vector<std::string>> modelFailures;
         /**
-         * @brief The data asset handles TryGet has reported reading as a type their record is not, each with that
-         * type's name, so each is logged once. Guarded by its mutex, since TryGet is a read that may run alongside
-         * others.
+         * @brief Guards a data asset record's `logged` while TryGet notes a read as a type the record is not: TryGet is
+         * a read, which may run alongside others.
          */
-        std::unordered_set<std::string> wrongTypeReads;
-        std::mutex wrongTypeReadsMutex;
+        std::mutex readLogMutex;
 
         /** @brief The live record `slot` names in `kind`'s table, or null. */
         [[nodiscard]] AssetRecord* Find(AssetKind kind, AssetSlot slot);
