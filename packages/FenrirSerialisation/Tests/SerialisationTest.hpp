@@ -6,10 +6,12 @@
 
 #include "FenrirLogger/ILogger.hpp"
 
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <memory>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -86,5 +88,17 @@ namespace SerialisationTest
     inline std::string ReadFixture(std::string_view name)
     {
         return ReadBytes(Fixtures() / name);
+    }
+
+    // The bytes of `text`, as a file holding it stores them.
+    inline std::span<const std::byte> BytesOf(std::string_view text)
+    {
+        return std::as_bytes(std::span(text.data(), text.size()));
+    }
+
+    // The first error `logger` holds, or "no error", for an INFO.
+    inline std::string FirstError(const RecordingLogger& logger)
+    {
+        return logger.errors.empty() ? std::string("no error") : logger.errors.front();
     }
 } // namespace SerialisationTest

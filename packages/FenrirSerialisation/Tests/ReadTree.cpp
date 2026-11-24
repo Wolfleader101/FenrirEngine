@@ -18,6 +18,8 @@
 #include <vector>
 
 using namespace Fenrir::Serialisation;
+using SerialisationTest::BytesOf;
+using SerialisationTest::FirstError;
 using SerialisationTest::ReadFixture;
 using SerialisationTest::RecordingLogger;
 
@@ -25,25 +27,20 @@ namespace
 {
     constexpr std::string_view kGoldens[] = {"sword.asset.json5", "level1.scene.json5"};
 
-    // The bytes of `text`, as a file holding it stores them.
-    std::span<const std::byte> BytesOf(std::string_view text)
-    {
-        return std::as_bytes(std::span(text.data(), text.size()));
-    }
-
     // Reads bytes that must read, and fails the test when they give no tree.
     Value Read(std::span<const std::byte> bytes, std::string_view path)
     {
         RecordingLogger logger;
         ReadTreeResult result = ReadTree(bytes, path, logger);
-        INFO(path << " reads: " << (logger.errors.empty() ? std::string("no error") : logger.errors.front()));
+        INFO(path << " reads: " << FirstError(logger));
         REQUIRE(result.tree.has_value());
         return std::move(*result.tree);
     }
 
-    // The one diagnostic bytes that must fail give, through a logger the caller then inspects.
-    Diagnostic Fail(std::span<const std::byte> bytes, RecordingLogger& logger)
+    // The one diagnostic bytes that must fail give.
+    Diagnostic Fail(std::span<const std::byte> bytes)
     {
+        RecordingLogger logger;
         ReadTreeResult result = ReadTree(bytes, "save.dat", logger);
         INFO("the bytes fail with no tree and one error diagnostic");
         REQUIRE_FALSE(result.tree.has_value());
@@ -95,8 +92,7 @@ TEST_CASE("ReadTree reads bytes whose first is zero as the tree encoding, with i
 {
     // A zero and then nothing: the start of an encoding's tag, cut short.
     const std::byte bytes[] = {std::byte{0x00}};
-    RecordingLogger logger;
-    const Diagnostic diagnostic = Fail(bytes, logger);
+    const Diagnostic diagnostic = Fail(bytes);
     INFO("the diagnostic '" << diagnostic.message << "' is DecodeTree's, naming the byte it is about");
     REQUIRE(diagnostic.message.starts_with("at byte 0, "));
 }
@@ -104,8 +100,7 @@ TEST_CASE("ReadTree reads bytes whose first is zero as the tree encoding, with i
 TEST_CASE("ReadTree reads bytes whose first is not zero as JSON5 text, with its diagnostics",
           "[serialisation][readtree]")
 {
-    RecordingLogger logger;
-    const Diagnostic diagnostic = Fail(BytesOf("{\n  a: ,\n}\n"), logger);
+    const Diagnostic diagnostic = Fail(BytesOf("{\n  a: ,\n}\n"));
     INFO("the diagnostic '" << diagnostic.message << "' is ReadText's, on the line and column of the bad character");
     REQUIRE(diagnostic.line == 2);
     REQUIRE(diagnostic.column == 6);
@@ -122,13 +117,20 @@ TEST_CASE("ReadTree skips a byte order mark at the start of text", "[serialisati
 
 TEST_CASE("ReadTree gives an empty span one error diagnostic at its start", "[serialisation][readtree]")
 {
-    RecordingLogger logger;
-    const Diagnostic diagnostic = Fail({}, logger);
+    const Diagnostic diagnostic = Fail({});
     INFO("the diagnostic names the file and is at line 1, column 1");
     REQUIRE(diagnostic.path == "save.dat");
     REQUIRE(diagnostic.line == 1);
     REQUIRE(diagnostic.column == 1);
+}
+
+TEST_CASE("ReadTree logs an empty span's diagnostic once, through Error", "[serialisation][readtree]")
+{
+    RecordingLogger logger;
+    const ReadTreeResult result = ReadTree({}, "save.dat", logger);
+    INFO("the empty span gives one diagnostic");
+    REQUIRE(result.diagnostics.size() == 1);
     INFO("it is logged once, through Error, as path:line:column: message");
-    REQUIRE(logger.errors == std::vector<std::string>{FormatDiagnostic(diagnostic)});
+    REQUIRE(logger.errors == std::vector<std::string>{FormatDiagnostic(result.diagnostics.front())});
     REQUIRE(logger.warnings.empty());
 }

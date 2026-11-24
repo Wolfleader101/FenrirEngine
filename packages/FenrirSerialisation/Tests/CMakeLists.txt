@@ -56,7 +56,19 @@ string(FIND "${fenrir_serialisation_example}" "\n```" fenrir_serialisation_examp
 if(fenrir_serialisation_example_end EQUAL -1)
     message(FATAL_ERROR "${fenrir_serialisation_readme}'s ```cpp block is not closed")
 endif()
+string(SUBSTRING "${fenrir_serialisation_example}" ${fenrir_serialisation_example_end} -1 fenrir_serialisation_readme_rest)
 string(SUBSTRING "${fenrir_serialisation_example}" 0 ${fenrir_serialisation_example_end} fenrir_serialisation_example)
+# One block, copied as it is: a second would go untested, and file(CONFIGURE) would replace an @name@ in it.
+string(FIND "${fenrir_serialisation_readme_rest}" "
+```cpp
+" fenrir_serialisation_second_example)
+if(NOT fenrir_serialisation_second_example EQUAL -1)
+    message(FATAL_ERROR "${fenrir_serialisation_readme} has a second ```cpp block, which ReadmeExample.cpp would not compile")
+endif()
+string(FIND "${fenrir_serialisation_example}" "@" fenrir_serialisation_example_at)
+if(NOT fenrir_serialisation_example_at EQUAL -1)
+    message(FATAL_ERROR "${fenrir_serialisation_readme}'s ```cpp block holds an @, which its copy would not keep")
+endif()
 file(CONFIGURE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/ReadmeExample/ReadmeExample.inl"
      CONTENT "@fenrir_serialisation_example@\n" @ONLY)
 target_sources(FenrirSerialisationTests PRIVATE ReadmeExample.cpp)

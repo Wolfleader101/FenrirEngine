@@ -65,6 +65,8 @@ struct Fenrir::Describe<MyGame::Progress>
 #include "ReadmeExample.inl"
 
 using namespace Fenrir::Serialisation;
+using SerialisationTest::BytesOf;
+using SerialisationTest::FirstError;
 using SerialisationTest::RecordingLogger;
 
 namespace
@@ -80,24 +82,15 @@ namespace
         return registry;
     }
 
-    // The bytes of `text`, as a file holding it stores them.
-    std::span<const std::byte> BytesOf(std::string_view text)
-    {
-        return std::as_bytes(std::span(text.data(), text.size()));
-    }
-
-    // The first error logged, or "no error", for an INFO.
-    std::string FirstError(const RecordingLogger& logger)
-    {
-        return logger.errors.empty() ? std::string("no error") : logger.errors.front();
-    }
+    // The progress the tests save: both fields away from their defaults.
+    constexpr MyGame::Progress Saved{.level = 7, .health = 42.5f};
 } // namespace
 
 TEST_CASE("The README's save file writes the progress under the game's own keys", "[serialisation][readme]")
 {
     RecordingLogger logger;
     const Fenrir::TypeRegistry registry = GameRegistry(logger);
-    const std::string text = MyGame::WriteSave(MyGame::Progress{.level = 7, .health = 42.5f}, registry);
+    const std::string text = MyGame::WriteSave(Saved, registry);
     INFO("the save holds the type's version and the fields that differ from their defaults:\n" << text);
     REQUIRE(text == "{\n  progressVersion: 2,\n  progress: {\n    level: 7,\n    health: 42.5,\n  },\n}\n");
 }
@@ -106,7 +99,7 @@ TEST_CASE("The README's save file reads back the progress it wrote", "[serialisa
 {
     RecordingLogger logger;
     const Fenrir::TypeRegistry registry = GameRegistry(logger);
-    const std::string text = MyGame::WriteSave(MyGame::Progress{.level = 7, .health = 42.5f}, registry);
+    const std::string text = MyGame::WriteSave(Saved, registry);
 
     MyGame::Progress progress;
     const bool read = MyGame::ReadSave(BytesOf(text), "save.json5", registry, progress, logger);
@@ -115,7 +108,17 @@ TEST_CASE("The README's save file reads back the progress it wrote", "[serialisa
     INFO("each field reads as written");
     REQUIRE(progress.level == 7);
     REQUIRE(progress.health == 42.5f);
-    INFO("nothing was logged");
+}
+
+TEST_CASE("The README's save file logs nothing reading the save it wrote", "[serialisation][readme]")
+{
+    RecordingLogger logger;
+    const Fenrir::TypeRegistry registry = GameRegistry(logger);
+    const std::string text = MyGame::WriteSave(Saved, registry);
+
+    MyGame::Progress progress;
+    (void)MyGame::ReadSave(BytesOf(text), "save.json5", registry, progress, logger);
+    INFO("no error and no warning was logged: " << FirstError(logger));
     REQUIRE(logger.errors.empty());
     REQUIRE(logger.warnings.empty());
 }
@@ -124,7 +127,7 @@ TEST_CASE("The README's save file reads a save cooked into the tree encoding", "
 {
     RecordingLogger logger;
     const Fenrir::TypeRegistry registry = GameRegistry(logger);
-    const std::string text = MyGame::WriteSave(MyGame::Progress{.level = 7, .health = 42.5f}, registry);
+    const std::string text = MyGame::WriteSave(Saved, registry);
     const std::vector<std::byte> cooked = EncodeTree(SerialisationTest::TreeOf(text), Trivia::Drop);
 
     MyGame::Progress progress;
@@ -152,7 +155,24 @@ TEST_CASE("The README's save file upgrades a version 1 save before reading it", 
     REQUIRE(progress.level == 3);
 }
 
-TEST_CASE("The README's save file refuses a file with no progress in it, with one error", "[serialisation][readme]")
+TEST_CASE("The README's save file reads an encoded save whose version is an unsigned number", "[serialisation][readme]")
+{
+    RecordingLogger logger;
+    const Fenrir::TypeRegistry registry = GameRegistry(logger);
+    // A save built in code: its version is a `std::uint32_t`, so the encoding holds it unsigned.
+    Object save;
+    save.Add("progressVersion", std::uint32_t{2});
+    save.Add("progress", SerialisationTest::TreeOf("{level: 4}"));
+
+    MyGame::Progress progress;
+    const bool read = MyGame::ReadSave(EncodeTree(save, Trivia::Drop), "save.bin", registry, progress, logger);
+    INFO("the save reads, its unsigned version taken: " << FirstError(logger));
+    REQUIRE(read);
+    INFO("its field reads as written");
+    REQUIRE(progress.level == 4);
+}
+
+TEST_CASE("The README's save file refuses a file with no progress in it", "[serialisation][readme]")
 {
     RecordingLogger logger;
     const Fenrir::TypeRegistry registry = GameRegistry(logger);
@@ -161,8 +181,41 @@ TEST_CASE("The README's save file refuses a file with no progress in it, with on
     const bool read = MyGame::ReadSave(BytesOf("{level: 3}"), "notasave.json5", registry, progress, logger);
     INFO("a file without `progressVersion` and `progress` is no save");
     REQUIRE_FALSE(read);
-    INFO("one error says so");
+}
+
+TEST_CASE("The README's save file logs one error for a file with no progress in it", "[serialisation][readme]")
+{
+    RecordingLogger logger;
+    const Fenrir::TypeRegistry registry = GameRegistry(logger);
+
+    MyGame::Progress progress;
+    (void)MyGame::ReadSave(BytesOf("{level: 3}"), "notasave.json5", registry, progress, logger);
+    INFO("one error says the file is no save");
     REQUIRE(logger.errors.size() == 1);
-    INFO("the progress keeps its defaults");
-    REQUIRE(progress.level == 1);
+}
+
+TEST_CASE("The README's save file refuses a save when the registry lacks Progress", "[serialisation][readme]")
+{
+    RecordingLogger logger;
+    const Fenrir::TypeRegistry registered = GameRegistry(logger);
+    const std::string text = MyGame::WriteSave(Saved, registered);
+    const Fenrir::TypeRegistry empty;
+
+    MyGame::Progress progress;
+    const bool read = MyGame::ReadSave(BytesOf(text), "save.json5", empty, progress, logger);
+    INFO("a save of a type the registry lacks is not read");
+    REQUIRE_FALSE(read);
+}
+
+TEST_CASE("The README's save file logs one error when the registry lacks Progress", "[serialisation][readme]")
+{
+    RecordingLogger logger;
+    const Fenrir::TypeRegistry registered = GameRegistry(logger);
+    const std::string text = MyGame::WriteSave(Saved, registered);
+    const Fenrir::TypeRegistry empty;
+
+    MyGame::Progress progress;
+    (void)MyGame::ReadSave(BytesOf(text), "save.json5", empty, progress, logger);
+    INFO("one error names the unknown type, since Upgrade and FromTree log nothing for one");
+    REQUIRE(logger.errors.size() == 1);
 }
