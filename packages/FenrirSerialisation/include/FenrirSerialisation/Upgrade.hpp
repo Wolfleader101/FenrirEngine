@@ -1,5 +1,6 @@
 #pragma once
 
+#include "FenrirSerialisation/Diagnostic.hpp"
 #include "FenrirSerialisation/Value.hpp"
 
 #include "FenrirTypes/TypeRegistry.hpp"
@@ -8,6 +9,7 @@
 #include <functional>
 #include <map>
 #include <string_view>
+#include <vector>
 
 namespace Fenrir
 {
@@ -58,7 +60,7 @@ namespace Fenrir::Serialisation
         UnknownType,
     };
 
-    /** @brief What `Upgrade` gives: how it went and the version the tree is now at. */
+    /** @brief What `Upgrade` gives: how it went, the version the tree is now at and its diagnostics. */
     struct UpgradeResult
     {
         /** @brief How it went. */
@@ -68,6 +70,11 @@ namespace Fenrir::Serialisation
          * and the version passed in when `Newer` or `UnknownType`.
          */
         std::uint32_t version = 0;
+        /**
+         * @brief The one diagnostic of a `MissingStep` or a `Newer` tree, already logged once; none otherwise. It is
+         * at the tree's root, or at line 1, column 1 for a tree built in code.
+         */
+        std::vector<Diagnostic> diagnostics;
     };
 
     /**
@@ -80,7 +87,8 @@ namespace Fenrir::Serialisation
      * from wherever its file keeps it, so this names no envelope key.
      *
      * @param typeName The type's canonical or a former name.
+     * @param path The path diagnostics name the tree's file by, as `ReadText`'s and `FromTree`'s do.
      */
     [[nodiscard]] UpgradeResult Upgrade(const TypeRegistry& registry, std::string_view typeName,
-                                        std::uint32_t fromVersion, Value& tree, ILogger& logger);
+                                        std::uint32_t fromVersion, Value& tree, std::string_view path, ILogger& logger);
 } // namespace Fenrir::Serialisation

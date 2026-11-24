@@ -3,10 +3,31 @@
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirTypes/TypeDescription.hpp"
 
+#include <format>
+#include <string>
 #include <utility>
 
 namespace Fenrir::Serialisation
 {
+    namespace
+    {
+        // The result `status` at `version`, carrying its one diagnostic at `at`, logged once.
+        UpgradeResult Reported(UpgradeStatus status, std::uint32_t version, DiagnosticSeverity severity,
+                               std::string_view path, Location at, std::string message, ILogger& logger)
+        {
+            const Diagnostic diagnostic{.severity = severity,
+                                        .path = std::string(path),
+                                        .line = at.line,
+                                        .column = at.column,
+                                        .message = std::move(message)};
+            if (severity == DiagnosticSeverity::Error)
+                logger.Error("{}", FormatDiagnostic(diagnostic));
+            else
+                logger.Warn("{}", FormatDiagnostic(diagnostic));
+            return {.status = status, .version = version, .diagnostics = {diagnostic}};
+        }
+    } // namespace
+
     bool RegisterUpgrader(TypeRegistry& registry, std::string_view typeName, std::uint32_t fromVersion,
                           Upgrader upgrader, ILogger& logger)
     {
@@ -40,17 +61,19 @@ namespace Fenrir::Serialisation
     }
 
     UpgradeResult Upgrade(const TypeRegistry& registry, std::string_view typeName, std::uint32_t fromVersion,
-                          Value& tree, ILogger& logger)
+                          Value& tree, std::string_view path, ILogger& logger)
     {
         const TypeDescription* type = registry.Find(typeName);
         if (type == nullptr)
             return {.status = UpgradeStatus::UnknownType, .version = fromVersion};
+        // Taken before any step runs, since an upgrader may replace the root.
+        const Location root = tree.location.value_or(Location{});
         if (fromVersion > type->version)
-        {
-            logger.Warn("A {} written at version {} is newer than the type's version {}; it is read as it is.",
-                        type->name, fromVersion, type->version);
-            return {.status = UpgradeStatus::Newer, .version = fromVersion};
-        }
+            return Reported(UpgradeStatus::Newer, fromVersion, DiagnosticSeverity::Warning, path, root,
+                            std::format("A {} written at version {} is newer than the type's version {}; it is read "
+                                        "as it is.",
+                                        type->name, fromVersion, type->version),
+                            logger);
 
         static const UpgradersTag::Value none;
         const UpgradersTag::Value* attached = registry.Attachment<UpgradersTag>(typeName);
@@ -60,11 +83,11 @@ namespace Fenrir::Serialisation
         {
             const auto step = upgraders.find(version);
             if (step == upgraders.end())
-            {
-                logger.Error("The type {} has no upgrader from version {} to {}; its tree stays at version {}.",
-                             type->name, version, version + 1, version);
-                return {.status = UpgradeStatus::MissingStep, .version = version};
-            }
+                return Reported(UpgradeStatus::MissingStep, version, DiagnosticSeverity::Error, path, root,
+                                std::format("The type {} has no upgrader from version {} to {}; its tree stays at "
+                                            "version {}.",
+                                            type->name, version, version + 1, version),
+                                logger);
             step->second(version, tree);
             ++version;
         }

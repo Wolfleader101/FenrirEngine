@@ -95,6 +95,16 @@ namespace
         return RenameStep(steps, "power", "damage");
     }
 
+    // The path the tests name the sword's file by.
+    constexpr std::string_view Path = "sword.json5";
+
+    // A diagnostic's severity, path and location as one string, so a failure shows all of them.
+    std::string Where(const Diagnostic& diagnostic)
+    {
+        return std::string(diagnostic.severity == DiagnosticSeverity::Error ? "error" : "warning") + " at " +
+               diagnostic.path + ":" + std::to_string(diagnostic.line) + ":" + std::to_string(diagnostic.column);
+    }
+
     // The sword at version 1, as a file of that time holds its data.
     constexpr std::string_view SwordAtVersion1 = "{attack: 12.5, weight: 3}";
 } // namespace
@@ -110,7 +120,7 @@ TEST_CASE("A version 1 sword reaches version 3 through its two upgraders and Fro
     REQUIRE(RegisterUpgrader(registry, "MyGame::Sword", 2, PowerToDamage(steps), logger));
     Value tree = TreeOf(SwordAtVersion1);
 
-    const UpgradeResult upgraded = Upgrade(registry, "MyGame::Sword", 1, tree, logger);
+    const UpgradeResult upgraded = Upgrade(registry, "MyGame::Sword", 1, tree, Path, logger);
     INFO("the upgrade reached the type's version");
     REQUIRE(upgraded.status == UpgradeStatus::Succeeded);
     INFO("the version reached is the type's, 3");
@@ -119,7 +129,7 @@ TEST_CASE("A version 1 sword reaches version 3 through its two upgraders and Fro
     REQUIRE(steps == std::vector<std::uint32_t>{1, 2});
 
     Sword sword;
-    const BridgeResult read = FromTree(tree, SwordDescription, registry, Resolvers{}, &sword, "sword.json5", logger);
+    const BridgeResult read = FromTree(tree, SwordDescription, registry, Resolvers{}, &sword, Path, logger);
     INFO("the upgraded tree reads with nothing defaulted or dropped");
     REQUIRE(read.status == BridgeStatus::Succeeded);
     INFO("the field written as `attack` at version 1 reads as `damage`");
@@ -141,7 +151,7 @@ TEST_CASE("Upgraders run in version order whatever order they were registered in
     REQUIRE(RegisterUpgrader(registry, "MyGame::Sword", 1, AttackToPower(steps), logger));
     Value tree = TreeOf(SwordAtVersion1);
 
-    const UpgradeResult upgraded = Upgrade(registry, "MyGame::Sword", 1, tree, logger);
+    const UpgradeResult upgraded = Upgrade(registry, "MyGame::Sword", 1, tree, Path, logger);
     INFO("the version 1 step ran before the version 2 step, though the version 2 step was registered first");
     REQUIRE(steps == std::vector<std::uint32_t>{1, 2});
     INFO("so `attack` became `power` and then `damage`");
@@ -160,7 +170,7 @@ TEST_CASE("A tree at its type's version runs no upgrader", "[serialisation][upgr
     REQUIRE(RegisterUpgrader(registry, "MyGame::Sword", 2, PowerToDamage(steps), logger));
     Value tree = TreeOf("{damage: 12.5}");
 
-    const UpgradeResult upgraded = Upgrade(registry, "MyGame::Sword", 3, tree, logger);
+    const UpgradeResult upgraded = Upgrade(registry, "MyGame::Sword", 3, tree, Path, logger);
     INFO("a tree already at the type's version is current");
     REQUIRE(upgraded.status == UpgradeStatus::Succeeded);
     REQUIRE(upgraded.version == 3);
@@ -179,19 +189,26 @@ TEST_CASE("A missing step is one error and leaves the tree at the version it rea
     std::vector<std::uint32_t> steps;
     INFO("each upgrader registers, for a registered type and a version not yet taken");
     REQUIRE(RegisterUpgrader(registry, "MyGame::Sword", 1, AttackToPower(steps), logger));
-    Value tree = TreeOf(SwordAtVersion1);
+    // The root begins on line 2, column 3, where the diagnostic is located.
+    Value tree = TreeOf("\n  {attack: 12.5, weight: 3}", Path);
 
-    const UpgradeResult upgraded = Upgrade(registry, "MyGame::Sword", 1, tree, logger);
+    const UpgradeResult upgraded = Upgrade(registry, "MyGame::Sword", 1, tree, Path, logger);
     INFO("the upgrade stopped for want of the version 2 step");
     REQUIRE(upgraded.status == UpgradeStatus::MissingStep);
     INFO("the version reached is 2, the one the registered step gave");
     REQUIRE(upgraded.version == 2);
     INFO("the tree holds the version 2 form, the first step applied");
     REQUIRE(Equals(tree, TreeOf("{power: 12.5, weight: 3}")));
-    INFO("one error, naming the type and the missing step's version, and no warning");
-    REQUIRE(logger.errors.size() == 1);
-    REQUIRE(logger.errors[0].find("MyGame::Sword") != std::string::npos);
-    REQUIRE(logger.errors[0].find("version 2") != std::string::npos);
+    INFO("one diagnostic, an error");
+    REQUIRE(upgraded.diagnostics.size() == 1);
+    const Diagnostic& missing = upgraded.diagnostics[0];
+    INFO("it is an error in sword.json5 at the tree's root, 2:3; got " + Where(missing));
+    REQUIRE(Where(missing) == "error at sword.json5:2:3");
+    INFO("it names the type and the missing step's version");
+    REQUIRE(missing.message.find("MyGame::Sword") != std::string::npos);
+    REQUIRE(missing.message.find("version 2") != std::string::npos);
+    INFO("it was logged once as an error, as formatted, and no warning was");
+    REQUIRE(logger.errors == std::vector<std::string>{FormatDiagnostic(missing)});
     REQUIRE(logger.warnings.empty());
 }
 
@@ -202,9 +219,10 @@ TEST_CASE("A tree newer than its type is left as it is with one warning", "[seri
     std::vector<std::uint32_t> steps;
     INFO("each upgrader registers, for a registered type and a version not yet taken");
     REQUIRE(RegisterUpgrader(registry, "MyGame::Sword", 1, AttackToPower(steps), logger));
-    Value tree = TreeOf("{damage: 12.5, edge: 4}");
+    // The root begins on line 2, column 3, where the diagnostic is located.
+    Value tree = TreeOf("\n  {damage: 12.5, edge: 4}", Path);
 
-    const UpgradeResult upgraded = Upgrade(registry, "MyGame::Sword", 5, tree, logger);
+    const UpgradeResult upgraded = Upgrade(registry, "MyGame::Sword", 5, tree, Path, logger);
     INFO("a newer tree is not downgraded");
     REQUIRE(upgraded.status == UpgradeStatus::Newer);
     INFO("the version reached is the tree's own, 5");
@@ -212,10 +230,31 @@ TEST_CASE("A tree newer than its type is left as it is with one warning", "[seri
     INFO("no upgrader ran and the tree is unchanged");
     REQUIRE(steps.empty());
     REQUIRE(Equals(tree, TreeOf("{damage: 12.5, edge: 4}")));
-    INFO("one warning, naming the type, and no error");
-    REQUIRE(logger.warnings.size() == 1);
-    REQUIRE(logger.warnings[0].find("MyGame::Sword") != std::string::npos);
+    INFO("one diagnostic, a warning");
+    REQUIRE(upgraded.diagnostics.size() == 1);
+    const Diagnostic& newer = upgraded.diagnostics[0];
+    INFO("it is a warning in sword.json5 at the tree's root, 2:3; got " + Where(newer));
+    REQUIRE(Where(newer) == "warning at sword.json5:2:3");
+    INFO("it names the type");
+    REQUIRE(newer.message.find("MyGame::Sword") != std::string::npos);
+    INFO("it was logged once as a warning, as formatted, and no error was");
+    REQUIRE(logger.warnings == std::vector<std::string>{FormatDiagnostic(newer)});
     REQUIRE(logger.errors.empty());
+}
+
+TEST_CASE("A diagnostic about a tree built in code is at line 1, column 1", "[serialisation][upgrade]")
+{
+    Fenrir::TypeRegistry registry = SwordRegistry();
+    RecordingLogger logger;
+    Object object;
+    object.Add("attack", 12.5f);
+    Value tree(std::move(object));
+
+    const UpgradeResult upgraded = Upgrade(registry, "MyGame::Sword", 1, tree, Path, logger);
+    INFO("no upgrader steps from version 1, so there is one diagnostic");
+    REQUIRE(upgraded.diagnostics.size() == 1);
+    INFO("a root with no location is at 1:1; got " + Where(upgraded.diagnostics[0]));
+    REQUIRE(Where(upgraded.diagnostics[0]) == "error at sword.json5:1:1");
 }
 
 TEST_CASE("Upgrading a type the registry lacks changes nothing and logs nothing", "[serialisation][upgrade]")
@@ -224,13 +263,14 @@ TEST_CASE("Upgrading a type the registry lacks changes nothing and logs nothing"
     RecordingLogger logger;
     Value tree = TreeOf(SwordAtVersion1);
 
-    const UpgradeResult upgraded = Upgrade(registry, "MyGame::Shield", 1, tree, logger);
+    const UpgradeResult upgraded = Upgrade(registry, "MyGame::Shield", 1, tree, Path, logger);
     INFO("the type is unknown, so the caller keeps the tree to write back as FromTree's UnknownType does");
     REQUIRE(upgraded.status == UpgradeStatus::UnknownType);
     INFO("the version is the tree's own");
     REQUIRE(upgraded.version == 1);
-    INFO("the tree is unchanged and nothing was logged");
+    INFO("the tree is unchanged, and nothing was reported or logged");
     REQUIRE(Equals(tree, TreeOf(SwordAtVersion1)));
+    REQUIRE(upgraded.diagnostics.empty());
     REQUIRE(logger.errors.empty());
     REQUIRE(logger.warnings.empty());
 }
@@ -245,7 +285,7 @@ TEST_CASE("A former type name finds the type to register and run upgraders for",
     REQUIRE(RegisterUpgrader(registry, "MyGame::Sword", 2, PowerToDamage(steps), logger));
     Value tree = TreeOf(SwordAtVersion1);
 
-    const UpgradeResult upgraded = Upgrade(registry, "MyGame::Blade", 1, tree, logger);
+    const UpgradeResult upgraded = Upgrade(registry, "MyGame::Blade", 1, tree, Path, logger);
     INFO("both steps are the one type's, so a file naming the former type upgrades through both");
     REQUIRE(steps == std::vector<std::uint32_t>{1, 2});
     REQUIRE(upgraded.status == UpgradeStatus::Succeeded);
@@ -292,7 +332,7 @@ TEST_CASE("A second upgrader for one version is one error and the first is kept"
     REQUIRE(upgraders->size() == 1);
 
     Value tree = TreeOf(SwordAtVersion1);
-    (void)Upgrade(registry, "MyGame::Sword", 1, tree, logger);
+    (void)Upgrade(registry, "MyGame::Sword", 1, tree, Path, logger);
     INFO("the first upgrader is the one that runs");
     REQUIRE(firstSteps == std::vector<std::uint32_t>{1});
     REQUIRE(secondSteps.empty());
