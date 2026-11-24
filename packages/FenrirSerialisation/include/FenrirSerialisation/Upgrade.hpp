@@ -38,8 +38,9 @@ namespace Fenrir::Serialisation
      * @brief Adds `upgrader` to the upgraders of the type registered under `typeName`, its canonical or a former name,
      * as the step from `fromVersion` to the next.
      *
-     * Refused with one error through `logger`, adding nothing, when the registry has no type under `typeName`, when the
-     * type already has an upgrader from `fromVersion`, or when `upgrader` is empty. The C# side registers through this
+     * Refused with one error through `logger`, adding nothing, when the registry has no type under `typeName`, when
+     * `fromVersion` is 0 or at or above the type's version (a step that could never run), when the type already has
+     * an upgrader from `fromVersion`, or when `upgrader` is empty. The C# side registers through this
      * door too.
      *
      * @return Whether it was added.
