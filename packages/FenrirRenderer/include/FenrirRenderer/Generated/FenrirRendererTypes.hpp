@@ -108,6 +108,7 @@ namespace Fenrir::Generated::FenrirRendererTypes
 template <>
 struct Fenrir::Describe<Fenrir::AmbientOcclusion>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -115,6 +116,7 @@ struct Fenrir::Describe<Fenrir::AmbientOcclusion>
 template <>
 struct Fenrir::Describe<Fenrir::AnamorphicStreaks>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -122,6 +124,7 @@ struct Fenrir::Describe<Fenrir::AnamorphicStreaks>
 template <>
 struct Fenrir::Describe<Fenrir::BackgroundType>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -129,6 +132,7 @@ struct Fenrir::Describe<Fenrir::BackgroundType>
 template <>
 struct Fenrir::Describe<Fenrir::Bloom>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -136,6 +140,7 @@ struct Fenrir::Describe<Fenrir::Bloom>
 template <>
 struct Fenrir::Describe<Fenrir::ColourBackground>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -143,6 +148,7 @@ struct Fenrir::Describe<Fenrir::ColourBackground>
 template <>
 struct Fenrir::Describe<Fenrir::SceneBackground>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -150,6 +156,7 @@ struct Fenrir::Describe<Fenrir::SceneBackground>
 template <>
 struct Fenrir::Describe<Fenrir::CameraBackground>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -157,6 +164,7 @@ struct Fenrir::Describe<Fenrir::CameraBackground>
 template <>
 struct Fenrir::Describe<Fenrir::CameraDebugView>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -164,6 +172,7 @@ struct Fenrir::Describe<Fenrir::CameraDebugView>
 template <>
 struct Fenrir::Describe<Fenrir::ChromaticAberration>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -171,6 +180,7 @@ struct Fenrir::Describe<Fenrir::ChromaticAberration>
 template <>
 struct Fenrir::Describe<Fenrir::ColourGrading>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -178,6 +188,7 @@ struct Fenrir::Describe<Fenrir::ColourGrading>
 template <>
 struct Fenrir::Describe<Fenrir::FilmGrain>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -185,6 +196,7 @@ struct Fenrir::Describe<Fenrir::FilmGrain>
 template <>
 struct Fenrir::Describe<Fenrir::LensFlare>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -192,6 +204,7 @@ struct Fenrir::Describe<Fenrir::LensFlare>
 template <>
 struct Fenrir::Describe<Fenrir::Tonemapper>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -199,6 +212,7 @@ struct Fenrir::Describe<Fenrir::Tonemapper>
 template <>
 struct Fenrir::Describe<Fenrir::Vignette>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -206,6 +220,7 @@ struct Fenrir::Describe<Fenrir::Vignette>
 template <>
 struct Fenrir::Describe<Fenrir::CameraLook>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -213,6 +228,7 @@ struct Fenrir::Describe<Fenrir::CameraLook>
 template <>
 struct Fenrir::Describe<Fenrir::Orthographic>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -220,6 +236,7 @@ struct Fenrir::Describe<Fenrir::Orthographic>
 template <>
 struct Fenrir::Describe<Fenrir::Perspective>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -227,6 +244,7 @@ struct Fenrir::Describe<Fenrir::Perspective>
 template <>
 struct Fenrir::Describe<Fenrir::ProjectionType>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -234,6 +252,7 @@ struct Fenrir::Describe<Fenrir::ProjectionType>
 template <>
 struct Fenrir::Describe<Fenrir::Projection>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -241,6 +260,7 @@ struct Fenrir::Describe<Fenrir::Projection>
 template <>
 struct Fenrir::Describe<Fenrir::Reflections>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -248,6 +268,7 @@ struct Fenrir::Describe<Fenrir::Reflections>
 template <>
 struct Fenrir::Describe<Fenrir::ImageTarget>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -255,6 +276,7 @@ struct Fenrir::Describe<Fenrir::ImageTarget>
 template <>
 struct Fenrir::Describe<Fenrir::RenderTargetType>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -262,6 +284,7 @@ struct Fenrir::Describe<Fenrir::RenderTargetType>
 template <>
 struct Fenrir::Describe<Fenrir::WindowTarget>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -269,6 +292,7 @@ struct Fenrir::Describe<Fenrir::WindowTarget>
 template <>
 struct Fenrir::Describe<Fenrir::RenderTarget>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -276,6 +300,7 @@ struct Fenrir::Describe<Fenrir::RenderTarget>
 template <>
 struct Fenrir::Describe<Fenrir::Viewport>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -283,6 +308,7 @@ struct Fenrir::Describe<Fenrir::Viewport>
 template <>
 struct Fenrir::Describe<Fenrir::Camera>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -290,6 +316,7 @@ struct Fenrir::Describe<Fenrir::Camera>
 template <>
 struct Fenrir::Describe<Fenrir::ColourSky>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -297,6 +324,7 @@ struct Fenrir::Describe<Fenrir::ColourSky>
 template <>
 struct Fenrir::Describe<Fenrir::CubemapSky>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -304,6 +332,7 @@ struct Fenrir::Describe<Fenrir::CubemapSky>
 template <>
 struct Fenrir::Describe<Fenrir::DirectionalLight>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -311,6 +340,7 @@ struct Fenrir::Describe<Fenrir::DirectionalLight>
 template <>
 struct Fenrir::Describe<Fenrir::GraphicsBackend>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -318,6 +348,7 @@ struct Fenrir::Describe<Fenrir::GraphicsBackend>
 template <>
 struct Fenrir::Describe<Fenrir::InstancedMeshRenderer>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -325,6 +356,7 @@ struct Fenrir::Describe<Fenrir::InstancedMeshRenderer>
 template <>
 struct Fenrir::Describe<Fenrir::MeshRenderer>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -332,6 +364,7 @@ struct Fenrir::Describe<Fenrir::MeshRenderer>
 template <>
 struct Fenrir::Describe<Fenrir::PanoramaSky>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -339,6 +372,7 @@ struct Fenrir::Describe<Fenrir::PanoramaSky>
 template <>
 struct Fenrir::Describe<Fenrir::PointLight>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -346,6 +380,7 @@ struct Fenrir::Describe<Fenrir::PointLight>
 template <>
 struct Fenrir::Describe<Fenrir::RectLight>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -353,6 +388,7 @@ struct Fenrir::Describe<Fenrir::RectLight>
 template <>
 struct Fenrir::Describe<Fenrir::Vsync>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -360,6 +396,7 @@ struct Fenrir::Describe<Fenrir::Vsync>
 template <>
 struct Fenrir::Describe<Fenrir::RendererConfig>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Settings;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -367,6 +404,7 @@ struct Fenrir::Describe<Fenrir::RendererConfig>
 template <>
 struct Fenrir::Describe<Fenrir::RendererStats>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -374,6 +412,7 @@ struct Fenrir::Describe<Fenrir::RendererStats>
 template <>
 struct Fenrir::Describe<Fenrir::SkinnedMesh>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -381,6 +420,7 @@ struct Fenrir::Describe<Fenrir::SkinnedMesh>
 template <>
 struct Fenrir::Describe<Fenrir::SkyType>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -388,6 +428,7 @@ struct Fenrir::Describe<Fenrir::SkyType>
 template <>
 struct Fenrir::Describe<Fenrir::Sky>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SceneResource;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -395,6 +436,7 @@ struct Fenrir::Describe<Fenrir::Sky>
 template <>
 struct Fenrir::Describe<Fenrir::SkyLight>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SceneResource;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -402,6 +444,7 @@ struct Fenrir::Describe<Fenrir::SkyLight>
 template <>
 struct Fenrir::Describe<Fenrir::SpotLight>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -409,6 +452,7 @@ struct Fenrir::Describe<Fenrir::SpotLight>
 template <>
 struct Fenrir::Describe<Fenrir::WorldQuad2D>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 

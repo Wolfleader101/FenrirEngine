@@ -67,6 +67,7 @@ namespace Fenrir::Generated::FenrirAnimationTypes
 template <>
 struct Fenrir::Describe<Fenrir::AdditiveReference>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -74,6 +75,7 @@ struct Fenrir::Describe<Fenrir::AdditiveReference>
 template <>
 struct Fenrir::Describe<Fenrir::AnimationConfig>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Settings;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -81,6 +83,7 @@ struct Fenrir::Describe<Fenrir::AnimationConfig>
 template <>
 struct Fenrir::Describe<Fenrir::ClipEventId>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -88,6 +91,7 @@ struct Fenrir::Describe<Fenrir::ClipEventId>
 template <>
 struct Fenrir::Describe<Fenrir::AnimationEvent>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Event;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -95,6 +99,7 @@ struct Fenrir::Describe<Fenrir::AnimationEvent>
 template <>
 struct Fenrir::Describe<Fenrir::AnimationEventsDropped>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Event;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -102,6 +107,7 @@ struct Fenrir::Describe<Fenrir::AnimationEventsDropped>
 template <>
 struct Fenrir::Describe<Fenrir::ClipLoop>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -109,6 +115,7 @@ struct Fenrir::Describe<Fenrir::ClipLoop>
 template <>
 struct Fenrir::Describe<Fenrir::FadeCurve>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -116,6 +123,7 @@ struct Fenrir::Describe<Fenrir::FadeCurve>
 template <>
 struct Fenrir::Describe<Fenrir::LayerMode>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -123,6 +131,7 @@ struct Fenrir::Describe<Fenrir::LayerMode>
 template <>
 struct Fenrir::Describe<Fenrir::AnimationLayer>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -130,6 +139,7 @@ struct Fenrir::Describe<Fenrir::AnimationLayer>
 template <>
 struct Fenrir::Describe<Fenrir::Animator>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -137,6 +147,7 @@ struct Fenrir::Describe<Fenrir::Animator>
 template <>
 struct Fenrir::Describe<Fenrir::ClipFinished>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Event;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -144,6 +155,7 @@ struct Fenrir::Describe<Fenrir::ClipFinished>
 template <>
 struct Fenrir::Describe<Fenrir::MaskScope>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -151,6 +163,7 @@ struct Fenrir::Describe<Fenrir::MaskScope>
 template <>
 struct Fenrir::Describe<Fenrir::PlaybackInfo>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 

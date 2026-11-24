@@ -66,6 +66,7 @@ namespace Fenrir::Generated::FenrirSkeletonTypes
 template <>
 struct Fenrir::Describe<Fenrir::AttachmentState>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -73,6 +74,7 @@ struct Fenrir::Describe<Fenrir::AttachmentState>
 template <>
 struct Fenrir::Describe<Fenrir::BoneName>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -80,6 +82,7 @@ struct Fenrir::Describe<Fenrir::BoneName>
 template <>
 struct Fenrir::Describe<Fenrir::BoneAttachment>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -87,6 +90,7 @@ struct Fenrir::Describe<Fenrir::BoneAttachment>
 template <>
 struct Fenrir::Describe<Fenrir::Channels>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -94,6 +98,7 @@ struct Fenrir::Describe<Fenrir::Channels>
 template <>
 struct Fenrir::Describe<Fenrir::DetachMode>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -101,6 +106,7 @@ struct Fenrir::Describe<Fenrir::DetachMode>
 template <>
 struct Fenrir::Describe<Fenrir::DetachResult>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -108,6 +114,7 @@ struct Fenrir::Describe<Fenrir::DetachResult>
 template <>
 struct Fenrir::Describe<Fenrir::OverrideScope>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -115,6 +122,7 @@ struct Fenrir::Describe<Fenrir::OverrideScope>
 template <>
 struct Fenrir::Describe<Fenrir::PoseKind>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -122,6 +130,7 @@ struct Fenrir::Describe<Fenrir::PoseKind>
 template <>
 struct Fenrir::Describe<Fenrir::PoseSpace>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -129,6 +138,7 @@ struct Fenrir::Describe<Fenrir::PoseSpace>
 template <>
 struct Fenrir::Describe<Fenrir::PoseState>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -136,6 +146,7 @@ struct Fenrir::Describe<Fenrir::PoseState>
 template <>
 struct Fenrir::Describe<Fenrir::PoseTiming>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -143,6 +154,7 @@ struct Fenrir::Describe<Fenrir::PoseTiming>
 template <>
 struct Fenrir::Describe<Fenrir::SkeletonPose>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -150,6 +162,7 @@ struct Fenrir::Describe<Fenrir::SkeletonPose>
 template <>
 struct Fenrir::Describe<Fenrir::Target>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 

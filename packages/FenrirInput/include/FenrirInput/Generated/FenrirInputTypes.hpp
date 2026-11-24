@@ -55,6 +55,7 @@ namespace Fenrir::Generated::FenrirInputTypes
 template <>
 struct Fenrir::Describe<Fenrir::GamepadAxis>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -62,6 +63,7 @@ struct Fenrir::Describe<Fenrir::GamepadAxis>
 template <>
 struct Fenrir::Describe<Fenrir::GamepadId>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -69,6 +71,7 @@ struct Fenrir::Describe<Fenrir::GamepadId>
 template <>
 struct Fenrir::Describe<Fenrir::GamepadAxisEvent>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Event;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -76,6 +79,7 @@ struct Fenrir::Describe<Fenrir::GamepadAxisEvent>
 template <>
 struct Fenrir::Describe<Fenrir::GamepadButton>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -83,6 +87,7 @@ struct Fenrir::Describe<Fenrir::GamepadButton>
 template <>
 struct Fenrir::Describe<Fenrir::GamepadButtonEvent>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Event;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -90,6 +95,7 @@ struct Fenrir::Describe<Fenrir::GamepadButtonEvent>
 template <>
 struct Fenrir::Describe<Fenrir::GamepadConnectionEvent>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Event;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -97,6 +103,7 @@ struct Fenrir::Describe<Fenrir::GamepadConnectionEvent>
 template <>
 struct Fenrir::Describe<Fenrir::Key>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -104,6 +111,7 @@ struct Fenrir::Describe<Fenrir::Key>
 template <>
 struct Fenrir::Describe<Fenrir::KeyModifiers>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -111,6 +119,7 @@ struct Fenrir::Describe<Fenrir::KeyModifiers>
 template <>
 struct Fenrir::Describe<Fenrir::Scancode>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -118,6 +127,7 @@ struct Fenrir::Describe<Fenrir::Scancode>
 template <>
 struct Fenrir::Describe<Fenrir::WindowId>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -125,6 +135,7 @@ struct Fenrir::Describe<Fenrir::WindowId>
 template <>
 struct Fenrir::Describe<Fenrir::KeyEvent>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Event;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -132,6 +143,7 @@ struct Fenrir::Describe<Fenrir::KeyEvent>
 template <>
 struct Fenrir::Describe<Fenrir::MouseButton>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -139,6 +151,7 @@ struct Fenrir::Describe<Fenrir::MouseButton>
 template <>
 struct Fenrir::Describe<Fenrir::MouseButtonEvent>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Event;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -146,6 +159,7 @@ struct Fenrir::Describe<Fenrir::MouseButtonEvent>
 template <>
 struct Fenrir::Describe<Fenrir::MouseMotionEvent>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Event;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -153,6 +167,7 @@ struct Fenrir::Describe<Fenrir::MouseMotionEvent>
 template <>
 struct Fenrir::Describe<Fenrir::MouseScrollEvent>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Event;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -160,6 +175,7 @@ struct Fenrir::Describe<Fenrir::MouseScrollEvent>
 template <>
 struct Fenrir::Describe<Fenrir::TextEvent>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Event;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -167,6 +183,7 @@ struct Fenrir::Describe<Fenrir::TextEvent>
 template <>
 struct Fenrir::Describe<Fenrir::WindowFocusEvent>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Event;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 

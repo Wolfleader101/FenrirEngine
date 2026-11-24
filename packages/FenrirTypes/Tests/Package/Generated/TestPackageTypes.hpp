@@ -79,6 +79,7 @@ namespace Fenrir::Generated::TestPackageTypes
 template <>
 struct Fenrir::Describe<Test::Vec2>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::BoundType;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -86,6 +87,7 @@ struct Fenrir::Describe<Test::Vec2>
 template <>
 struct Fenrir::Describe<Test::Box>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -93,6 +95,7 @@ struct Fenrir::Describe<Test::Box>
 template <>
 struct Fenrir::Describe<Test::Layers>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::AppResource;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -100,6 +103,7 @@ struct Fenrir::Describe<Test::Layers>
 template <>
 struct Fenrir::Describe<Test::Rarity>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -107,6 +111,7 @@ struct Fenrir::Describe<Test::Rarity>
 template <>
 struct Fenrir::Describe<Test::Marker>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -114,6 +119,7 @@ struct Fenrir::Describe<Test::Marker>
 template <>
 struct Fenrir::Describe<Test::Options>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Settings;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -121,6 +127,7 @@ struct Fenrir::Describe<Test::Options>
 template <>
 struct Fenrir::Describe<Test::Stat>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -128,6 +135,7 @@ struct Fenrir::Describe<Test::Stat>
 template <>
 struct Fenrir::Describe<Test::WeaponData>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::DataAsset;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -135,6 +143,7 @@ struct Fenrir::Describe<Test::WeaponData>
 template <>
 struct Fenrir::Describe<Test::Sword>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::DataAsset;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -142,6 +151,7 @@ struct Fenrir::Describe<Test::Sword>
 template <>
 struct Fenrir::Describe<Test::VolumeKind>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -149,6 +159,7 @@ struct Fenrir::Describe<Test::VolumeKind>
 template <>
 struct Fenrir::Describe<Test::Volume>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -156,6 +167,7 @@ struct Fenrir::Describe<Test::Volume>
 template <>
 struct Fenrir::Describe<Test::Trigger>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -163,6 +175,7 @@ struct Fenrir::Describe<Test::Trigger>
 template <>
 struct Fenrir::Describe<Test::Weather>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SceneResource;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 

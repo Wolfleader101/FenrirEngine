@@ -127,6 +127,7 @@ namespace Fenrir::Generated::FenrirPhysicsTypes
 template <>
 struct Fenrir::Describe<Fenrir::BallJoint>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -134,6 +135,7 @@ struct Fenrir::Describe<Fenrir::BallJoint>
 template <>
 struct Fenrir::Describe<Fenrir::BoxShape>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -141,6 +143,7 @@ struct Fenrir::Describe<Fenrir::BoxShape>
 template <>
 struct Fenrir::Describe<Fenrir::CapsuleShape>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -148,6 +151,7 @@ struct Fenrir::Describe<Fenrir::CapsuleShape>
 template <>
 struct Fenrir::Describe<Fenrir::GroundState>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -155,6 +159,7 @@ struct Fenrir::Describe<Fenrir::GroundState>
 template <>
 struct Fenrir::Describe<Fenrir::CharacterState>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -162,6 +167,7 @@ struct Fenrir::Describe<Fenrir::CharacterState>
 template <>
 struct Fenrir::Describe<Fenrir::CharacterBody>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -169,6 +175,7 @@ struct Fenrir::Describe<Fenrir::CharacterBody>
 template <>
 struct Fenrir::Describe<Fenrir::CollisionMesh>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -176,6 +183,7 @@ struct Fenrir::Describe<Fenrir::CollisionMesh>
 template <>
 struct Fenrir::Describe<Fenrir::ConvexHullShape>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -183,6 +191,7 @@ struct Fenrir::Describe<Fenrir::ConvexHullShape>
 template <>
 struct Fenrir::Describe<Fenrir::MeshShape>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -190,6 +199,7 @@ struct Fenrir::Describe<Fenrir::MeshShape>
 template <>
 struct Fenrir::Describe<Fenrir::ShapeType>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -197,6 +207,7 @@ struct Fenrir::Describe<Fenrir::ShapeType>
 template <>
 struct Fenrir::Describe<Fenrir::SphereShape>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -204,6 +215,7 @@ struct Fenrir::Describe<Fenrir::SphereShape>
 template <>
 struct Fenrir::Describe<Fenrir::CollisionShape>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -211,6 +223,7 @@ struct Fenrir::Describe<Fenrir::CollisionShape>
 template <>
 struct Fenrir::Describe<Fenrir::Collider>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -218,6 +231,7 @@ struct Fenrir::Describe<Fenrir::Collider>
 template <>
 struct Fenrir::Describe<Fenrir::CollisionFilter>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -225,6 +239,7 @@ struct Fenrir::Describe<Fenrir::CollisionFilter>
 template <>
 struct Fenrir::Describe<Fenrir::CollisionLayer>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -232,6 +247,7 @@ struct Fenrir::Describe<Fenrir::CollisionLayer>
 template <>
 struct Fenrir::Describe<Fenrir::Contact>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -239,6 +255,7 @@ struct Fenrir::Describe<Fenrir::Contact>
 template <>
 struct Fenrir::Describe<Fenrir::ContactBegin>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Event;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -246,6 +263,7 @@ struct Fenrir::Describe<Fenrir::ContactBegin>
 template <>
 struct Fenrir::Describe<Fenrir::ContactEnd>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Event;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -253,6 +271,7 @@ struct Fenrir::Describe<Fenrir::ContactEnd>
 template <>
 struct Fenrir::Describe<Fenrir::ContactEvents>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -260,6 +279,7 @@ struct Fenrir::Describe<Fenrir::ContactEvents>
 template <>
 struct Fenrir::Describe<Fenrir::JointSpring>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -267,6 +287,7 @@ struct Fenrir::Describe<Fenrir::JointSpring>
 template <>
 struct Fenrir::Describe<Fenrir::DistanceJoint>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -274,6 +295,7 @@ struct Fenrir::Describe<Fenrir::DistanceJoint>
 template <>
 struct Fenrir::Describe<Fenrir::FixedJoint>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -281,6 +303,7 @@ struct Fenrir::Describe<Fenrir::FixedJoint>
 template <>
 struct Fenrir::Describe<Fenrir::JointLimits>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -288,6 +311,7 @@ struct Fenrir::Describe<Fenrir::JointLimits>
 template <>
 struct Fenrir::Describe<Fenrir::JointMotorMode>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -295,6 +319,7 @@ struct Fenrir::Describe<Fenrir::JointMotorMode>
 template <>
 struct Fenrir::Describe<Fenrir::JointMotor>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -302,6 +327,7 @@ struct Fenrir::Describe<Fenrir::JointMotor>
 template <>
 struct Fenrir::Describe<Fenrir::HingeJoint>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -309,6 +335,7 @@ struct Fenrir::Describe<Fenrir::HingeJoint>
 template <>
 struct Fenrir::Describe<Fenrir::JointFrame>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -316,6 +343,7 @@ struct Fenrir::Describe<Fenrir::JointFrame>
 template <>
 struct Fenrir::Describe<Fenrir::JointType>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -323,6 +351,7 @@ struct Fenrir::Describe<Fenrir::JointType>
 template <>
 struct Fenrir::Describe<Fenrir::SliderJoint>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -330,6 +359,7 @@ struct Fenrir::Describe<Fenrir::SliderJoint>
 template <>
 struct Fenrir::Describe<Fenrir::SwingTwistMotor>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -337,6 +367,7 @@ struct Fenrir::Describe<Fenrir::SwingTwistMotor>
 template <>
 struct Fenrir::Describe<Fenrir::SwingTwistJoint>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -344,6 +375,7 @@ struct Fenrir::Describe<Fenrir::SwingTwistJoint>
 template <>
 struct Fenrir::Describe<Fenrir::JointKind>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -351,6 +383,7 @@ struct Fenrir::Describe<Fenrir::JointKind>
 template <>
 struct Fenrir::Describe<Fenrir::Joint>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -358,6 +391,7 @@ struct Fenrir::Describe<Fenrir::Joint>
 template <>
 struct Fenrir::Describe<Fenrir::JointBroken>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Event;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -365,6 +399,7 @@ struct Fenrir::Describe<Fenrir::JointBroken>
 template <>
 struct Fenrir::Describe<Fenrir::JointFrames>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -372,6 +407,7 @@ struct Fenrir::Describe<Fenrir::JointFrames>
 template <>
 struct Fenrir::Describe<Fenrir::JointState>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -379,6 +415,7 @@ struct Fenrir::Describe<Fenrir::JointState>
 template <>
 struct Fenrir::Describe<Fenrir::MotionType>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -386,6 +423,7 @@ struct Fenrir::Describe<Fenrir::MotionType>
 template <>
 struct Fenrir::Describe<Fenrir::MotorcycleLean>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -393,6 +431,7 @@ struct Fenrir::Describe<Fenrir::MotorcycleLean>
 template <>
 struct Fenrir::Describe<Fenrir::VehicleEngine>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -400,6 +439,7 @@ struct Fenrir::Describe<Fenrir::VehicleEngine>
 template <>
 struct Fenrir::Describe<Fenrir::TransmissionMode>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -407,6 +447,7 @@ struct Fenrir::Describe<Fenrir::TransmissionMode>
 template <>
 struct Fenrir::Describe<Fenrir::VehicleTransmission>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -414,6 +455,7 @@ struct Fenrir::Describe<Fenrir::VehicleTransmission>
 template <>
 struct Fenrir::Describe<Fenrir::MotorcycleVehicle>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -421,6 +463,7 @@ struct Fenrir::Describe<Fenrir::MotorcycleVehicle>
 template <>
 struct Fenrir::Describe<Fenrir::MoveCastHit>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -428,6 +471,7 @@ struct Fenrir::Describe<Fenrir::MoveCastHit>
 template <>
 struct Fenrir::Describe<Fenrir::OverlapHit>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -435,6 +479,7 @@ struct Fenrir::Describe<Fenrir::OverlapHit>
 template <>
 struct Fenrir::Describe<Fenrir::PenetrationHit>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -442,6 +487,7 @@ struct Fenrir::Describe<Fenrir::PenetrationHit>
 template <>
 struct Fenrir::Describe<Fenrir::PhysicsConfig>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Settings;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -449,6 +495,7 @@ struct Fenrir::Describe<Fenrir::PhysicsConfig>
 template <>
 struct Fenrir::Describe<Fenrir::PhysicsMaterial>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -456,6 +503,7 @@ struct Fenrir::Describe<Fenrir::PhysicsMaterial>
 template <>
 struct Fenrir::Describe<Fenrir::QueryFilter>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -463,6 +511,7 @@ struct Fenrir::Describe<Fenrir::QueryFilter>
 template <>
 struct Fenrir::Describe<Fenrir::RaycastHit>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -470,6 +519,7 @@ struct Fenrir::Describe<Fenrir::RaycastHit>
 template <>
 struct Fenrir::Describe<Fenrir::RigidBody>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -477,6 +527,7 @@ struct Fenrir::Describe<Fenrir::RigidBody>
 template <>
 struct Fenrir::Describe<Fenrir::ShapeCastHit>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -484,6 +535,7 @@ struct Fenrir::Describe<Fenrir::ShapeCastHit>
 template <>
 struct Fenrir::Describe<Fenrir::VehicleTrack>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -491,6 +543,7 @@ struct Fenrir::Describe<Fenrir::VehicleTrack>
 template <>
 struct Fenrir::Describe<Fenrir::TrackedVehicle>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -498,6 +551,7 @@ struct Fenrir::Describe<Fenrir::TrackedVehicle>
 template <>
 struct Fenrir::Describe<Fenrir::TrailerVehicle>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -505,6 +559,7 @@ struct Fenrir::Describe<Fenrir::TrailerVehicle>
 template <>
 struct Fenrir::Describe<Fenrir::Trigger>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -512,6 +567,7 @@ struct Fenrir::Describe<Fenrir::Trigger>
 template <>
 struct Fenrir::Describe<Fenrir::TriggerEnter>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Event;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -519,6 +575,7 @@ struct Fenrir::Describe<Fenrir::TriggerEnter>
 template <>
 struct Fenrir::Describe<Fenrir::TriggerExit>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Event;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -526,6 +583,7 @@ struct Fenrir::Describe<Fenrir::TriggerExit>
 template <>
 struct Fenrir::Describe<Fenrir::VehicleInput>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -533,6 +591,7 @@ struct Fenrir::Describe<Fenrir::VehicleInput>
 template <>
 struct Fenrir::Describe<Fenrir::VehicleType>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -540,6 +599,7 @@ struct Fenrir::Describe<Fenrir::VehicleType>
 template <>
 struct Fenrir::Describe<Fenrir::WheeledVehicle>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -547,6 +607,7 @@ struct Fenrir::Describe<Fenrir::WheeledVehicle>
 template <>
 struct Fenrir::Describe<Fenrir::VehicleKind>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -554,6 +615,7 @@ struct Fenrir::Describe<Fenrir::VehicleKind>
 template <>
 struct Fenrir::Describe<Fenrir::VehicleProbe>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -561,6 +623,7 @@ struct Fenrir::Describe<Fenrir::VehicleProbe>
 template <>
 struct Fenrir::Describe<Fenrir::VehicleState>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -568,6 +631,7 @@ struct Fenrir::Describe<Fenrir::VehicleState>
 template <>
 struct Fenrir::Describe<Fenrir::Vehicle>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -575,6 +639,7 @@ struct Fenrir::Describe<Fenrir::Vehicle>
 template <>
 struct Fenrir::Describe<Fenrir::VehicleAntiRollBar>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -582,6 +647,7 @@ struct Fenrir::Describe<Fenrir::VehicleAntiRollBar>
 template <>
 struct Fenrir::Describe<Fenrir::VehicleDifferential>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -589,6 +655,7 @@ struct Fenrir::Describe<Fenrir::VehicleDifferential>
 template <>
 struct Fenrir::Describe<Fenrir::VehicleSuspension>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -596,6 +663,7 @@ struct Fenrir::Describe<Fenrir::VehicleSuspension>
 template <>
 struct Fenrir::Describe<Fenrir::VehicleTrackSide>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -603,6 +671,7 @@ struct Fenrir::Describe<Fenrir::VehicleTrackSide>
 template <>
 struct Fenrir::Describe<Fenrir::VehicleTyre>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -610,6 +679,7 @@ struct Fenrir::Describe<Fenrir::VehicleTyre>
 template <>
 struct Fenrir::Describe<Fenrir::VehicleWheelState>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -617,6 +687,7 @@ struct Fenrir::Describe<Fenrir::VehicleWheelState>
 template <>
 struct Fenrir::Describe<Fenrir::VehicleWheel>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 

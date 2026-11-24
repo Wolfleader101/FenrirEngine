@@ -39,6 +39,7 @@ namespace Fenrir::Generated::FenrirScriptingTypes
 template <>
 struct Fenrir::Describe<Fenrir::ChangeError>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -46,6 +47,7 @@ struct Fenrir::Describe<Fenrir::ChangeError>
 template <>
 struct Fenrir::Describe<Fenrir::RegistryError>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -53,6 +55,7 @@ struct Fenrir::Describe<Fenrir::RegistryError>
 template <>
 struct Fenrir::Describe<Fenrir::ScriptingConfig>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Settings;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
