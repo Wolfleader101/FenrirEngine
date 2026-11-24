@@ -736,7 +736,7 @@ internal sealed class Describer
             // The engine's own fixed-layout values, recognised by qualified name: the tool is binding-agnostic but not
             // engine-agnostic. Neither is described for the kind.
             case CXTypeKind.CXType_Record when IsEngineEntity(type):
-                // Where it is held, for CheckDataAssetEntities to name.
+                // CheckDataAssetEntities walks descriptions, which keep no declarations: this points it at the field.
                 m_entityFields.TryAdd(subject, at);
                 return new FieldType("entity");
             case CXTypeKind.CXType_Record when AssetHandleTarget(type) is { } target:
