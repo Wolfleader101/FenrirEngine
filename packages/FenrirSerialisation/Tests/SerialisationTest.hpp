@@ -1,5 +1,9 @@
 #pragma once
 
+#include "FenrirSerialisation/Diagnostic.hpp"
+#include "FenrirSerialisation/Text.hpp"
+#include "FenrirSerialisation/Value.hpp"
+
 #include "FenrirLogger/ILogger.hpp"
 
 #include <filesystem>
@@ -59,6 +63,13 @@ namespace SerialisationTest
     {
         std::ifstream file(path, std::ios::binary);
         return std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+    }
+
+    // The tree `text` reads as, its diagnostics naming `path`; the text must be valid JSON5.
+    inline Fenrir::Serialisation::Value TreeOf(std::string_view text, std::string_view path = "test.json5")
+    {
+        RecordingLogger logger;
+        return Fenrir::Serialisation::ReadText(text, path, logger).tree.value_or(Fenrir::Serialisation::Value{});
     }
 
     // A fixture's bytes, by its path under the fixtures directory.

@@ -3,6 +3,7 @@
 // also compiles alone is checked by the one-line sources the test CMakeLists.txt writes per header.
 #include "FenrirSerialisation/Bridge.hpp"
 #include "FenrirSerialisation/Text.hpp"
+#include "FenrirSerialisation/Upgrade.hpp"
 #include "FenrirSerialisation/Value.hpp"
 
 #if __has_include("FenrirAssets/AssetHandle.hpp") || __has_include("FenrirScene/Scene.hpp")

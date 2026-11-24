@@ -28,6 +28,7 @@ using namespace BridgeTest;
 using Fenrir::EntityValue;
 using Fenrir::ReferenceValue;
 using SerialisationTest::RecordingLogger;
+using SerialisationTest::TreeOf;
 
 namespace
 {
@@ -58,14 +59,6 @@ namespace
         Fenrir::TypeRegistry registry;
         RegisterBridgeTypes(registry);
         return ToTree(value, type, registry, resolvers);
-    }
-
-    // The tree `text` reads as; the text must be valid JSON5.
-    Value TreeOf(std::string_view text)
-    {
-        RecordingLogger logger;
-        ReadTreeResult read = ReadText(text, Path, logger);
-        return read.tree.value_or(Value{});
     }
 
     // Reads `text` into `value` through `resolvers`.
