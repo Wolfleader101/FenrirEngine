@@ -79,13 +79,13 @@ TEST_CASE("Relative paths resolve against the asset root", "[assets][loading][pa
     REQUIRE(test.store.IsValid(image.handle));
 }
 
-TEST_CASE("Absolute paths are taken as given", "[assets][loading][paths]")
+TEST_CASE("An imported asset's absolute path outside the root is taken as given", "[assets][loading][paths]")
 {
     AssetsApp test({Fixtures() / "no-such-root"});
     const Fenrir::LoadResult<Fenrir::Image> image =
         test.store.Load<Fenrir::Image>((Fixtures() / "fourbytwo.png").string(), Fenrir::AssetOwner::App());
 
-    INFO("an absolute path loads whatever the asset root is");
+    INFO("an image loads by an absolute path whatever the asset root is; a data asset's may not (AssetPaths.cpp)");
     REQUIRE(image.Ok());
 }
 

@@ -14,6 +14,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "AssetSource.hpp"
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirTypes/TypeDescription.hpp"
 
@@ -88,6 +89,9 @@ namespace Fenrir::Detail
         /** @brief The app's type registry, which data asset types are found and checked in. */
         const TypeRegistry* types = nullptr;
         std::filesystem::path root;
+        /** @brief Where data asset envelopes are read from: the directory source over `root`, unless a test swapped it.
+         */
+        std::unique_ptr<AssetSource> source;
         std::array<AssetTable, AssetKindCount> tables;
         OwnerId nextSceneOwner = 1;
         /** @brief By model file key, the units its last import left out, for the files that left any out. */

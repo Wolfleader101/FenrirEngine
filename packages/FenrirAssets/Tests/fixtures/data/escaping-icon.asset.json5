@@ -1,0 +1,10 @@
+// A sword whose icon's path leaves the asset root through `..`, which a path in a file may not.
+{
+  format: 1,
+  type: "AssetsTest::Sword",
+  version: 2,
+  data: {
+    displayName: "Wandering sword",
+    icon: "../fourbytwo.png",
+  },
+}

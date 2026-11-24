@@ -8,14 +8,18 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
+#include "AssetSource.hpp"
 #include "AssetStoreState.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirSerialisation/ReadTree.hpp"
 #include "FenrirSerialisation/Upgrade.hpp"
 #include "FenrirSerialisation/Value.hpp"
+#include "FenrirTypes/FieldInfo.hpp"
 #include "FenrirTypes/TypeDescription.hpp"
 #include "FenrirTypes/TypeRegistry.hpp"
+#include "FenrirTypes/ValueRef.hpp"
 
 namespace Fenrir::Detail
 {
@@ -101,6 +105,47 @@ namespace Fenrir::Detail
         {
             to.insert(to.end(), std::make_move_iterator(from.begin()), std::make_move_iterator(from.end()));
         }
+
+        // The string node under `node` whose text is the one at `text`: the bridge hands a resolver the node's own
+        // text, so its address finds the node, and with it the line and column. Null when none is.
+        const Ser::Value* StringAt(const Ser::Value& node, const char* text)
+        {
+            switch (node.Kind())
+            {
+            case Ser::ValueKind::String:
+                return node.AsString().data() == text ? &node : nullptr;
+            case Ser::ValueKind::Object:
+                for (const Ser::Member& member : node.AsObject().members)
+                {
+                    if (const Ser::Value* found = StringAt(member.value, text))
+                    {
+                        return found;
+                    }
+                }
+                return nullptr;
+            case Ser::ValueKind::Array:
+                for (const Ser::Element& element : node.AsArray().elements)
+                {
+                    if (const Ser::Value* found = StringAt(element.value, text))
+                    {
+                        return found;
+                    }
+                }
+                return nullptr;
+            default:
+                return nullptr;
+            }
+        }
+
+        // A reference path the file names that the path rules refuse: where its text is, which field held it, and
+        // why.
+        struct RefusedPath
+        {
+            const char* text = nullptr;
+            std::string path;
+            std::string field;
+            std::string problem;
+        };
     } // namespace
 
     EnvelopeRead ReadDataEnvelope(std::span<const std::byte> bytes, std::string_view path,
@@ -195,10 +240,43 @@ namespace Fenrir::Detail
             Ser::Upgrade(registry, type->name, static_cast<std::uint32_t>(*fromVersion), *data, path, logger);
         Append(read.diagnostics, std::move(upgraded.diagnostics));
 
+        // Every path the file names passes the path rules before `resolvers` sees it (ADR-0076): a refused one is left
+        // empty with the reader's own located error, and with no resolver to ask a path is unresolved, as the bridge
+        // counts one.
+        std::vector<RefusedPath> refused;
+        bool unresolved = false;
+        Ser::Resolvers checked = resolvers;
+        checked.readReference = [&](std::string_view reference,
+                                    const FieldInfo& field) -> std::optional<ReferenceValue> {
+            if (std::string problem = FilePathProblem(reference); !problem.empty())
+            {
+                refused.push_back(
+                    {reference.data(), std::string(reference), std::string(field.name), std::move(problem)});
+                return ReferenceValue{};
+            }
+            if (!resolvers.readReference)
+            {
+                unresolved = true;
+                return ReferenceValue{};
+            }
+            return resolvers.readReference(reference, field);
+        };
+
         auto instance = std::make_unique<DataValue>(*type);
-        Ser::BridgeResult bridged = Ser::FromTree(*data, *type, registry, resolvers, instance->value, path, logger);
+        Ser::BridgeResult bridged = Ser::FromTree(*data, *type, registry, checked, instance->value, path, logger);
         Append(read.diagnostics, std::move(bridged.diagnostics));
-        read.incomplete = bridged.status == Ser::BridgeStatus::Partial;
+        for (const RefusedPath& refusal : refused)
+        {
+            Ser::Diagnostic error = LocatedAt(
+                Ser::DiagnosticSeverity::Error, path, StringAt(*data, refusal.text), *data,
+                std::format(
+                    "expected `{}` to name an asset path under the asset root, found \"{}\", which {}; it is left "
+                    "empty",
+                    refusal.field, refusal.path, refusal.problem));
+            logger.Error("{}", Ser::FormatDiagnostic(error));
+            read.diagnostics.push_back(std::move(error));
+        }
+        read.incomplete = bridged.status == Ser::BridgeStatus::Partial || unresolved;
         read.type = type;
         read.value = AssetBox(instance.release(), &DestroyAssetData<DataValue>);
         return read;
