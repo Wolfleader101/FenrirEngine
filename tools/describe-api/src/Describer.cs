@@ -47,6 +47,10 @@ internal sealed class Describer
     private readonly Dictionary<string, List<(FieldDecl At, string Subject, string Kind)>> m_owningFields =
         new(StringComparer.Ordinal);
 
+    // Each field holding an entity (its subject, `Ns::Type::member`), by itself or as an element: what the data-asset
+    // entity check names.
+    private readonly Dictionary<string, Decl> m_entityFields = new(StringComparer.Ordinal);
+
     // The type being described, which a field's type is held by.
     private string? m_describing;
 
@@ -133,6 +137,7 @@ internal sealed class Describer
 
         m_describing = null;
         CheckOwningKinds();
+        CheckDataAssetEntities();
         MarkByMember();
 
         // A private-members name the selection does not select is a nested type some selected type holds, or nothing.
@@ -731,6 +736,8 @@ internal sealed class Describer
             // The engine's own fixed-layout values, recognised by qualified name: the tool is binding-agnostic but not
             // engine-agnostic. Neither is described for the kind.
             case CXTypeKind.CXType_Record when IsEngineEntity(type):
+                // Where it is held, for CheckDataAssetEntities to name.
+                m_entityFields.TryAdd(subject, at);
                 return new FieldType("entity");
             case CXTypeKind.CXType_Record when AssetHandleTarget(type) is { } target:
                 return new FieldType("reference", Target: target)
@@ -1000,6 +1007,70 @@ internal sealed class Describer
         }
 
         static string Path(string? through) => through is null ? "where it is selected" : $"through {through}";
+    }
+
+    /// <summary>
+    /// ADR-0075's rule (SCHEMA.md, "Owning kinds"): a data asset is not in a scene, so it never holds an entity. Walks
+    /// each data asset's fields by value, through nested structs (a component held by value among them), list, optional
+    /// and array elements, tagged-union kinds and its base, and fails naming each entity field it reaches, the data
+    /// asset and the first path reaching it (<c>Ns::Spawner.slots[].target</c>).
+    /// </summary>
+    private void CheckDataAssetEntities()
+    {
+        foreach (var (name, _) in m_selection.Types.Where(type => type.Value == Role.DataAsset &&
+                                                                  m_described.ContainsKey(type.Key)))
+        {
+            var walked = new HashSet<string>(StringComparer.Ordinal) { name };
+            Walk(name, name);
+
+            void Walk(string type, string path)
+            {
+                switch (m_described.GetValueOrDefault(type))
+                {
+                    case StructDescription described:
+                        // A base's fields are the derived type's own: reached as Derived.field.
+                        if (described.Base is { } baseName && walked.Add(baseName))
+                        {
+                            Walk(baseName, path);
+                        }
+
+                        foreach (var field in described.Fields)
+                        {
+                            Reach(field.Type, $"{path}.{field.Name}", $"{described.Name}::{field.Name}");
+                        }
+
+                        break;
+                    case TaggedUnionDescription union:
+                        foreach (var kind in union.Kinds)
+                        {
+                            Reach(kind.Type, $"{path}.{kind.Name}", $"{union.Name}::{kind.Name}");
+                        }
+
+                        break;
+                }
+            }
+
+            void Reach(FieldType type, string path, string subject)
+            {
+                switch (type.Kind)
+                {
+                    case "entity":
+                        m_errors.Add(Error(m_entityFields[subject], subject,
+                                           $"an entity, which the data asset {name} reaches ({path}) and cannot " +
+                                           "hold: a data asset is not in a scene").Message);
+                        break;
+                    case "list" or "array":
+                        Reach(type.Element!, $"{path}[]", subject);
+                        break;
+                    case "optional":
+                        Reach(type.Element!, path, subject);
+                        break;
+                    case "struct" when walked.Add(type.TypeName!):
+                        Walk(type.TypeName!, path);
+                        break;
+                }
+            }
+        }
     }
 
     /// <summary>

@@ -164,6 +164,15 @@ public sealed class DescribeTests
                 "layout")]
     [InlineData("\"Failing::ArrayOfStrings\" = \"data-asset\"",
                 "Failing::ArrayOfStrings::names: an array of strings, which the kinds cannot express: hold a list")]
+    [InlineData("\"Failing::TargetingAsset\" = \"data-asset\"",
+                "Failing::TargetingAsset::target: an entity, which the data asset Failing::TargetingAsset reaches " +
+                "(Failing::TargetingAsset.target) and cannot hold: a data asset is not in a scene")]
+    [InlineData("\"Failing::Spawner\" = \"data-asset\"",
+                "Failing::Slot::target: an entity, which the data asset Failing::Spawner reaches " +
+                "(Failing::Spawner.slots[].target) and cannot hold: a data asset is not in a scene")]
+    [InlineData("\"Failing::Anchored\" = \"component\"\n\"Failing::HoldsAnchored\" = \"data-asset\"",
+                "Failing::Anchored::anchor: an entity, which the data asset Failing::HoldsAnchored reaches " +
+                "(Failing::HoldsAnchored.anchored.anchor) and cannot hold: a data asset is not in a scene")]
     public void EachRoleRefusesWhatItCannotHoldNamingTheTypeMemberAndRole(string types, string diagnostic)
     {
         using var directory = new TemporaryDirectory();

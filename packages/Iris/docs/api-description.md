@@ -85,7 +85,7 @@ Described when a field uses it, or when the selection names it with the role `en
 | `struct` | A described struct, tagged union or bound type, held by value; `type` names it. |
 | `array` | `length` elements of `elementKind`, contiguous. An array's elements are never arrays or fixed strings. |
 | `pointer` | 8 opaque bytes: any pointer, its target never described. |
-| `entity` | 16 bytes: the engine's entity (`Fenrir::Entity`), recognised by its qualified name. It is never described for the kind: FenrirECS's description, which selects it as a `shared-struct`, records its layout. |
+| `entity` | 16 bytes: the engine's entity (`Fenrir::Entity`), recognised by its qualified name. It is never described for the kind: FenrirECS's description, which selects it as a `shared-struct`, records its layout. Every role but `data-asset` may hold it; a data asset never reaches one (ADR-0075; see "Owning kinds"). |
 | `fixed-string` | `length` bytes of UTF-8 text, zero-terminated: a C array of `char` or `char8_t` (`char name[256]`), holding at most `length` - 1 bytes. A reader cuts longer text at `length` - 1 bytes on a UTF-8 boundary. An array of `signed char`, `unsigned char` or `std::uint8_t`, and a `std::array` of `char`, stay an `array` of `u8`. |
 | `reference` | 8 bytes: an asset handle (`Fenrir::AssetHandle<T>`, recognised by its qualified name), a `u32` slot index then a `u32` generation; `target` names `T`. The handle is never described for the kind. |
 | `string`, `list`, `optional`, `path` | The owning kinds: a `std::string`, a `std::vector<T>` (any element kind, a `list` included), a `std::optional<T>` (any but `optional`) and a `std::filesystem::path`, with the element keys for a list and an optional. Only a `data-asset` or `settings` type, or a nested struct only they reach, holds one. |
@@ -94,7 +94,7 @@ Anything else (a C++ reference, `T&`, `long double`, `wchar_t`, a bit-field, ...
 
 ## Owning kinds
 
-A `data-asset` or `settings` type is reached by member through a generated visitor, so it may hold the owning kinds. It, and every struct whose layout holds an owning kind, records no `size`, `alignment` or field `offset`: they are the standard library's. A `data-asset` may extend one other, recorded as `base`, and its `fields` are only those it declares. Iris.Bindings skips every `data-asset` and `settings` type and every nested type and enum that only they reach, without failing or logging (the C# spec binds them), and fails naming the field on an owning kind or a missing layout in any type it binds.
+A `data-asset` or `settings` type is reached by member through a generated visitor, so it may hold the owning kinds. It, and every struct whose layout holds an owning kind, records no `size`, `alignment` or field `offset`: they are the standard library's. A `data-asset` may extend one other, recorded as `base`, and its `fields` are only those it declares. A `data-asset` never reaches an `entity` (ADR-0075): one reached through any field, element, base or component it holds by value fails the tool naming the field, the data asset and the path. Iris.Bindings skips every `data-asset` and `settings` type and every nested type and enum that only they reach, without failing or logging (the C# spec binds them), and fails naming the field on an owning kind or a missing layout in any type it binds.
 
 ## Defaults
 
