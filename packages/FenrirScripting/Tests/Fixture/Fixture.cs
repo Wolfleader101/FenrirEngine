@@ -31,6 +31,14 @@ public static class Fixture
 
     public static float TickRate() => Time.TickRate;
 
+    public static double Elapsed() => Time.Elapsed;
+
+    public static ulong FrameCount() => Time.FrameCount;
+
+    public static ulong TickCount() => Time.TickCount;
+
+    public static void StopApp() => App.Stop();
+
     public static bool IsValid(uint value) => new Entity(value).IsValid;
 
     // The contract came from the host's shared copy, in the default load context.

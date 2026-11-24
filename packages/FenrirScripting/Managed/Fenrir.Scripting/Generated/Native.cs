@@ -26,6 +26,22 @@ internal static unsafe partial class Native
     [NativeFunction]
     public static partial float TimeTickRate();
 
+    /// <summary>Seconds since the app started (Time::CurrentTime), read from the clock on each call.</summary>
+    [NativeFunction]
+    public static partial double TimeElapsed();
+
+    /// <summary>The frames begun so far: during a frame, its number, from 1 (Time::frameCount).</summary>
+    [NativeFunction]
+    public static partial ulong TimeFrameCount();
+
+    /// <summary>The fixed steps begun so far: during a step, its number, from 1 (Time::tickCount).</summary>
+    [NativeFunction]
+    public static partial ulong TimeTickCount();
+
+    /// <summary>Stops the app (App::Stop): the frame being run finishes, and no other begins.</summary>
+    [NativeFunction]
+    public static partial void AppStop();
+
     /// <summary>Whether the entity is alive in the active scene.</summary>
     /// <param name="entity">The entity; one another scene's list owns is not alive here.</param>
     [NativeFunction]

@@ -309,6 +309,94 @@ namespace
         }
     }
 
+    void ScriptsReadElapsedTimeAndTheCounts()
+    {
+        HeadlessApp headless;
+        App& app = headless.Get();
+        auto scripting = Scripting::Install(app, ConfigFor(fixture));
+        {
+            INFO("The fixture did not load");
+            REQUIRE(scripting.HasScripts());
+        }
+        bool elapsedInside = true;
+        double lastElapsed = -1.0;
+        bool elapsedGrew = true;
+        std::uint64_t frames = 0;
+        std::uint64_t ticks = 0;
+        bool countsMatched = true;
+        app.AddSequentialSystems(SchedulePriority::PostUpdate, {[&](App& running) {
+                                     const double before = running.GetTime().CurrentTime();
+                                     const double elapsed = Call<double>(scripting, "Elapsed");
+                                     const double after = running.GetTime().CurrentTime();
+                                     elapsedInside = elapsedInside && before <= elapsed && elapsed <= after;
+                                     elapsedGrew = elapsedGrew && elapsed >= lastElapsed;
+                                     lastElapsed = elapsed;
+                                     frames = Call<std::uint64_t>(scripting, "FrameCount");
+                                     ticks = Call<std::uint64_t>(scripting, "TickCount");
+                                     countsMatched = countsMatched && frames == running.GetTime().frameCount &&
+                                                     ticks == running.GetTime().tickCount;
+                                 }});
+        // Two ticks, none, one (the half owed and three quarters), none: four frames and three ticks.
+        const double tick = app.GetTime().tickRate;
+        for (const double delta : {tick * 2.5, 0.0, tick * 0.75, 0.0})
+        {
+            app.RunFrame(delta);
+        }
+        app.RunExit();
+        {
+            INFO("Time.Elapsed was not the app's time since it started, read at the same moment");
+            REQUIRE(elapsedInside);
+        }
+        {
+            INFO("Time.Elapsed went backwards");
+            REQUIRE(elapsedGrew);
+        }
+        {
+            INFO("Time.FrameCount or Time.TickCount differed from the app's during a frame");
+            REQUIRE(countsMatched);
+        }
+        {
+            INFO("After four frames and three ticks, C# read other counts");
+            REQUIRE((frames == 4 && ticks == 3));
+        }
+    }
+
+    void AppStopEndsTheRunAfterTheFrame()
+    {
+        HeadlessApp headless;
+        App& app = headless.Get();
+        auto scripting = Scripting::Install(app, ConfigFor(fixture));
+        {
+            INFO("The fixture did not load");
+            REQUIRE(scripting.HasScripts());
+        }
+        constexpr std::uint64_t StopFrame = 3;
+        int postUpdates = 0;
+        app.AddSequentialSystems(SchedulePriority::Update, {[&](App& running) {
+                                     if (running.GetTime().frameCount == StopFrame)
+                                     {
+                                         Call<void>(scripting, "StopApp");
+                                     }
+                                 }});
+        app.AddSequentialSystems(SchedulePriority::PostUpdate, {[&](App&) { ++postUpdates; }});
+        // As App::Run drives it, with a bound in case the stop never lands.
+        int frames = 0;
+        while (app.IsRunning() && frames < 10)
+        {
+            app.RunFrame(HeadlessApp::FrameDelta);
+            ++frames;
+        }
+        app.RunExit();
+        {
+            INFO("App.Stop did not end the run after the frame it was called in");
+            REQUIRE(frames == static_cast<int>(StopFrame));
+        }
+        {
+            INFO("The frame App.Stop was called in did not run to its end");
+            REQUIRE(postUpdates == static_cast<int>(StopFrame));
+        }
+    }
+
     void EntityValidityFollowsTheActiveScene()
     {
         HeadlessApp headless;
@@ -580,6 +668,16 @@ TEST_CASE("scripts log through the engine logger at every level", "[scripting]")
 TEST_CASE("scripts read the engine clock", "[scripting]")
 {
     ScriptsReadTheEngineClock();
+}
+
+TEST_CASE("scripts read the time since the app started and the frame and tick counts", "[scripting]")
+{
+    ScriptsReadElapsedTimeAndTheCounts();
+}
+
+TEST_CASE("App.Stop from a script ends the run after the frame", "[scripting]")
+{
+    AppStopEndsTheRunAfterTheFrame();
 }
 
 TEST_CASE("entity validity follows the active scene, including slot reuse", "[scripting]")
