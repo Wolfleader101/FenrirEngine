@@ -18,6 +18,7 @@
 using namespace Fenrir::Serialisation;
 using namespace BridgeTest;
 using SerialisationTest::RecordingLogger;
+using SerialisationTest::Replaced;
 using SerialisationTest::TreeOf;
 
 namespace
@@ -45,23 +46,22 @@ namespace
 }
 )";
 
-    // `text` with its first `from` replaced by `to`.
-    std::string Replaced(std::string_view text, std::string_view from, std::string_view to)
+    // A `T` of type `type` read from `prior`, against a registry holding the bridge's test types; the read must
+    // succeed, so a test's failure is in the rewrite.
+    template <typename T>
+    T ReadAs(const Value& prior, const Fenrir::TypeDescription& type, const Fenrir::TypeRegistry& registry)
     {
-        std::string result(text);
-        const std::size_t at = result.find(from);
-        if (at != std::string::npos)
-            result.replace(at, from.size(), to);
-        return result;
+        T value;
+        RecordingLogger logger;
+        const BridgeResult read = FromTree(prior, type, registry, Resolvers{}, &value, "test.json5", logger);
+        INFO("the prior tree reads into the test type with nothing defaulted, unknown or unresolved");
+        REQUIRE(read.status == BridgeStatus::Succeeded);
+        return value;
     }
 
-    // An `Owned` read from `prior`, against a registry holding the bridge's test types.
     Owned ReadOwned(const Value& prior, const Fenrir::TypeRegistry& registry)
     {
-        Owned owned;
-        RecordingLogger logger;
-        (void)FromTree(prior, OwnedDescription, registry, Resolvers{}, &owned, "test.json5", logger);
-        return owned;
+        return ReadAs<Owned>(prior, OwnedDescription, registry);
     }
 } // namespace
 
@@ -172,4 +172,27 @@ TEST_CASE("A prior node of another kind gives its member's comments but none of 
   tags: [1],
 }
 )");
+}
+
+TEST_CASE("A tagged union's kind and its live alternative's fields keep their comments",
+          "[serialisation][totree][prior]")
+{
+    Fenrir::TypeRegistry registry;
+    RegisterBridgeTypes(registry);
+    constexpr std::string_view text = R"({
+  // a sphere, not the default box
+  shape: {
+    kind: "Sphere", // the alternative
+    // its size
+    radius: 2.5,
+  },
+}
+)";
+    const Value prior = TreeOf(text);
+    Fixed fixed = ReadAs<Fixed>(prior, FixedDescription, registry);
+    fixed.shape.sphere.radius = 3.0f;
+
+    INFO("`kind` and `radius` match the prior union's members by key, and only the radius differs");
+    REQUIRE(WriteText(ToTree(&fixed, FixedDescription, registry, Resolvers{}, &prior)) ==
+            Replaced(text, "radius: 2.5,", "radius: 3,"));
 }

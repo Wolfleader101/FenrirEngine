@@ -366,6 +366,17 @@ namespace Fenrir::Serialisation
             return nullptr;
         }
 
+        void TakeTrivia(Value& node, const Value& prior);
+
+        // Gives a member or element, and everything below it, the trivia of the one that held its key path in `prior`.
+        template <typename Holder>
+        void TakeHeldTrivia(Holder& holder, const Holder& prior)
+        {
+            holder.leadingComments = prior.leadingComments;
+            holder.trailingComment = prior.trailingComment;
+            TakeTrivia(holder.value, prior.value);
+        }
+
         // Gives `node`'s members and elements, and its own closing comments, the trivia of the same key path in
         // `prior`, which held the node's place: a member matches by key and an element by index. A container of
         // another kind than `prior` shares no key path below it, so takes nothing.
@@ -378,11 +389,7 @@ namespace Fenrir::Serialisation
                 object.closingComments = priorObject.closingComments;
                 for (Member& member : object.members)
                     if (const Member* priorMember = FindMember(priorObject, member.key))
-                    {
-                        member.leadingComments = priorMember->leadingComments;
-                        member.trailingComment = priorMember->trailingComment;
-                        TakeTrivia(member.value, priorMember->value);
-                    }
+                        TakeHeldTrivia(member, *priorMember);
             }
             else if (node.Kind() == ValueKind::Array && prior.Kind() == ValueKind::Array)
             {
@@ -390,13 +397,7 @@ namespace Fenrir::Serialisation
                 const Array& priorArray = prior.AsArray();
                 array.closingComments = priorArray.closingComments;
                 for (std::size_t i = 0; i < array.elements.size() && i < priorArray.elements.size(); ++i)
-                {
-                    Element& element = array.elements[i];
-                    const Element& priorElement = priorArray.elements[i];
-                    element.leadingComments = priorElement.leadingComments;
-                    element.trailingComment = priorElement.trailingComment;
-                    TakeTrivia(element.value, priorElement.value);
-                }
+                    TakeHeldTrivia(array.elements[i], priorArray.elements[i]);
             }
         }
     } // namespace

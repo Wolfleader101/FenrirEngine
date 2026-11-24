@@ -72,6 +72,16 @@ namespace SerialisationTest
         return Fenrir::Serialisation::ReadText(text, path, logger).tree.value_or(Fenrir::Serialisation::Value{});
     }
 
+    // `text` with its first `from` replaced by `to`; unchanged when `from` is not in it.
+    inline std::string Replaced(std::string_view text, std::string_view from, std::string_view to)
+    {
+        std::string result(text);
+        const std::size_t at = result.find(from);
+        if (at != std::string::npos)
+            result.replace(at, from.size(), to);
+        return result;
+    }
+
     // A fixture's bytes, by its path under the fixtures directory.
     inline std::string ReadFixture(std::string_view name)
     {
