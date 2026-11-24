@@ -14,6 +14,7 @@ add_library(FenrirTypes STATIC
     include/FenrirTypes/TypeRegistry.hpp
     include/FenrirTypes/ValueRef.hpp
 )
+target_compile_features(FenrirTypes PUBLIC cxx_std_20)
 
 target_include_directories(FenrirTypes PUBLIC include)
 

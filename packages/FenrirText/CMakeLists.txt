@@ -18,6 +18,7 @@ add_library(FenrirText STATIC
     src/Unicode.hpp
     src/Unicode.cpp
 )
+target_compile_features(FenrirText PUBLIC cxx_std_20)
 
 target_link_libraries(FenrirText PUBLIC FenrirAssets FenrirDraw2D FenrirMath
                                  PRIVATE FenrirHarfBuzz freetype FenrirSheenBidi FenrirUnibreak)

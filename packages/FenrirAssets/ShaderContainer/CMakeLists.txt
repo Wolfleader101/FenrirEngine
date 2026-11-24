@@ -7,5 +7,6 @@ add_library(FenrirShaderContainer STATIC
 
     src/ShaderContainer.cpp
 )
+target_compile_features(FenrirShaderContainer PUBLIC cxx_std_20)
 
 target_include_directories(FenrirShaderContainer PUBLIC include)

@@ -2,6 +2,7 @@
 # libraries and FenrirPainter fill DrawList2Ds; FenrirRenderer draws them. Header-only, depending on FenrirAssets
 # (asset handles, samplers, colour spaces) and FenrirMath only. Built with FENRIR_ENABLE_ASSETS.
 add_library(FenrirDraw2D INTERFACE)
+target_compile_features(FenrirDraw2D INTERFACE cxx_std_20)
 target_include_directories(FenrirDraw2D INTERFACE include)
 target_link_libraries(FenrirDraw2D INTERFACE FenrirAssets FenrirMath)
 

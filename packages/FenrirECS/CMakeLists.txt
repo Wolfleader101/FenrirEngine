@@ -27,6 +27,7 @@ add_library(FenrirECS STATIC
     src/DynamicComponent.cpp
     src/ByteStorage.hpp
 )
+target_compile_features(FenrirECS PUBLIC cxx_std_20)
 
 add_subdirectory(libs)
 

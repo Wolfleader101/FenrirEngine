@@ -19,6 +19,7 @@ add_library(FenrirPainter STATIC
     src/Tessellation.cpp
     src/Tessellation.hpp
 )
+target_compile_features(FenrirPainter PUBLIC cxx_std_20)
 target_include_directories(FenrirPainter PUBLIC include)
 target_link_libraries(FenrirPainter PUBLIC FenrirDraw2D FenrirMath FenrirText PRIVATE FenrirApp)
 # builtin:painter, embedded so the painter needs no files beside it. GAMMA: the variant for the Gamma blend space; MASK:

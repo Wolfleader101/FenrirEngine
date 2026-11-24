@@ -5,6 +5,7 @@ add_library(FenrirApp STATIC
     src/App.cpp
     include/FenrirApp/App.hpp
 )
+target_compile_features(FenrirApp PUBLIC cxx_std_20)
 
 # link against other interal libraries
 target_link_libraries(FenrirApp PUBLIC FenrirScheduler FenrirTime FenrirLogger FenrirScene FenrirECS)

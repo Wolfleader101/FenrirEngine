@@ -9,6 +9,7 @@ add_library(FenrirMath STATIC
     include/FenrirMath/Math.hpp
     include/FenrirMath/Math_fwd.hpp
 )
+target_compile_features(FenrirMath PUBLIC cxx_std_20)
 
 add_subdirectory(libs)
 

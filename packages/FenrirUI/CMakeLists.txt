@@ -66,6 +66,7 @@ add_library(FenrirUI STATIC
     src/UIWorldTarget.cpp
     src/Utf8.hpp
 )
+target_compile_features(FenrirUI PUBLIC cxx_std_20)
 target_include_directories(FenrirUI PUBLIC include PRIVATE src)
 target_link_libraries(FenrirUI PUBLIC FenrirPainter FenrirInput FenrirApp FenrirAssets
                                PRIVATE FenrirYoga FenrirWindow FenrirRenderer)

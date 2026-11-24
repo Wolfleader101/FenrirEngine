@@ -23,6 +23,7 @@ add_library(FenrirAnimation STATIC
     src/Sampling.cpp
     src/Animation.cpp
 )
+target_compile_features(FenrirAnimation PUBLIC cxx_std_20)
 
 target_link_libraries(FenrirAnimation PUBLIC FenrirSkeleton FenrirAssets)
 

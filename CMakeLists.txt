@@ -1,7 +1,12 @@
 cmake_minimum_required(VERSION 3.20)
 project(FenrirEngine)
+# The engine writes its generated outputs under FenrirEngine_BINARY_DIR, a cache variable project() sets, so the same
+# from any directory: never CMAKE_BINARY_DIR, which is a parent project's build directory when the engine is added with
+# add_subdirectory.
 
-# Set the C++ standard
+# The C++ standard of everything built in the engine's directory, the libraries under packages/*/libs among them. It
+# does not reach a parent project that adds the engine: each engine library gives its consumers C++20 itself, as a
+# PUBLIC (an interface library's INTERFACE) compile feature.
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
