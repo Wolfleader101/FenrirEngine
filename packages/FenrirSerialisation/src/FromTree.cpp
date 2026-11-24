@@ -318,8 +318,9 @@ namespace Fenrir::Serialisation
             }
 
             // A reference or an entity: `null` is none, and a string is what `resolve`, the caller's callback, names
-            // the value by. A string it names nothing for, or one with no callback to ask, leaves the value empty,
-            // with one error counted in `unresolved`. `what` is what the string should be and `callback` the
+            // the value by. A string it names nothing for leaves the value empty, with one error counted in
+            // `unresolved`; with no callback to ask, the value is left empty and counted with no diagnostic, since a
+            // caller may pass no resolvers on purpose. `what` is what the string should be and `callback` the
             // callback's name, for the diagnostic; `set` writes the value.
             template <typename Resolve, typename Set>
             bool ReadResolved(const Value& node, ValueRef target, std::string_view where, std::string_view what,
@@ -333,21 +334,21 @@ namespace Fenrir::Serialisation
                 }
                 if (node.Kind() != ValueKind::String)
                     return Reject(node, where, std::format("{} or null", what));
-                const bool asked = resolve && m_field != nullptr;
-                std::optional<Resolved> resolved;
-                if (asked)
-                    resolved = CallWithResolverField(*m_field, target.Type(), [&](const FieldInfo& handed) {
-                        return resolve(node.AsString(), handed);
-                    });
+                if (!resolve || m_field == nullptr)
+                {
+                    set(Resolved{});
+                    ++m_result.unresolved;
+                    return true;
+                }
+                const std::optional<Resolved> resolved = CallWithResolverField(
+                    *m_field, target.Type(), [&](const FieldInfo& handed) { return resolve(node.AsString(), handed); });
                 set(resolved.value_or(Resolved{}));
                 if (resolved.has_value())
                     return true;
                 ++m_result.unresolved;
                 Report(DiagnosticSeverity::Error, node,
-                       asked ? std::format("`{}` names {}, which {} resolves to nothing; it is left empty", where,
-                                           Found(node), callback)
-                             : std::format("`{}` names {}, but there is no {} to resolve it; it is left empty", where,
-                                           Found(node), callback));
+                       std::format("`{}` names {}, which {} resolves to nothing; it is left empty", where, Found(node),
+                                   callback));
                 return true;
             }
 

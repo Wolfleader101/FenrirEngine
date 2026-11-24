@@ -11,7 +11,7 @@
   - An empty string from a write callback is written as `null`.
   - `null` reads as the kind's empty value (the empty handle, the null entity) with no diagnostic.
   - A read callback returning nothing leaves the field empty, counted in `unresolved`, with one diagnostic.
-  - A missing callback leaves the field empty on read and writes `null`, counted in `unresolved`.
+  - A missing callback writes `null`, and on read leaves the field empty, counted in `FromTree`'s `unresolved` with no diagnostic: a caller may pass no resolvers on purpose. `ToTree` returns a bare `Value` and counts nothing (decided with the user on 2026-11-24).
 - **`path`:** a `String` both ways, with no callback. This ticket asserts nothing about its form beyond the text round-tripping; the writer's check for absolute or escaping paths is the data-assets spec's.
 
 **Blocked by:** 04.
