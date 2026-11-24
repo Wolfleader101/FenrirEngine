@@ -44,11 +44,12 @@ namespace Fenrir::Serialisation
 
     /**
      * @brief What reading a value tree gives: the tree when one was read, and the diagnostics either way. A syntax
-     * error leaves no tree and one error diagnostic; warnings come with a tree.
+     * error, bytes that are not one whole tree encoding, or an empty span to `ReadTree` leaves no tree and one error
+     * diagnostic; warnings come with a tree.
      */
     struct ReadTreeResult
     {
-        /** @brief The tree read, or empty when the text could not be read. */
+        /** @brief The tree read, or empty when the text or bytes could not be read. */
         std::optional<Value> tree;
         /** @brief Every diagnostic the read produced, in the order found, each already logged once. */
         std::vector<Diagnostic> diagnostics;

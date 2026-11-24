@@ -12,8 +12,8 @@
 
 **Touches:** `packages/FenrirSerialisation/` (`include/FenrirSerialisation/`, `src/`, `Tests/`, `Tests/CMakeLists.txt`, `README.md` new)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `ReadTree` on a golden's text bytes and on its encoded bytes gives trees that are equal, trivia aside.
-- [ ] Text with a BOM reads, and an empty span gives one diagnostic.
-- [ ] The package README's composition example compiles, as a test that runs it.
+- [x] `ReadTree` on a golden's text bytes and on its encoded bytes gives trees that are equal, trivia aside.
+- [x] Text with a BOM reads, and an empty span gives one diagnostic.
+- [x] The package README's composition example compiles, as a test that runs it.
