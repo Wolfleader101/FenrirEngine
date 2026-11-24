@@ -19,7 +19,7 @@ A modular C++20 game engine: every system is its own package, and you build only
 | `FenrirScripting`, `Iris` | C# scripting: Iris hosts .NET (CoreCLR) with collectible, reloadable components; the engine exposes its packages to C# as `Fenrir.*` contracts |
 | `FenrirMath`, `FenrirCore`, `FenrirLogger` | Math, core utilities and logging |
 | `FenrirTypes` | The type registry: run-time descriptions of described types (kinds, fields, versions, former names, editor metadata), one field visitor over an instance, is-a over data asset base chains, and attachments other packages hang on a type; below every other package, linking nothing but the standard library |
-| `FenrirSerialisation` | The value tree (objects, arrays, strings, numbers in their own width, bools and nulls, with comments kept as trivia) and its JSON5 text in the fixed subset the engine writes; on `FenrirTypes` and `FenrirLogger` alone, knowing no files, assets or scenes |
+| `FenrirSerialisation` | The value tree (objects, arrays, strings, numbers in their own width, bools and nulls, with comments kept as trivia); its JSON5 reader and writer; the bridge between described values and trees (`ToTree`, `FromTree`, with the caller's resolvers for references and entities); per-type upgraders; the compact tree encoding; and `ReadTree`, which reads either form. On `FenrirTypes` and `FenrirLogger` alone, knowing no files, assets or scenes (`packages/FenrirSerialisation/README.md`) |
 
 Design choices that shape the engine:
 
