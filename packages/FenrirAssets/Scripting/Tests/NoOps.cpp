@@ -185,6 +185,12 @@ namespace
                  std::uint32_t room[3] = {7, 7, 7};
                  return h.Call<std::int32_t>("AssetsNative.GetMeshLodIndices", &mesh, 0, room, 3) == 0 && room[0] == 7;
              }},
+            {"AssetsNative.GetMeshPositions", "mesh",
+             [=](Testing::NativeCallHarness& h) {
+                 Math::Vec3 room[2] = {Math::Vec3(7.0f), Math::Vec3(7.0f)};
+                 return h.Call<std::int32_t>("AssetsNative.GetMeshPositions", &mesh, room, 2) == -1 &&
+                        room[0] == Math::Vec3(7.0f);
+             }},
             {"AssetsNative.ResizeRenderTarget", "image",
              [=](Testing::NativeCallHarness& h) {
                  return !h.Call<bool>("AssetsNative.ResizeRenderTarget", &image, 8, 8);

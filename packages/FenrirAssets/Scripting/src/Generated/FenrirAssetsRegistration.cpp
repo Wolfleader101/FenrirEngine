@@ -33,6 +33,7 @@ namespace Fenrir::Generated
                 Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::AddMeshLod>("Fenrir.Assets.AssetsNative.AddMeshLod"),
                 Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::GetMeshLodErrors>("Fenrir.Assets.AssetsNative.GetMeshLodErrors"),
                 Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::GetMeshLodIndices>("Fenrir.Assets.AssetsNative.GetMeshLodIndices"),
+                Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::GetMeshPositions>("Fenrir.Assets.AssetsNative.GetMeshPositions"),
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::AddRenderTarget, 5>::Call>("Fenrir.Assets.AssetsNative.AddRenderTarget"),
                 Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::ResizeRenderTarget>("Fenrir.Assets.AssetsNative.ResizeRenderTarget"),
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::AddImage, 7>::Call>("Fenrir.Assets.AssetsNative.AddImage"),

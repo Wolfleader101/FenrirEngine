@@ -24,6 +24,7 @@ namespace Fenrir::AssetsNatives
     bool AddMeshLod(const Fenrir::CallContext&, Fenrir::AssetsScripting&, const Fenrir::AssetHandle<Fenrir::Mesh>* mesh, const std::uint32_t* indices, std::int32_t indexCount, float error);
     std::int32_t GetMeshLodErrors(const Fenrir::CallContext&, Fenrir::AssetsScripting&, const Fenrir::AssetHandle<Fenrir::Mesh>* mesh, float* errors, std::int32_t capacity);
     std::int32_t GetMeshLodIndices(const Fenrir::CallContext&, Fenrir::AssetsScripting&, const Fenrir::AssetHandle<Fenrir::Mesh>* mesh, std::int32_t level, std::uint32_t* indices, std::int32_t capacity);
+    std::int32_t GetMeshPositions(const Fenrir::CallContext&, Fenrir::AssetsScripting&, const Fenrir::AssetHandle<Fenrir::Mesh>* mesh, Fenrir::Math::Vec3* positions, std::int32_t capacity);
     bool AddRenderTarget(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::int32_t width, std::int32_t height, Fenrir::ScriptAssetOwner owner, Fenrir::AssetHandle<Fenrir::Image>* image);
     bool ResizeRenderTarget(const Fenrir::CallContext&, Fenrir::AssetsScripting&, const Fenrir::AssetHandle<Fenrir::Image>* image, std::int32_t width, std::int32_t height);
     bool AddImage(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::int32_t width, std::int32_t height, const std::uint8_t* rgba8, std::int32_t byteCount, Fenrir::ScriptAssetOwner owner, Fenrir::AssetHandle<Fenrir::Image>* image);

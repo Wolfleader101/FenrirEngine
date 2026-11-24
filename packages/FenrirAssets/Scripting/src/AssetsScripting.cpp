@@ -385,6 +385,26 @@ namespace Fenrir
         }
 
         /**
+         * @brief Copies `mesh`'s positions, from the CPU copy the store keeps (MeshData::positions), into `positions`,
+         * as many as fit, in vertex order: with GetMeshLodIndices' level 0 they are the mesh's triangles, as
+         * PhysicsWorld.CreateCollisionMesh takes them. An empty span asks only how many there are.
+         * @return How many positions the mesh holds, so a result larger than the span says how large a span would hold
+         * them all; -1 if the mesh is unreadable, its CPU copy absent (a stale or empty handle), which writes nothing.
+         * @facade Assets.GetMeshPositions
+         */
+        std::int32_t GetMeshPositions(const CallContext& context, AssetsScripting& assets,
+                                      const AssetHandle<Mesh>* mesh, Math::Vec3* positions, std::int32_t capacity)
+        {
+            const NativeGuard guard(context, assets.warnings);
+            AssetStore* store = Resolve<Mesh>(guard, *mesh);
+            if (store == nullptr)
+            {
+                return -1;
+            }
+            return CopyInto(store->TryGet(*mesh)->positions, positions, capacity);
+        }
+
+        /**
          * @brief Adds a render target for `owner`: an RGBA8 sRGB image of this size with no pixels, which a camera
          * draws into and materials sample (ADR-0026).
          * @param[out] image The image; the empty handle if either side is under one pixel.

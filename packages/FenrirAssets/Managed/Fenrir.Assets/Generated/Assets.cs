@@ -88,6 +88,18 @@ public static partial class Assets
         AssetsNative.GetMeshLodIndices(in mesh, level, indices);
 
     /// <summary>
+    /// Copies `mesh`'s positions, from the CPU copy the store keeps (MeshData::positions), into `positions`, as many as
+    /// fit, in vertex order: with GetMeshLodIndices' level 0 they are the mesh's triangles, as
+    /// PhysicsWorld.CreateCollisionMesh takes them. An empty span asks only how many there are.
+    /// </summary>
+    /// <returns>
+    /// How many positions the mesh holds, so a result larger than the span says how large a span would hold them all;
+    /// -1 if the mesh is unreadable, its CPU copy absent (a stale or empty handle), which writes nothing.
+    /// </returns>
+    public static int GetMeshPositions(AssetHandle<Mesh> mesh, Span<Vector3> positions) =>
+        AssetsNative.GetMeshPositions(in mesh, positions);
+
+    /// <summary>
     /// Adds a render target for `owner`: an RGBA8 sRGB image of this size with no pixels, which a camera draws into and
     /// materials sample (ADR-0026).
     /// </summary>
