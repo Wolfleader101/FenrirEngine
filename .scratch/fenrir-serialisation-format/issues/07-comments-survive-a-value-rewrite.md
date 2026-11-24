@@ -14,8 +14,8 @@
 
 **Touches:** `packages/FenrirSerialisation/` (`src/`, `Tests/`, `Tests/CMakeLists.txt`)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Each golden, read, bridged into its hand-registered types, changed in one field and written with `prior`, differs from the golden only in that field's value.
-- [ ] A comment on a field that is now at its default, and so omitted, is dropped. The other comments stay.
-- [ ] With no `prior`, the written tree has no comments.
+- [x] Each golden, read, bridged into its hand-registered types, changed in one field and written with `prior`, differs from the golden only in that field's value.
+- [x] A comment on a field that is now at its default, and so omitted, is dropped. The other comments stay.
+- [x] With no `prior`, the written tree has no comments.
