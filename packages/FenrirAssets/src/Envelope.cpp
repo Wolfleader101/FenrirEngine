@@ -190,6 +190,24 @@ namespace Fenrir::Detail
 
     namespace
     {
+        // What every step of one envelope's read shares: the file's path its diagnostics name, where types and
+        // references are found, the log, and the file's diagnostics so far.
+        struct EnvelopeReader
+        {
+            std::string_view path;
+            const TypeRegistry& registry;
+            const Ser::Resolvers& resolvers;
+            ILogger& logger;
+            std::vector<Ser::Diagnostic>& diagnostics;
+
+            // Logs `error`, one of the reader's own that fails no read, and records it with the file's diagnostics.
+            void Report(Ser::Diagnostic error) const
+            {
+                logger.Error("{}", Ser::FormatDiagnostic(error));
+                diagnostics.push_back(std::move(error));
+            }
+        };
+
         // What reading one entry of an envelope gave: the top level's, or one of its `sub`'s.
         struct EntryRead
         {
@@ -201,19 +219,19 @@ namespace Fenrir::Detail
             bool incomplete = false;
         };
 
-        // Reads one entry: its `type`, `version` and `data`, through `resolvers`, into an instance. `where` names the
-        // entry in its diagnostics ("" for the top level). With `expected`, the type must be it or extend it; without,
-        // it must be a data asset type. A sub-asset (`isSub`) holding a `sub` of its own is refused. Every diagnostic
-        // goes into `diagnostics`, and each is logged here but the one that fails the entry.
-        EntryRead ReadEntry(Ser::Object& entry, const Ser::Value& at, std::string_view path, std::string_view where,
-                            bool isSub, const TypeDescription* expected, const TypeRegistry& registry,
-                            const Ser::Resolvers& resolvers, ILogger& logger, std::vector<Ser::Diagnostic>& diagnostics)
+        // Reads one entry, the sub-asset `name` or the top level when it is empty: its `type`, `version` and `data`,
+        // into an instance. With `expected`, the type must be it or extend it; without, it must be a data asset type.
+        // A sub-asset holding a `sub` of its own is refused. Every diagnostic goes into the reader's, and each is
+        // logged here but the one that fails the entry.
+        EntryRead ReadEntry(const EnvelopeReader& reader, Ser::Object& entry, const Ser::Value& at,
+                            std::string_view name, const TypeDescription* expected)
         {
+            const std::string where = name.empty() ? std::string() : std::format("sub-asset `{}`: ", name);
             EntryRead read;
             const auto fail = [&](LoadFailure reason, const Ser::Value* node, std::string message) -> EntryRead {
-                Ser::Diagnostic diagnostic =
-                    LocatedAt(Ser::DiagnosticSeverity::Error, path, node, at, std::format("{}{}", where, message));
-                diagnostics.push_back(diagnostic);
+                Ser::Diagnostic diagnostic = LocatedAt(Ser::DiagnosticSeverity::Error, reader.path, node, at,
+                                                       std::format("{}{}", where, message));
+                reader.diagnostics.push_back(diagnostic);
                 read.failure = reason;
                 read.failureDiagnostic = std::move(diagnostic);
                 return std::move(read);
@@ -225,7 +243,7 @@ namespace Fenrir::Detail
                 return fail(LoadFailure::ImportFailed, typeName,
                             std::format("expected `type`, a type's name, found {}", Found(typeName)));
             }
-            const TypeDescription* type = registry.Find(typeName->AsString());
+            const TypeDescription* type = reader.registry.Find(typeName->AsString());
             const std::string wanted = expected != nullptr ? std::format("`{}` or a type extending it", expected->name)
                                                            : std::string("a data asset type");
             if (type == nullptr)
@@ -234,7 +252,7 @@ namespace Fenrir::Detail
                     LoadFailure::WrongType, typeName,
                     std::format("expected {}, found `{}`, which no package registers", wanted, typeName->AsString()));
             }
-            if (expected != nullptr ? !registry.IsA(type->name, expected->name) : type->role != Role::DataAsset)
+            if (expected != nullptr ? !reader.registry.IsA(type->name, expected->name) : type->role != Role::DataAsset)
             {
                 return fail(LoadFailure::WrongType, typeName,
                             std::format("expected {}, found `{}`", wanted, type->name));
@@ -256,7 +274,7 @@ namespace Fenrir::Detail
             }
 
             // Sub-assets have none of their own (ADR-0076): a file's top level holds them all.
-            if (const Ser::Value* nested = entry.Find("sub"); isSub && nested != nullptr)
+            if (const Ser::Value* nested = entry.Find("sub"); !name.empty() && nested != nullptr)
             {
                 return fail(LoadFailure::ImportFailed, nested,
                             "expected no `sub`, found sub-assets of a sub-asset, which only a file's top level holds; "
@@ -264,15 +282,16 @@ namespace Fenrir::Detail
             }
 
             Ser::UpgradeResult upgraded =
-                Ser::Upgrade(registry, type->name, static_cast<std::uint32_t>(*fromVersion), *data, path, logger);
-            Append(diagnostics, std::move(upgraded.diagnostics));
+                Ser::Upgrade(reader.registry, type->name, static_cast<std::uint32_t>(*fromVersion), *data, reader.path,
+                             reader.logger);
+            Append(reader.diagnostics, std::move(upgraded.diagnostics));
 
-            // Every path the entry names passes the path rules before `resolvers` sees it (ADR-0076): a refused one is
-            // left empty with the reader's own located error, and with no resolver to ask a path is unresolved, as the
-            // bridge counts one.
+            // Every path the entry names passes the path rules before the resolvers see it (ADR-0076): a refused one
+            // is left empty with the reader's own located error, and with no resolver to ask a path is unresolved, as
+            // the bridge counts one.
             std::vector<RefusedPath> refused;
             bool unresolved = false;
-            Ser::Resolvers checked = resolvers;
+            Ser::Resolvers checked = reader.resolvers;
             checked.readReference = [&](std::string_view reference,
                                         const FieldInfo& field) -> std::optional<ReferenceValue> {
                 if (std::optional<std::string> problem = FilePathProblem(reference))
@@ -281,26 +300,25 @@ namespace Fenrir::Detail
                         {reference.data(), std::string(reference), std::string(field.name), std::move(*problem)});
                     return ReferenceValue{};
                 }
-                if (!resolvers.readReference)
+                if (!reader.resolvers.readReference)
                 {
                     unresolved = true;
                     return ReferenceValue{};
                 }
-                return resolvers.readReference(reference, field);
+                return reader.resolvers.readReference(reference, field);
             };
 
             auto instance = std::make_unique<DataValue>(*type);
-            Ser::BridgeResult bridged = Ser::FromTree(*data, *type, registry, checked, instance->value, path, logger);
-            Append(diagnostics, std::move(bridged.diagnostics));
+            Ser::BridgeResult bridged =
+                Ser::FromTree(*data, *type, reader.registry, checked, instance->value, reader.path, reader.logger);
+            Append(reader.diagnostics, std::move(bridged.diagnostics));
             for (const RefusedPath& refusal : refused)
             {
-                Ser::Diagnostic error = LocatedAt(
-                    Ser::DiagnosticSeverity::Error, path, StringAt(*data, refusal.text), *data,
+                reader.Report(LocatedAt(
+                    Ser::DiagnosticSeverity::Error, reader.path, StringAt(*data, refusal.text), *data,
                     std::format("{}expected `{}` to name an asset path under the asset root, found \"{}\", which {}; "
                                 "it is left empty",
-                                where, refusal.field, refusal.path, refusal.problem));
-                logger.Error("{}", Ser::FormatDiagnostic(error));
-                diagnostics.push_back(std::move(error));
+                                where, refusal.field, refusal.path, refusal.problem)));
             }
             read.incomplete = bridged.status == Ser::BridgeStatus::Partial || unresolved;
             read.type = type;
@@ -308,8 +326,8 @@ namespace Fenrir::Detail
             return read;
         }
 
-        // Why `name` cannot name a sub-asset, or none: Load splits a path at its last `#`, so no path reaches a name
-        // holding one, or an empty name.
+        // Why `name` cannot name a sub-asset, or none: Load splits a path at its last `#`, so no path names a
+        // sub-asset whose name holds one, and `file#` names none.
         std::optional<std::string> SubNameProblem(std::string_view name)
         {
             if (name.empty())
@@ -330,6 +348,7 @@ namespace Fenrir::Detail
                                   ILogger& logger)
     {
         EnvelopeRead read;
+        const EnvelopeReader reader{path, registry, resolvers, logger, read.diagnostics};
         // The read fails with `reason`; `diagnostic`, the reader's own, is the store's to log with the failure.
         const auto fail = [&](LoadFailure reason, Ser::Diagnostic diagnostic) -> EnvelopeRead {
             read.failure = reason;
@@ -369,26 +388,26 @@ namespace Fenrir::Detail
         Ser::Value* sub = envelope.Find("sub");
         if (sub != nullptr && sub->Kind() != Ser::ValueKind::Object)
         {
-            Ser::Diagnostic error =
+            reader.Report(
                 LocatedAt(Ser::DiagnosticSeverity::Error, path, sub, root,
-                          std::format("expected `sub`, an object of named sub-assets, found {}", Found(sub)));
-            logger.Error("{}", Ser::FormatDiagnostic(error));
-            read.diagnostics.push_back(std::move(error));
+                          std::format("expected `sub`, an object of named sub-assets, found {}", Found(sub))));
             sub = nullptr;
         }
-        if (label && (sub == nullptr || sub->AsObject().Find(*label) == nullptr))
+        // A label no sub-asset may have (`file#` gives an empty one) names none, even when `sub` has a key so named:
+        // that entry is refused below.
+        if (label && (SubNameProblem(*label) || sub == nullptr || sub->AsObject().Find(*label) == nullptr))
         {
             read.failure = LoadFailure::LabelNotFound;
             read.failureMessage = std::format("the file has no sub-asset named '{}'", *label);
             return read;
         }
 
-        // Reads one entry, as the one asked for when `requested`: a failure there fails the read, its diagnostic left
-        // for the store to log; any other entry's failure is logged here and leaves that entry out.
-        const auto take = [&](Ser::Object& entry, const Ser::Value& at, std::string_view name, bool requested) {
-            const std::string where = name.empty() ? std::string() : std::format("sub-asset `{}`: ", name);
-            EntryRead entryRead = ReadEntry(entry, at, path, where, !name.empty(), requested ? &expected : nullptr,
-                                            registry, resolvers, logger, read.diagnostics);
+        // Reads one entry into `read`, as the one asked for when `requested`: a failure there fails the read, its
+        // diagnostic left for the store to log; any other entry's failure is logged here and leaves that entry out.
+        // False when the read failed.
+        const auto readEntryInto = [&](Ser::Object& entry, const Ser::Value& at, std::string_view name,
+                                       bool requested) {
+            EntryRead entryRead = ReadEntry(reader, entry, at, name, requested ? &expected : nullptr);
             if (entryRead.failure)
             {
                 if (requested)
@@ -410,24 +429,18 @@ namespace Fenrir::Detail
             return true;
         };
 
-        if (!take(envelope, root, {}, !label))
-        {
-            return read;
-        }
-        if (sub == nullptr)
+        if (!readEntryInto(envelope, root, {}, !label) || sub == nullptr)
         {
             return read;
         }
         for (Ser::Member& member : sub->AsObject().members)
         {
             const bool requested = label && member.key == *label;
-            // A name no path reaches is never the one asked for, which a path named.
+            // The label asked for passed this check above, so a name refused here is never the one asked for.
             if (std::optional<std::string> problem = SubNameProblem(member.key))
             {
-                Ser::Diagnostic error = LocatedAt(Ser::DiagnosticSeverity::Error, path, &member.value, *sub,
-                                                  std::format("{}; it is not loaded", *problem));
-                logger.Error("{}", Ser::FormatDiagnostic(error));
-                read.diagnostics.push_back(std::move(error));
+                reader.Report(LocatedAt(Ser::DiagnosticSeverity::Error, path, &member.value, *sub,
+                                        std::format("{}; it is not loaded", *problem)));
                 continue;
             }
             if (member.value.Kind() != Ser::ValueKind::Object)
@@ -440,11 +453,10 @@ namespace Fenrir::Detail
                 {
                     return fail(LoadFailure::ImportFailed, std::move(error));
                 }
-                logger.Error("{}", Ser::FormatDiagnostic(error));
-                read.diagnostics.push_back(std::move(error));
+                reader.Report(std::move(error));
                 continue;
             }
-            if (!take(member.value.AsObject(), member.value, member.key, requested))
+            if (!readEntryInto(member.value.AsObject(), member.value, member.key, requested))
             {
                 return read;
             }

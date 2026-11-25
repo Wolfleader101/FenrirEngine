@@ -1,4 +1,5 @@
-// A sword whose second sub-asset names a type nothing registers, beside a sheath that reads.
+// A sword whose second sub-asset names a type nothing registers, and whose third has an empty name no path reaches,
+// beside a sheath that reads.
 {
   format: 1,
   type: "AssetsTest::Sword",
@@ -14,6 +15,11 @@
     },
     cracked: {
       type: "AssetsTest::NoSuchType",
+      version: 1,
+      data: {},
+    },
+    "": {
+      type: "AssetsTest::ShieldData",
       version: 1,
       data: {},
     },

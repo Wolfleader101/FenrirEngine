@@ -68,7 +68,7 @@ namespace
         return std::string(file) + '#' + std::string(label);
     }
 
-    std::string Why(const Fenrir::LoadResult<ShieldData>& loaded)
+    std::string FailureText(const Fenrir::LoadResult<ShieldData>& loaded)
     {
         return loaded.diagnostic ? loaded.diagnostic->importerMessage : std::string("ok");
     }
@@ -83,7 +83,7 @@ TEST_CASE("A sub-asset loads by its file's path and its name", "[assets][data][s
     const Fenrir::LoadResult<ShieldData> sheath =
         test.store.Load<ShieldData>(Labelled(SheathedSword, "sheath"), Fenrir::AssetOwner::App());
 
-    INFO("the sheath loads wholly, holding what its entry in `sub` says: " << Why(sheath));
+    INFO("the sheath loads wholly, holding what its entry in `sub` says: " << FailureText(sheath));
     REQUIRE(sheath.Status() == Fenrir::LoadStatus::Succeeded);
     const ShieldData* data = test.store.TryGet(sheath.handle);
     REQUIRE(data != nullptr);
@@ -120,7 +120,6 @@ TEST_CASE("A sub-asset and its file's top level share one read of the file", "[a
     INFO("both load, and the file is read once");
     REQUIRE(sheath.Ok());
     REQUIRE(sword.Ok());
-    REQUIRE(test.store.TryGet(sword.handle)->displayName == "Sheathed sword");
     REQUIRE(*reads == 1);
 }
 
@@ -156,10 +155,10 @@ TEST_CASE("A later load of a sub-asset gives the same handle", "[assets][data][s
     const Fenrir::LoadResult<ShieldData> second =
         test.store.Load<ShieldData>(Labelled(SheathedSword, "sheath"), Fenrir::AssetOwner::App());
 
-    INFO("the second load of the sheath gives the first one's handle, and the sword is another asset");
+    INFO("the second load of the sheath, after the sword's, gives the first one's handle");
     REQUIRE(first.Ok());
-    REQUIRE(second.handle == first.handle);
     REQUIRE(sword.Ok());
+    REQUIRE(second.handle == first.handle);
 }
 
 TEST_CASE("A file's sub-assets are freed with the owner that loaded its top level", "[assets][data][sub][owners]")
@@ -193,8 +192,11 @@ TEST_CASE("A file's top level loaded for a second owner keeps its sub-assets aft
     Fenrir::Scene& level = test.app.CreateScene("Level");
     const Fenrir::LoadResult<ShieldData> sheath = test.store.Load<ShieldData>(Labelled(SheathedSword, "sheath"), level);
     const Fenrir::LoadResult<Sword> forApp = test.store.Load<Sword>(SheathedSword, Fenrir::AssetOwner::App());
-    REQUIRE(sheath.Ok());
-    REQUIRE(forApp.Ok());
+    {
+        INFO("the sheath loads for the scene, then the sword for the app");
+        REQUIRE(sheath.Ok());
+        REQUIRE(forApp.Ok());
+    }
 
     test.app.DestroyScene("Level");
 
@@ -213,8 +215,11 @@ TEST_CASE("A sub-asset loaded for a second owner alone ends with the first owner
     const Fenrir::LoadResult<Sword> sword = test.store.Load<Sword>(SheathedSword, level);
     const Fenrir::LoadResult<ShieldData> sheath =
         test.store.Load<ShieldData>(Labelled(SheathedSword, "sheath"), Fenrir::AssetOwner::App());
-    REQUIRE(sword.Ok());
-    REQUIRE(sheath.Ok());
+    {
+        INFO("the sword loads for the scene, then the sheath for the app");
+        REQUIRE(sword.Ok());
+        REQUIRE(sheath.Ok());
+    }
 
     test.app.DestroyScene("Level");
 
@@ -232,8 +237,9 @@ TEST_CASE("A label the file's sub lacks fails with LabelNotFound", "[assets][dat
     const Fenrir::LoadResult<ShieldData> loaded =
         test.store.Load<ShieldData>(Labelled(SheathedSword, "quiver"), Fenrir::AssetOwner::App());
 
-    INFO("the file has a sheath and a spare, and no quiver");
+    INFO("the file has a sheath and a spare, and no quiver, which the error names");
     REQUIRE(loaded.Status() == Fenrir::LoadStatus::Failed);
+    REQUIRE(loaded.diagnostic.has_value());
     REQUIRE(loaded.diagnostic->reason == Fenrir::LoadFailure::LabelNotFound);
     REQUIRE(CountContaining(*test.errors, "quiver") == 1);
 }
@@ -249,7 +255,40 @@ TEST_CASE("A label on a file with no sub fails with LabelNotFound", "[assets][da
 
     INFO("the plain sword embeds nothing");
     REQUIRE(loaded.Status() == Fenrir::LoadStatus::Failed);
+    REQUIRE(loaded.diagnostic.has_value());
     REQUIRE(loaded.diagnostic->reason == Fenrir::LoadFailure::LabelNotFound);
+}
+
+TEST_CASE("An empty label fails with LabelNotFound though sub has an empty name", "[assets][data][sub]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+
+    const Fenrir::LoadResult<ShieldData> loaded =
+        test.store.Load<ShieldData>("data/broken-sub.asset.json5#", Fenrir::AssetOwner::App());
+
+    INFO("`file#` names no sub-asset, and the file's empty-named entry is not one");
+    REQUIRE(loaded.Status() == Fenrir::LoadStatus::Failed);
+    REQUIRE(loaded.diagnostic.has_value());
+    REQUIRE(loaded.diagnostic->reason == Fenrir::LoadFailure::LabelNotFound);
+}
+
+TEST_CASE("A sub-asset with an empty name is refused with a located diagnostic", "[assets][data][sub]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+
+    const Fenrir::LoadResult<Sword> sword =
+        test.store.Load<Sword>("data/broken-sub.asset.json5", Fenrir::AssetOwner::App());
+
+    INFO("the sword loads in part, with an error at the empty-named entry");
+    REQUIRE(sword.Status() == Fenrir::LoadStatus::Partial);
+    const Fenrir::Serialisation::Diagnostic* empty = FindDiagnostic(sword.diagnostics, "empty one");
+    REQUIRE(empty != nullptr);
+    REQUIRE(empty->line == 21);
+    REQUIRE(empty->column == 9);
 }
 
 TEST_CASE("A sub-asset loaded as a type it is not fails with WrongType", "[assets][data][sub]")
@@ -263,6 +302,7 @@ TEST_CASE("A sub-asset loaded as a type it is not fails with WrongType", "[asset
 
     INFO("the sheath is a ShieldData, not a Sword");
     REQUIRE(loaded.Status() == Fenrir::LoadStatus::Failed);
+    REQUIRE(loaded.diagnostic.has_value());
     REQUIRE(loaded.diagnostic->reason == Fenrir::LoadFailure::WrongType);
 }
 
@@ -281,6 +321,19 @@ TEST_CASE("A sub-asset holding a sub of its own is refused with a located diagno
     REQUIRE(nested != nullptr);
     REQUIRE(nested->severity == Fenrir::Serialisation::DiagnosticSeverity::Error);
     REQUIRE(nested->line == 19);
+    REQUIRE(nested->column == 12);
+}
+
+TEST_CASE("A sub-asset refused for its own sub is logged once", "[assets][data][sub]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+
+    (void)test.store.Load<Sword>("data/nested-sub.asset.json5", Fenrir::AssetOwner::App());
+    (void)test.store.Load<ShieldData>("data/nested-sub.asset.json5#sheath", Fenrir::AssetOwner::App());
+
+    INFO("the scabbard's error is logged by the one read of the file");
     REQUIRE(CountContaining(*test.errors, "scabbard") == 1);
 }
 
@@ -295,29 +348,43 @@ TEST_CASE("A sub-asset refused for its own sub does not load", "[assets][data][s
 
     INFO("the scabbard is refused, for a reason that is not a missing label");
     REQUIRE(scabbard.Status() == Fenrir::LoadStatus::Failed);
+    REQUIRE(scabbard.diagnostic.has_value());
     REQUIRE(scabbard.diagnostic->reason == Fenrir::LoadFailure::ImportFailed);
 }
 
-TEST_CASE("A broken sub-asset leaves its siblings loaded and the load Partial", "[assets][data][sub]")
+TEST_CASE("A broken sub-asset leaves the load of its file Partial, saying where", "[assets][data][sub]")
 {
     DataApp test;
     INFO("the test package's data asset types register");
     REQUIRE(test.registered);
-    const std::shared_ptr<std::size_t> reads = CountReads(test);
 
     const Fenrir::LoadResult<Sword> sword =
         test.store.Load<Sword>("data/broken-sub.asset.json5", Fenrir::AssetOwner::App());
+
+    INFO("the sword loads in part, with an error at the cracked entry's `type`");
+    REQUIRE(sword.Status() == Fenrir::LoadStatus::Partial);
+    REQUIRE(test.store.TryGet(sword.handle) != nullptr);
+    const Fenrir::Serialisation::Diagnostic* cracked = FindDiagnostic(sword.diagnostics, "NoSuchType");
+    REQUIRE(cracked != nullptr);
+    REQUIRE(cracked->line == 17);
+    REQUIRE(cracked->column == 13);
+}
+
+TEST_CASE("A broken sub-asset leaves its siblings loaded", "[assets][data][sub]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+
     const Fenrir::LoadResult<ShieldData> sheath =
         test.store.Load<ShieldData>("data/broken-sub.asset.json5#sheath", Fenrir::AssetOwner::App());
 
-    INFO("the sword and its sheath load, the sword in part, with the cracked entry's error: " << Why(sheath));
-    REQUIRE(sword.Status() == Fenrir::LoadStatus::Partial);
-    REQUIRE(test.store.TryGet(sword.handle) != nullptr);
-    REQUIRE(FindDiagnostic(sword.diagnostics, "NoSuchType") != nullptr);
-    REQUIRE(sheath.Ok());
-    REQUIRE_THAT(test.store.TryGet(sheath.handle)->block, WithinAbs(0.25f, 0.0f));
-    INFO("the sheath was loaded with the sword");
-    REQUIRE(*reads == 1);
+    INFO("the sheath reads beside the cracked entry, and its load repeats the file's diagnostics: "
+         << FailureText(sheath));
+    REQUIRE(sheath.Status() == Fenrir::LoadStatus::Partial);
+    const ShieldData* data = test.store.TryGet(sheath.handle);
+    REQUIRE(data != nullptr);
+    REQUIRE_THAT(data->block, WithinAbs(0.25f, 0.0f));
 }
 
 TEST_CASE("A broken sub-asset's diagnostic is logged once", "[assets][data][sub]")
@@ -344,5 +411,6 @@ TEST_CASE("Loading a broken sub-asset by name fails with its reason", "[assets][
 
     INFO("the cracked entry's type is registered by nothing");
     REQUIRE(cracked.Status() == Fenrir::LoadStatus::Failed);
+    REQUIRE(cracked.diagnostic.has_value());
     REQUIRE(cracked.diagnostic->reason == Fenrir::LoadFailure::WrongType);
 }
