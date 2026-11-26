@@ -35,6 +35,7 @@
 #include "FenrirAssets/ShaderData.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirScene/Scene.hpp"
+#include "FenrirSerialisation/Text.hpp"
 #include "FenrirTypes/FieldInfo.hpp"
 #include "FenrirTypes/TypeRegistry.hpp"
 #include "Importers/ImageImporter.hpp"
@@ -203,6 +204,50 @@ namespace Fenrir
             }
             return "no importer";
         }
+
+        // Whether a data asset is from the file `fileKey` names: its top level's, or a sub-asset's.
+        bool FileInUse(const Detail::AssetTable& table, const std::string& fileKey)
+        {
+            const std::string prefix = fileKey + '#';
+            return table.byKey.contains(fileKey) ||
+                   std::ranges::any_of(table.byKey, [&](const auto& keyed) { return keyed.first.starts_with(prefix); });
+        }
+
+        // Writes `text` to `file` atomically (ADR-0079 §4): to a file beside it, named as it with `.saving` added, then
+        // renamed over it, so a write that fails before the rename leaves the old file whole. Why it failed, or none.
+        std::optional<std::string> WriteAtomically(const std::filesystem::path& file, std::string_view text)
+        {
+            std::error_code error;
+            std::filesystem::create_directories(file.parent_path(), error);
+            if (error)
+            {
+                return std::format("its directory could not be made ({})", error.message());
+            }
+            std::filesystem::path beside = file;
+            beside += ".saving";
+            {
+                std::ofstream stream(beside, std::ios::binary | std::ios::trunc);
+                if (!stream)
+                {
+                    return std::format("'{}', written before the rename, could not be opened", Utf8Text(beside));
+                }
+                stream.write(text.data(), static_cast<std::streamsize>(text.size()));
+                stream.close();
+                if (!stream)
+                {
+                    std::filesystem::remove(beside, error);
+                    return std::format("'{}', written before the rename, could not be written", Utf8Text(beside));
+                }
+            }
+            std::filesystem::rename(beside, file, error);
+            if (error)
+            {
+                const std::string message = error.message();
+                std::filesystem::remove(beside, error);
+                return std::format("'{}' could not be renamed over the file ({})", Utf8Text(beside), message);
+            }
+            return std::nullopt;
+        }
     } // namespace
 
     namespace Detail
@@ -314,6 +359,18 @@ namespace Fenrir
             if (!record.key.empty())
             {
                 table.byKey.erase(record.key);
+                // A data asset file's tree goes with the last record from the file, its top level's or a sub-asset's.
+                if (kind == AssetKind::Data)
+                {
+                    const std::string file = record.key.substr(0, record.key.find('#'));
+                    const std::string prefix = file + '#';
+                    if (!table.byKey.contains(file) && std::ranges::none_of(table.byKey, [&](const auto& keyed) {
+                            return keyed.first.starts_with(prefix);
+                        }))
+                    {
+                        fileTrees.erase(file);
+                    }
+                }
                 record.key.clear();
             }
             record.typeName = {};
@@ -748,6 +805,8 @@ namespace Fenrir
             return fail(*read.failure, std::move(read.failureMessage));
         }
         incomplete = read.incomplete;
+        // Kept so a save of the file keeps its comments (ADR-0077 §1).
+        m_state->fileTrees.insert_or_assign(fileKey, std::move(*read.tree));
 
         // One read gives the file's top level and every sub-asset, each stored under the file's key and its label for
         // the one owner, as a model's sub-assets are, in the slot reserved for it. Each repeats the whole file's
@@ -1021,6 +1080,145 @@ namespace Fenrir
     std::optional<std::string> AssetStore::PathOfSlot(Detail::AssetKind kind, Detail::AssetSlot slot) const
     {
         return Detail::PathOf(*m_state, kind, slot);
+    }
+
+    SaveResult AssetStore::SaveData(Detail::AssetSlot slot, const TypeDescription& type,
+                                    std::optional<std::string_view> path)
+    {
+        SaveResult result;
+        Detail::AssetTable& table = TableOf(*m_state, Detail::AssetKind::Data);
+        Detail::AssetRecord* record = m_state->Find(Detail::AssetKind::Data, slot);
+        // The file the save is about, as its diagnostics name it: the path given, then the file resolved.
+        std::string named = path ? std::string(*path) : std::string();
+        const auto fail = [&](std::string message) -> SaveResult {
+            m_state->logger->Error("Could not save {} '{}' as {}: {}", KindName(Detail::AssetKind::Data), named,
+                                   type.name, message);
+            result.status = SaveStatus::Failed;
+            result.diagnostics.push_back(
+                {.severity = Serialisation::DiagnosticSeverity::Error, .path = named, .message = std::move(message)});
+            return std::move(result);
+        };
+
+        if (record == nullptr || record->data == nullptr)
+        {
+            return fail("the data asset handle is empty or stale");
+        }
+        // A key's file is the part before its label; an asset added with no name has neither.
+        const std::size_t hash = record->key.find('#');
+        const std::string fileKey = record->key.substr(0, hash);
+        if (!path)
+        {
+            named = fileKey;
+        }
+        if (!m_state->types->IsA(record->typeName, type.name))
+        {
+            return fail(std::format("it is a `{}`, which is not a `{}`", record->typeName, type.name));
+        }
+
+        std::filesystem::path target;
+        std::string targetKey;
+        if (path)
+        {
+            if (hash != std::string::npos)
+            {
+                return fail("it is a sub-asset, which is saved with its whole file, to that file's own path");
+            }
+            // The writer's path check (ADR-0085 §1): an asset path is relative, under the root, and names a file.
+            const std::filesystem::path given = Utf8Path(*path);
+            if (given.is_absolute() || given.has_root_name() || given.has_root_directory())
+            {
+                return fail("the path is absolute: an asset path is relative to the asset root");
+            }
+            if (path->find('#') != std::string_view::npos)
+            {
+                return fail("the path names a sub-asset: a save writes a whole file");
+            }
+            const AssetPath resolved = Resolve(m_state->root, *path);
+            const std::optional<std::string> relative = RootRelative(m_state->root, resolved.file);
+            if (!relative || *relative == ".")
+            {
+                return fail(std::format("the path is outside the asset root '{}'", Utf8Text(m_state->root)));
+            }
+            target = resolved.file;
+            targetKey = resolved.key;
+            named = targetKey;
+            // Another asset's file is the store's to save from that asset, not this one's to write over.
+            if (targetKey != fileKey && FileInUse(table, targetKey))
+            {
+                return fail("the path names the file another asset of the store is from");
+            }
+        }
+        else
+        {
+            if (fileKey.empty())
+            {
+                return fail("it has no asset path, since it was added with no name: save it to a path");
+            }
+            target = Utf8Path(fileKey);
+            targetKey = fileKey;
+        }
+
+        // What the file holds: for an asset added with no name, itself; otherwise its file's top level and every
+        // sub-asset of it the store holds, with the file's tree as the store last read or wrote it.
+        const auto valueOf = [](const Detail::AssetRecord& held) {
+            return static_cast<const Detail::DataValue*>(held.data.get());
+        };
+        const Detail::DataValue* top = nullptr;
+        std::vector<Detail::EnvelopeSub> subs;
+        const Serialisation::Value* prior = nullptr;
+        if (fileKey.empty())
+        {
+            top = valueOf(*record);
+        }
+        else
+        {
+            if (const auto found = table.byKey.find(fileKey); found != table.byKey.end())
+            {
+                top = valueOf(table.records[found->second]);
+            }
+            const std::string prefix = fileKey + '#';
+            for (const auto& [key, index] : table.byKey)
+            {
+                if (key.starts_with(prefix) && table.records[index].data != nullptr)
+                {
+                    subs.push_back({std::string_view(key).substr(prefix.size()), valueOf(table.records[index])});
+                }
+            }
+            // The order the file has is the writer's; one it lacks is written in name order, the same on every save.
+            std::ranges::sort(subs, {}, &Detail::EnvelopeSub::label);
+            if (const auto tree = m_state->fileTrees.find(fileKey); tree != m_state->fileTrees.end())
+            {
+                prior = &tree->second;
+            }
+        }
+        if (top == nullptr && prior == nullptr)
+        {
+            return fail("its file's top level is no longer loaded, so the file cannot be written whole");
+        }
+
+        Detail::EnvelopeWrite written = Detail::WriteDataEnvelope(
+            top, subs, prior, *m_state->types, Detail::WritingResolvers(*m_state), named, *m_state->logger);
+        result.diagnostics = std::move(written.diagnostics);
+        result.emptyReferences = written.emptyReferences;
+        if (const std::optional<std::string> problem = WriteAtomically(target, Serialisation::WriteText(written.tree)))
+        {
+            return fail(*problem);
+        }
+
+        // An asset with no path takes the one it was saved to, keyed as a load of it is (ADR-0076).
+        if (record->key.empty())
+        {
+            record->key = targetKey;
+            table.byKey.emplace(targetKey, slot.index);
+        }
+        // What was written is the file's tree now, for the next save of it; a copy written elsewhere is no file of the
+        // store's.
+        if (record->key == targetKey || targetKey == fileKey)
+        {
+            m_state->fileTrees.insert_or_assign(targetKey, std::move(written.tree));
+        }
+        result.status = result.emptyReferences > 0 ? SaveStatus::Partial : SaveStatus::Succeeded;
+        return result;
     }
 
     bool AssetStore::SameFileOf(Detail::AssetKind kindA, Detail::AssetSlot a, Detail::AssetKind kindB,

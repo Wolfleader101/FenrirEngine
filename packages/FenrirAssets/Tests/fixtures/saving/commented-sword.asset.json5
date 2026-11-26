@@ -1,0 +1,13 @@
+// A sword whose envelope and fields carry comments, written as the store writes it, so a save keeps every byte.
+{
+  format: 1,
+  type: "AssetsTest::Sword",
+  version: 2,
+  // The sword's own fields.
+  data: {
+    displayName: "Notched sword", // what the shop shows
+    // Words a shop filters by.
+    tags: ["blade", "notched"],
+    edge: 0.25,
+  },
+}

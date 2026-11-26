@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -237,6 +238,38 @@ namespace Fenrir
             return failedUnits.empty() && diagnostics.empty() && !incomplete ? LoadStatus::Succeeded
                                                                              : LoadStatus::Partial;
         }
+    };
+
+    /** @brief How a save went. */
+    enum class SaveStatus : std::uint8_t
+    {
+        /** @brief The file was written, and every reference in it names its asset. */
+        Succeeded,
+        /**
+         * @brief The file was written, but references in it were written empty (`null`), SaveResult::diagnostics saying
+         * which: each names an asset with no asset path a file can hold.
+         */
+        Partial,
+        /** @brief Nothing was written, and the file on disk is as it was; SaveResult::diagnostics says why. */
+        Failed,
+    };
+
+    /** @brief What AssetStore::Save gives back (ADR-0079): how it went, why, and what it wrote empty. */
+    struct SaveResult
+    {
+        /** @brief Whether the file was written, wholly or with references written empty. */
+        SaveStatus status = SaveStatus::Succeeded;
+        /**
+         * @brief Each diagnostic of the save, already logged once, naming the file it was about: why the save was
+         * refused, or each reference written empty. A save writes the text a diagnostic would locate, so each is at
+         * line 1, column 1, as a node built in code is.
+         */
+        std::vector<Serialisation::Diagnostic> diagnostics;
+        /**
+         * @brief How many references were written empty: each names an asset that has no asset path (one added with no
+         * name, or freed) or whose path a file cannot hold (an imported asset loaded from outside the asset root).
+         */
+        std::size_t emptyReferences = 0;
     };
 
     /**
@@ -499,6 +532,43 @@ namespace Fenrir
         [[nodiscard]] std::optional<std::string> PathOf(AssetHandle<T> handle) const
         {
             return PathOfSlot(Detail::AssetTraits<T>::kind, {handle.index, handle.generation});
+        }
+
+        /**
+         * @brief Writes the data asset `handle` names back to its file, with every sub-asset of that file, through the
+         * envelope writer (ADR-0077, ADR-0079): the envelope's `format`, `type`, `version` (the type's own) and `data`,
+         * then `sub`; each value's fields in declaration order with its defaults left out, so the same data writes the
+         * same bytes. The comments of the file as the store last read or wrote it are kept, each where its key is. A
+         * sub-asset whose record has been freed, or that did not read, is written back as the file had it. Through a
+         * sub-asset's handle, the whole file is written.
+         *
+         * Each reference is written as its target's asset path, a sub-asset's in full as `path#name`. One naming an
+         * asset with no path a file can hold is written `null`, with a warning, and counted in
+         * SaveResult::emptyReferences.
+         *
+         * The write is atomic: the text goes to a file beside the target, named as it with `.saving` added, which is
+         * then renamed over it, so a save that fails leaves the old file whole. Refused with a logged error, and
+         * nothing written, for an empty or stale handle, a record whose type is neither `T` nor one extending it, and
+         * an asset with no path (added with no name: save it to a path).
+         */
+        template <Detail::DataAssetType T>
+        SaveResult Save(AssetHandle<T> handle)
+        {
+            return SaveData({handle.index, handle.generation}, Describe<T>::Description(), std::nullopt);
+        }
+
+        /**
+         * @brief Writes the data asset `handle` names to `path`, an asset path relative to the asset root, as Save
+         * writes its own file: an asset with no path takes `path` as its asset path, so PathOf gives it and a later
+         * Load of it gives this handle, while an asset that has a path keeps it, `path` getting a copy. Refused with a
+         * logged error, and nothing written, as Save is, and also for `path` absolute, climbing out of the root, naming
+         * a sub-asset (`#`), or naming a file another asset of the store is from; and for a sub-asset's handle, which
+         * is saved with its file.
+         */
+        template <Detail::DataAssetType T>
+        SaveResult Save(AssetHandle<T> handle, std::string_view path)
+        {
+            return SaveData({handle.index, handle.generation}, Describe<T>::Description(), path);
         }
 
         /** @brief Whether `handle` names a live asset: false for an empty or stale handle. */
@@ -765,6 +835,8 @@ namespace Fenrir
         [[nodiscard]] const void* FindData(Detail::AssetSlot slot, const TypeDescription& type) const;
         [[nodiscard]] std::uint32_t RevisionOf(Detail::AssetKind kind, Detail::AssetSlot slot) const;
         [[nodiscard]] std::optional<std::string> PathOfSlot(Detail::AssetKind kind, Detail::AssetSlot slot) const;
+        /** @brief Save's untyped part: writes the data asset `slot` names, as `type`, to its file or to `path`. */
+        SaveResult SaveData(Detail::AssetSlot slot, const TypeDescription& type, std::optional<std::string_view> path);
         [[nodiscard]] bool SameFileOf(Detail::AssetKind kindA, Detail::AssetSlot a, Detail::AssetKind kindB,
                                       Detail::AssetSlot b) const;
         void Refuse(std::string_view assetName, std::string_view action, const std::string& problem);

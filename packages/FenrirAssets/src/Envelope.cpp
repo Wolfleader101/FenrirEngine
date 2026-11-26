@@ -515,6 +515,164 @@ namespace Fenrir::Detail
             read.incomplete = read.incomplete || filled.incomplete;
             read.entries.push_back({check.name, std::move(filled.value), check.type, std::move(filled.references)});
         }
+        // Read last: every entry's `data` is upgraded in place by now, and nothing points into the tree any more.
+        read.tree = std::move(tree.tree);
         return read;
+    }
+
+    namespace
+    {
+        // The member of `node`, an object, keyed `key`; null when it has none, or is no object.
+        const Ser::Member* MemberOf(const Ser::Value* node, std::string_view key)
+        {
+            if (node == nullptr || node->Kind() != Ser::ValueKind::Object)
+            {
+                return nullptr;
+            }
+            const auto& members = node->AsObject().members;
+            const auto found = std::ranges::find(members, key, &Ser::Member::key);
+            return found != members.end() ? &*found : nullptr;
+        }
+
+        // Gives each member of `object` the comments of the member of its key in `prior`, and `object` the closing
+        // comments of `prior`, as ToTree does under `data`: for the envelope's own keys, which no type describes.
+        void TakeComments(Ser::Object& object, const Ser::Value* prior)
+        {
+            if (prior == nullptr || prior->Kind() != Ser::ValueKind::Object)
+            {
+                return;
+            }
+            for (Ser::Member& member : object.members)
+            {
+                if (const Ser::Member* match = MemberOf(prior, member.key))
+                {
+                    member.leadingComments = match->leadingComments;
+                    member.trailingComment = match->trailingComment;
+                }
+            }
+            object.closingComments = prior->AsObject().closingComments;
+        }
+
+        // One entry's `type`, `version` and `data` (after `format` for the top level): `version` is its type's own,
+        // since its `data` was upgraded to it on read, and `data` takes its comments from `prior`'s.
+        Ser::Object EntryObject(const DataValue& value, const Ser::Value* prior, bool top, const TypeRegistry& registry,
+                                const Ser::Resolvers& resolvers)
+        {
+            Ser::Object entry;
+            if (top)
+            {
+                entry.Add("format", EnvelopeFormat);
+            }
+            entry.Add("type", value.type->name);
+            entry.Add("version", value.type->version);
+            const Ser::Member* priorData = MemberOf(prior, "data");
+            entry.Add("data", Ser::ToTree(value.value, *value.type, registry, resolvers,
+                                          priorData != nullptr ? &priorData->value : nullptr));
+            TakeComments(entry, prior);
+            return entry;
+        }
+    } // namespace
+
+    EnvelopeWrite WriteDataEnvelope(const DataValue* top, std::span<const EnvelopeSub> subs, const Ser::Value* prior,
+                                    const TypeRegistry& registry, const Ser::Resolvers& resolvers,
+                                    std::string_view path, ILogger& logger)
+    {
+        EnvelopeWrite write;
+        // The entry being written, as a warning names it.
+        std::string where;
+        // A reference is written as the path the store names it by, unless it has none a file can hold: then it is
+        // `null`, with one warning, and counted (ADR-0079).
+        Ser::Resolvers counting = resolvers;
+        counting.writeReference = [&](ReferenceValue reference, const FieldInfo& field) -> std::string {
+            std::string written = resolvers.writeReference ? resolvers.writeReference(reference, field) : std::string();
+            std::optional<std::string> problem;
+            if (written.empty())
+            {
+                problem = std::format("{}`{}` names an asset with no asset path (one added with no name, or freed); it "
+                                      "is written null",
+                                      where, field.name);
+            }
+            else if (std::optional<std::string> refused = FilePathProblem(written))
+            {
+                problem = std::format("{}`{}` names \"{}\", which {}; it is written null", where, field.name, written,
+                                      *refused);
+            }
+            if (!problem)
+            {
+                return written;
+            }
+            Ser::Diagnostic warning{.severity = Ser::DiagnosticSeverity::Warning,
+                                    .path = std::string(path),
+                                    .message = std::move(*problem)};
+            logger.Warn("{}", Ser::FormatDiagnostic(warning));
+            write.diagnostics.push_back(std::move(warning));
+            ++write.emptyReferences;
+            return {};
+        };
+
+        Ser::Object envelope;
+        if (top != nullptr)
+        {
+            envelope = EntryObject(*top, prior, true, registry, counting);
+        }
+        else
+        {
+            // The top level the store holds none of is written as the file has it.
+            for (const std::string_view key : {"format", "type", "version", "data"})
+            {
+                if (const Ser::Member* member = MemberOf(prior, key))
+                {
+                    envelope.members.push_back(*member);
+                }
+            }
+            TakeComments(envelope, prior);
+        }
+
+        // `sub` keeps the file's order, so a save moves no sub-asset (ADR-0077 §3); one the store holds none of is
+        // kept as the file has it, as a value of an unknown type is.
+        const Ser::Member* priorSub = MemberOf(prior, "sub");
+        const Ser::Value* priorSubs =
+            priorSub != nullptr && priorSub->value.Kind() == Ser::ValueKind::Object ? &priorSub->value : nullptr;
+        const auto live = [&](std::string_view label) -> const DataValue* {
+            const auto found = std::ranges::find(subs, label, &EnvelopeSub::label);
+            return found != subs.end() ? found->value : nullptr;
+        };
+        Ser::Object sub;
+        if (priorSubs != nullptr)
+        {
+            for (const Ser::Member& member : priorSubs->AsObject().members)
+            {
+                if (const DataValue* value = live(member.key))
+                {
+                    where = EntryPrefix(member.key);
+                    sub.Add(member.key, EntryObject(*value, &member.value, false, registry, counting));
+                }
+                else
+                {
+                    sub.members.push_back(member);
+                }
+            }
+        }
+        for (const EnvelopeSub& entry : subs)
+        {
+            if (MemberOf(priorSubs, entry.label) == nullptr)
+            {
+                where = EntryPrefix(entry.label);
+                sub.Add(std::string(entry.label), EntryObject(*entry.value, nullptr, false, registry, counting));
+            }
+        }
+        if (!sub.members.empty())
+        {
+            TakeComments(sub, priorSubs);
+            envelope.Add("sub", std::move(sub));
+            TakeComments(envelope, prior);
+        }
+
+        write.tree = Ser::Value(std::move(envelope));
+        if (prior != nullptr)
+        {
+            write.tree.leadingComments = prior->leadingComments;
+        }
+        return write;
     }
 } // namespace Fenrir::Detail

@@ -5,6 +5,8 @@
 // Generated/DataAssetsTestPackageTypes.* from that), whose committed registration FenrirAssets' tests compile and
 // register into the app's type registry.
 
+#include <cstdint>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -56,3 +58,42 @@ namespace AssetsTest
         Fenrir::AssetHandle<Sword> parries;
     };
 } // namespace AssetsTest
+
+// The types of the format research's golden sword (FenrirSerialisation's fixtures/sword.asset.json5), field for field
+// as FenrirSerialisation's hand-written golden types have them, so the store loads the golden and saves it back.
+namespace MyGame
+{
+    /** @brief One row of a sword's upgrade table. */
+    struct Upgrade
+    {
+        std::int32_t level = 0;
+        std::int32_t cost = 0;
+        float damageBonus = 0.0f;
+    };
+
+    /**
+     * @brief The golden sword: `description` is declared but the golden leaves it at its default, and `mesh` and
+     * `onHit` are plain strings, as the golden's types have them.
+     *
+     * @version 2
+     */
+    struct Sword
+    {
+        std::string displayName;
+        std::string description;
+        float damage = 10.0f;
+        float durability = 100.0f;
+        std::string mesh;
+        std::vector<std::string> tags;
+        std::vector<Upgrade> upgrades;
+        std::string onHit;
+    };
+
+    /** @brief The golden sword's sub-asset. */
+    struct ParticleEffect
+    {
+        std::filesystem::path texture;
+        std::int32_t count = 0;
+        float lifetime = 1.0f;
+    };
+} // namespace MyGame

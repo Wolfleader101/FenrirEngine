@@ -10,7 +10,9 @@
 #include <vector>
 
 #include "FenrirAssets/AssetStore.hpp"
+#include "FenrirSerialisation/Bridge.hpp"
 #include "FenrirSerialisation/Diagnostic.hpp"
+#include "FenrirSerialisation/Value.hpp"
 #include "FenrirTypes/ValueRef.hpp"
 
 namespace Fenrir
@@ -23,6 +25,8 @@ namespace Fenrir
 
 namespace Fenrir::Detail
 {
+    struct DataValue;
+
     /** @brief One asset an envelope holds: its top level, or one of the sub-assets in its `sub`. */
     struct EnvelopeEntry
     {
@@ -63,6 +67,11 @@ namespace Fenrir::Detail
         /** @brief Whether FromTree read any entry's fields in part, as a reference with no resolver makes it with no
          * diagnostic. */
         bool incomplete = false;
+        /**
+         * @brief The file's tree as read, each entry's `data` upgraded to its type's version, when the read did not
+         * fail: what a save of the file takes its comments, and the entries the store holds none of, from.
+         */
+        std::optional<Serialisation::Value> tree;
     };
 
     /** @brief What a reference in a file names: the asset, or why it names none. */
@@ -123,4 +132,40 @@ namespace Fenrir::Detail
                                                 std::optional<std::string_view> label, const TypeDescription& expected,
                                                 const TypeRegistry& registry, const EnvelopeHooks& hooks,
                                                 ILogger& logger);
+
+    /** @brief One sub-asset an envelope is written with: its name in `sub`, and its instance. */
+    struct EnvelopeSub
+    {
+        std::string_view label;
+        const DataValue* value = nullptr;
+    };
+
+    /** @brief What writing a data asset's envelope gave: its tree, and what it wrote empty. */
+    struct EnvelopeWrite
+    {
+        /** @brief The envelope, for WriteText. */
+        Serialisation::Value tree;
+        /** @brief A warning for each reference written empty, each logged once, at line 1, column 1. */
+        std::vector<Serialisation::Diagnostic> diagnostics;
+        /** @brief How many references were written empty. */
+        std::size_t emptyReferences = 0;
+    };
+
+    /**
+     * @brief The `.asset.json5` envelope of a data asset and its sub-assets (ADR-0077): `format`, then the top level's
+     * `type`, `version` (its type's own) and `data`, then `sub`, each `data` through ToTree in declaration order with
+     * its defaults left out. With `prior`, the file's tree as last read or written, every node takes the comments of
+     * the node at its key path there, and `sub` keeps `prior`'s order: a sub-asset `subs` lacks is written as `prior`
+     * holds it (one freed, or one that did not read), and one `prior` lacks follows, in `subs`' order. A `top` of null
+     * writes `prior`'s top level as it holds it; one of the two must be given.
+     *
+     * Each reference is written through `resolvers.writeReference`. One it names no path for, or a path a file cannot
+     * hold (FilePathProblem), is written `null` with a warning naming its field, and counted.
+     *
+     * @param path The path the warnings name the file by.
+     */
+    [[nodiscard]] EnvelopeWrite WriteDataEnvelope(const DataValue* top, std::span<const EnvelopeSub> subs,
+                                                  const Serialisation::Value* prior, const TypeRegistry& registry,
+                                                  const Serialisation::Resolvers& resolvers, std::string_view path,
+                                                  ILogger& logger);
 } // namespace Fenrir::Detail
