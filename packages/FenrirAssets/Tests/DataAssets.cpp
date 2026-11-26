@@ -457,49 +457,72 @@ TEST_CASE("Loading the name of a data asset added with it gives the added asset"
     REQUIRE(loaded.handle.generation == added.generation);
 }
 
-TEST_CASE("A data asset added under a name in use is refused and logged", "[assets][data][add]")
+TEST_CASE("A data asset added under a name an added asset has is refused and logged", "[assets][data][add]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+    const Fenrir::AssetHandle<Sword> first =
+        test.store.Add<Sword>(Rapier(), Fenrir::AssetOwner::App(), "data/rapier.asset.json5");
+    INFO("the first named add succeeds");
+    REQUIRE_FALSE(first.IsEmpty());
+
+    Sword other = Rapier();
+    other.displayName = "Other";
+    const Fenrir::AssetHandle<Sword> second =
+        test.store.Add<Sword>(other, Fenrir::AssetOwner::App(), "data/rapier.asset.json5");
+
+    INFO("the second add under the name is refused with one error naming it, and the first is untouched");
+    REQUIRE(second.IsEmpty());
+    REQUIRE(CountContaining(*test.errors, "data/rapier.asset.json5") == 1);
+    REQUIRE(test.store.TryGet(first)->displayName == "Rapier");
+}
+
+TEST_CASE("A data asset added under a name a loaded asset has is refused and logged", "[assets][data][add]")
 {
     DataApp test;
     INFO("the test package's data asset types register");
     REQUIRE(test.registered);
     const Fenrir::LoadResult<Sword> loaded =
         test.store.Load<Sword>("data/sword.asset.json5", Fenrir::AssetOwner::App());
-    const Fenrir::AssetHandle<Sword> first =
-        test.store.Add<Sword>(Rapier(), Fenrir::AssetOwner::App(), "data/rapier.asset.json5");
-    INFO("the loaded sword and the first named add both succeed");
+    INFO("the sword loads");
     REQUIRE(loaded.Ok());
-    REQUIRE_FALSE(first.IsEmpty());
 
-    const Fenrir::AssetHandle<Sword> overAdded =
-        test.store.Add<Sword>(Rapier(), Fenrir::AssetOwner::App(), "data/rapier.asset.json5");
-    const Fenrir::AssetHandle<Sword> overLoaded =
+    const Fenrir::AssetHandle<Sword> added =
         test.store.Add<Sword>(Rapier(), Fenrir::AssetOwner::App(), "data/sword.asset.json5");
 
-    INFO("a name an added or a loaded asset has is refused, each with one error naming it");
-    REQUIRE(overAdded.IsEmpty());
-    REQUIRE(overLoaded.IsEmpty());
-    REQUIRE(CountContaining(*test.errors, "data/rapier.asset.json5") == 1);
+    INFO("an add under the loaded file's path is refused with one error naming it, and the loaded sword is untouched");
+    REQUIRE(added.IsEmpty());
     REQUIRE(CountContaining(*test.errors, "data/sword.asset.json5") == 1);
-    INFO("the assets already under the names are untouched");
     REQUIRE(test.store.TryGet(loaded.handle)->displayName == "Longsword");
-    REQUIRE(test.store.TryGet(first)->displayName == "Rapier");
 }
 
-TEST_CASE("A data asset added under a name outside the root is refused and logged", "[assets][data][add]")
+TEST_CASE("A data asset added under a name climbing out of the root is refused and logged", "[assets][data][add]")
 {
     DataApp test;
     INFO("the test package's data asset types register");
     REQUIRE(test.registered);
 
-    const Fenrir::AssetHandle<Sword> climbing =
+    const Fenrir::AssetHandle<Sword> handle =
         test.store.Add<Sword>(Rapier(), Fenrir::AssetOwner::App(), "../rapier.asset.json5");
-    const std::string elsewhere = (test.store.Root().parent_path() / "rapier.asset.json5").generic_string();
-    const Fenrir::AssetHandle<Sword> absolute = test.store.Add<Sword>(Rapier(), Fenrir::AssetOwner::App(), elsewhere);
 
-    INFO("a name climbing out through .. and an absolute one elsewhere are each refused with one error");
-    REQUIRE(climbing.IsEmpty());
-    REQUIRE(absolute.IsEmpty());
-    REQUIRE(CountContaining(*test.errors, "outside the asset root") == 2);
+    INFO("a name climbing out through .. is refused with one error");
+    REQUIRE(handle.IsEmpty());
+    REQUIRE(CountContaining(*test.errors, "outside the asset root") == 1);
+}
+
+TEST_CASE("A data asset added under an absolute name outside the root is refused and logged", "[assets][data][add]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+    const std::string elsewhere = (test.store.Root().parent_path() / "rapier.asset.json5").generic_string();
+
+    const Fenrir::AssetHandle<Sword> handle = test.store.Add<Sword>(Rapier(), Fenrir::AssetOwner::App(), elsewhere);
+
+    INFO("an absolute name elsewhere is refused with one error");
+    REQUIRE(handle.IsEmpty());
+    REQUIRE(CountContaining(*test.errors, "outside the asset root") == 1);
 }
 
 TEST_CASE("A data asset added under an absolute name under the root has its root-relative path", "[assets][data][add]")

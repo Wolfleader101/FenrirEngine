@@ -165,6 +165,12 @@ namespace Fenrir
             return Utf8Text(relative);
         }
 
+        // Why a data asset of `type` is refused when the store's type registry lacks it.
+        std::string UnregisteredType(const TypeDescription& type)
+        {
+            return std::format("the type registry has no `{}`: register its package's types first", type.name);
+        }
+
         std::string_view ReasonText(LoadFailure reason)
         {
             if (reason == LoadFailure::FileNotFound)
@@ -590,8 +596,7 @@ namespace Fenrir
         const TypeRegistry& registry = *m_state->types;
         if (registry.Find(type.name) == nullptr)
         {
-            return fail(LoadFailure::NotADataAsset,
-                        std::format("the type registry has no `{}`: register its package's types first", type.name));
+            return fail(LoadFailure::NotADataAsset, UnregisteredType(type));
         }
         // A data asset's identity is its path under the root (ADR-0076), so one outside it has none.
         const std::optional<std::string> assetPath = RootRelative(m_state->root, resolved.file);
@@ -823,8 +828,7 @@ namespace Fenrir
         const TypeDescription* registered = m_state->types->Find(type.name);
         if (registered == nullptr)
         {
-            Refuse(word, "add",
-                   std::format("the type registry has no `{}`: register its package's types first", type.name));
+            Refuse(word, "add", UnregisteredType(type));
             return nullptr;
         }
         Detail::AssetTable& table = TableOf(*m_state, Detail::AssetKind::Data);
@@ -945,10 +949,11 @@ namespace Fenrir
     void* AssetStore::ReplaceData(Detail::AssetSlot slot, const TypeDescription& type)
     {
         const std::string_view word = KindName(Detail::AssetKind::Data);
-        Detail::AssetRecord* record = m_state->Find(Detail::AssetKind::Data, slot);
-        if (record == nullptr || record->data == nullptr)
+        // Worded as an engine kind's Replace is (ReplaceSlot).
+        Detail::AssetRecord* record =
+            EditRecord(Detail::AssetKind::Data, slot, "replace", "Could not {} a {}: its handle is empty or stale");
+        if (record == nullptr)
         {
-            Refuse(word, "replace", "its handle is empty or stale");
             return nullptr;
         }
         // Exactly its type: a base's value would leave the fields of the type extending it as they were.
@@ -1051,13 +1056,13 @@ namespace Fenrir
         }
     }
 
-    Detail::AssetRecord* AssetStore::EditRecord(Detail::AssetKind kind, Detail::AssetSlot slot, std::string_view action,
+    Detail::AssetRecord* AssetStore::EditRecord(Detail::AssetKind kind, Detail::AssetSlot slot, std::string_view what,
                                                 std::string_view stale)
     {
         Detail::AssetRecord* record = m_state->Find(kind, slot);
         if (record == nullptr || record->data == nullptr)
         {
-            m_state->logger->Error(stale, action, KindName(kind));
+            m_state->logger->Error(stale, what, KindName(kind));
             return nullptr;
         }
         return record;

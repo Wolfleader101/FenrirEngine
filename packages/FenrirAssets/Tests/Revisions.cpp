@@ -147,6 +147,7 @@ TEST_CASE("Edit changes a data asset in place and bumps the revision every reade
     REQUIRE(test.registered);
     const Fenrir::LoadResult<Sword> loaded =
         test.store.Load<Sword>("data/sword.asset.json5", Fenrir::AssetOwner::App());
+    INFO("the sword loads");
     REQUIRE(loaded.Ok());
     const Sword* before = test.store.TryGet(loaded.handle);
 
@@ -172,6 +173,7 @@ TEST_CASE("Edit through a base type's handle edits the base part of a data asset
     REQUIRE(test.registered);
     const Fenrir::LoadResult<WeaponData> loaded =
         test.store.Load<WeaponData>("data/sword.asset.json5", Fenrir::AssetOwner::App());
+    INFO("the sword loads");
     REQUIRE(loaded.Ok());
 
     WeaponData* weapon = test.store.Edit(loaded.handle, "rename a weapon");
@@ -188,6 +190,7 @@ TEST_CASE("Edit of a stale data asset handle gives null and logs its action", "[
     INFO("the test package's data asset types register");
     REQUIRE(test.registered);
     const Fenrir::AssetHandle<Sword> sword = test.store.Add<Sword>(Sword{}, Fenrir::AssetOwner::App());
+    INFO("the added sword unloads, so its handle is stale");
     REQUIRE(test.store.Unload(sword));
 
     INFO("editing a freed data asset gives nothing, and one error says what was tried");
@@ -217,6 +220,7 @@ TEST_CASE("Replace swaps a data asset's value and bumps its revision", "[assets]
     REQUIRE(test.registered);
     const Fenrir::LoadResult<Sword> loaded =
         test.store.Load<Sword>("data/sword.asset.json5", Fenrir::AssetOwner::App());
+    INFO("the sword loads");
     REQUIRE(loaded.Ok());
 
     Sword blunt;
@@ -238,6 +242,7 @@ TEST_CASE("Replace of a data asset through a base type's handle is refused and l
     REQUIRE(test.registered);
     const Fenrir::LoadResult<WeaponData> loaded =
         test.store.Load<WeaponData>("data/sword.asset.json5", Fenrir::AssetOwner::App());
+    INFO("the sword loads");
     REQUIRE(loaded.Ok());
 
     WeaponData plain;
@@ -256,6 +261,7 @@ TEST_CASE("Replace of a stale data asset handle is refused and logged", "[assets
     INFO("the test package's data asset types register");
     REQUIRE(test.registered);
     const Fenrir::AssetHandle<Sword> sword = test.store.Add<Sword>(Sword{}, Fenrir::AssetOwner::App());
+    INFO("the added sword unloads, so its handle is stale");
     REQUIRE(test.store.Unload(sword));
 
     INFO("replacing a freed data asset fails with one error, and does not bring it back");

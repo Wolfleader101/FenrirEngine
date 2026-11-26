@@ -770,12 +770,13 @@ namespace Fenrir
         void Refuse(std::string_view assetName, std::string_view action, const std::string& problem);
         void Warn(std::string_view assetName, std::string_view action, const Detail::AssetWarnings& warnings);
         /**
-         * @brief Every edit's core (Edit, and the material, clip, bone mask and image edits): the live record `slot`
-         * names, for the caller to change and bump the revision of, or null when the slot does not resolve, logged
-         * through `stale` formatted with `action` and the kind's word.
+         * @brief Every edit's core (Edit, Replace of a data asset, and the material, clip, bone mask and image edits):
+         * the live record `slot` names, for the caller to change and bump the revision of, or null when the slot does
+         * not resolve. That is logged as `stale`, a format of two `{}`: `what`, the edit's own words (its action, or a
+         * material set's parameter name), then the kind's word.
          */
         [[nodiscard]] Detail::AssetRecord* EditRecord(
-            Detail::AssetKind kind, Detail::AssetSlot slot, std::string_view action,
+            Detail::AssetKind kind, Detail::AssetSlot slot, std::string_view what,
             std::string_view stale = "Could not {}: the {} handle is empty or stale");
         /** @brief Edit's untyped part: the instance, as `type`, of the data asset `slot` names, its revision bumped. */
         [[nodiscard]] void* EditData(Detail::AssetSlot slot, const TypeDescription& type, std::string_view action);
