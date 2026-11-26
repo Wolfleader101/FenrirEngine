@@ -200,12 +200,57 @@ namespace Fenrir
             return "no importer";
         }
 
-        // Whether a data asset is from the file `fileKey` names: its top level's, or a sub-asset's.
+        // Whether an asset of `table` is from the file `fileKey` names: a data asset's top level or sub-asset, a model
+        // or a model's sub-asset, or an image or font file's one asset.
         bool FileInUse(const Detail::AssetTable& table, const std::string& fileKey)
         {
             const std::string prefix = fileKey + '#';
             return table.byKey.contains(fileKey) ||
                    std::ranges::any_of(table.byKey, [&](const auto& keyed) { return keyed.first.starts_with(prefix); });
+        }
+
+        // The one asset an image, cubemap or font file imports to, into `data`, as a load and a reload both import
+        // it; or why it imports to none.
+        std::string ImportFileAsset(Detail::AssetKind kind, const std::filesystem::path& file, Detail::AssetBox& data)
+        {
+            Detail::AssetWarnings warnings;
+            if (kind == Detail::AssetKind::Font)
+            {
+                FontData font;
+                if (!Detail::ReadAssetFile(file, font.bytes))
+                {
+                    return "the file could not be read";
+                }
+                if (std::string problem = Detail::PrepareAsset(font, warnings); !problem.empty())
+                {
+                    return problem;
+                }
+                data = Detail::AssetBox(new FontData(std::move(font)), &Detail::DestroyAssetData<FontData>);
+                return {};
+            }
+            std::vector<std::byte> bytes;
+            if (!Detail::ReadAssetFile(file, bytes))
+            {
+                return "the file could not be read";
+            }
+            Detail::ImageImport imported =
+                Detail::IsCubemapFile(file) ? Detail::ImportCubemapFile(file, bytes) : Detail::ImportImage(bytes);
+            if (!imported.image)
+            {
+                return std::move(imported.error);
+            }
+            if (std::string problem = Detail::PrepareAsset(*imported.image, warnings); !problem.empty())
+            {
+                return problem;
+            }
+            data = Detail::AssetBox(new ImageData(std::move(*imported.image)), &Detail::DestroyAssetData<ImageData>);
+            return {};
+        }
+
+        // Logs that the changed file `path` did not reload as a `kind`, and why: its assets keep what they loaded.
+        void LogKept(ILogger& logger, Detail::AssetKind kind, std::string_view path, std::string_view problem)
+        {
+            logger.Error("Could not reload {} '{}': {}; what it loaded is kept", KindName(kind), path, problem);
         }
 
     } // namespace
@@ -378,6 +423,17 @@ namespace Fenrir
                         {
                             watcher->Forget(file);
                         }
+                    }
+                }
+                // An imported file's watch goes with the last asset from it of any kind: a model file's sub-assets
+                // live on after its model, and an image or font file is its one asset.
+                else if (watcher && !record.key.starts_with(BuiltinPrefix))
+                {
+                    const std::string file = record.key.substr(0, record.key.find('#'));
+                    if (watcher->Watches(file) &&
+                        std::ranges::none_of(tables, [&](const AssetTable& held) { return FileInUse(held, file); }))
+                    {
+                        watcher->Forget(file);
                     }
                 }
                 record.key.clear();
@@ -611,48 +667,32 @@ namespace Fenrir
                 return fail(LoadFailure::LabelNotFound,
                             "a font file has no sub-asset called '" + resolved.label + "', or any other");
             }
-            FontData font;
-            if (!Detail::ReadAssetFile(resolved.file, font.bytes))
-            {
-                return fail(LoadFailure::ImportFailed, "the file could not be read");
-            }
-            Detail::AssetWarnings warnings;
-            if (std::string problem = Detail::PrepareAsset(font, warnings); !problem.empty())
-            {
-                return fail(LoadFailure::ImportFailed, std::move(problem));
-            }
-            Detail::AssetBox data(new FontData(std::move(font)), &Detail::DestroyAssetData<FontData>);
-            return Detail::InsertAsset(table, std::move(data), owner, resolved.key);
         }
-        if (kind != Detail::AssetKind::Image)
+        else if (kind != Detail::AssetKind::Image)
         {
             return fail(LoadFailure::NoImporter,
                         std::string("nothing imports a ") + std::string(KindName(kind)) + " from this kind of file");
         }
-        if (resolved.labelled)
+        else if (resolved.labelled)
         {
             return fail(LoadFailure::LabelNotFound,
                         "an image file has no sub-asset called '" + resolved.label + "', or any other");
         }
-        std::vector<std::byte> bytes;
-        if (!Detail::ReadAssetFile(resolved.file, bytes))
-        {
-            return fail(LoadFailure::ImportFailed, "the file could not be read");
-        }
-        Detail::ImageImport imported = Detail::IsCubemapFile(resolved.file)
-                                           ? Detail::ImportCubemapFile(resolved.file, bytes)
-                                           : Detail::ImportImage(bytes);
-        if (!imported.image)
-        {
-            return fail(LoadFailure::ImportFailed, std::move(imported.error));
-        }
-        Detail::AssetWarnings warnings;
-        if (std::string problem = Detail::PrepareAsset(*imported.image, warnings); !problem.empty())
+        // Looked at before the read, so a write during it is a change the watcher sees.
+        const std::optional<ReloadWatcher::Stamp> stamp =
+            m_state->watcher ? Detail::StampOf(resolved.file) : std::nullopt;
+        Detail::AssetBox data(nullptr, nullptr);
+        if (std::string problem = ImportFileAsset(kind, resolved.file, data); !problem.empty())
         {
             return fail(LoadFailure::ImportFailed, std::move(problem));
         }
-        Detail::AssetBox data(new ImageData(std::move(*imported.image)), &Detail::DestroyAssetData<ImageData>);
-        return Detail::InsertAsset(table, std::move(data), owner, resolved.key);
+        const Detail::AssetSlot slot = Detail::InsertAsset(table, std::move(data), owner, resolved.key);
+        if (m_state->watcher)
+        {
+            m_state->watcher->Track(resolved.key, RootRelative(m_state->root, resolved.file).value_or(resolved.key),
+                                    kind, stamp, ReloadWatcher::Clock::now());
+        }
+        return slot;
     }
 
     Detail::AssetSlot AssetStore::LoadDataSlot(std::string_view path, std::uint32_t owner, const TypeDescription& type,
@@ -1281,13 +1321,53 @@ namespace Fenrir
         }
         m_state->watcher->Poll(ReloadWatcher::Clock::now(), *m_state->logger,
                                [this](const std::string& key, Detail::AssetKind kind) {
-                                   // Only data asset files are watched so far; an imported file reloads through its
-                                   // importer (ADR-0081 §2) once it is watched too.
+                                   // A data asset file reloads through its envelope, an imported one through its
+                                   // importer (ADR-0081 §2).
                                    if (kind == Detail::AssetKind::Data)
                                    {
                                        ReloadDataFile(key);
                                    }
+                                   else if (kind == Detail::AssetKind::Model)
+                                   {
+                                       ReloadModelFile(key);
+                                   }
+                                   else
+                                   {
+                                       ReloadImportedFile(key, kind);
+                                   }
                                });
+    }
+
+    void AssetStore::ReloadImportedFile(const std::string& fileKey, Detail::AssetKind kind)
+    {
+        Detail::AssetTable& table = TableOf(*m_state, kind);
+        const auto found = table.byKey.find(fileKey);
+        if (found == table.byKey.end())
+        {
+            return;
+        }
+        const Detail::AssetSlot slot{found->second, table.records[found->second].generation};
+        const std::string assetPath = Detail::PathOf(*m_state, kind, slot).value_or(fileKey);
+        // Imported into its own box, so a failure leaves the asset as it was.
+        Detail::AssetBox data(nullptr, nullptr);
+        if (const std::string problem = ImportFileAsset(kind, Utf8Path(fileKey), data); !problem.empty())
+        {
+            LogKept(*m_state->logger, kind, assetPath, problem);
+            return;
+        }
+        if (ReplaceSlot(kind, slot, std::move(data)))
+        {
+            m_state->reloaded.push_back({assetPath, kind, slot});
+        }
+    }
+
+    void AssetStore::ReloadModelFile(const std::string& fileKey)
+    {
+        if (std::string problem = ImportModelFile(Utf8Path(fileKey), fileKey, Detail::ReloadOwnerId); !problem.empty())
+        {
+            LogKept(*m_state->logger, Detail::AssetKind::Model,
+                    RootRelative(m_state->root, Utf8Path(fileKey)).value_or(fileKey), problem);
+        }
     }
 
     void AssetStore::ReloadDataFile(const std::string& fileKey)
@@ -1316,8 +1396,7 @@ namespace Fenrir
         std::ranges::sort(held);
         const std::string assetPath = RootRelative(m_state->root, Utf8Path(fileKey)).value_or(fileKey);
         const auto keep = [&](std::string_view problem) {
-            m_state->logger->Error("Could not reload {} '{}': {}; what it loaded is kept",
-                                   KindName(Detail::AssetKind::Data), assetPath, problem);
+            LogKept(*m_state->logger, Detail::AssetKind::Data, assetPath, problem);
         };
 
         // The file is read as the type its first entry the store has first held, so each handle to it reads the new

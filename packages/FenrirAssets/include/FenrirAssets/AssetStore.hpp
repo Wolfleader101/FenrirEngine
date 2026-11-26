@@ -884,6 +884,16 @@ namespace Fenrir
         void PollForReload();
         /** @brief Reloads the data asset file `fileKey` in place under its handles, or keeps it whole and says why. */
         void ReloadDataFile(const std::string& fileKey);
+        /**
+         * @brief Re-imports the image, cubemap or font file `fileKey` and replaces its one asset under its handle, or
+         * keeps it and says why.
+         */
+        void ReloadImportedFile(const std::string& fileKey, Detail::AssetKind kind);
+        /**
+         * @brief Re-imports the model file `fileKey` and replaces its model and each sub-asset under its handle, or
+         * keeps them all and says why.
+         */
+        void ReloadModelFile(const std::string& fileKey);
         Detail::AssetSlot AddSlot(Detail::AssetKind kind, Detail::AssetBox data, AssetOwner owner);
         /**
          * @brief Stores a value-initialised instance of `type` for `owner`, keyed by `name` when there is one, and
@@ -893,6 +903,12 @@ namespace Fenrir
                                         std::optional<std::string_view> name, Detail::AssetSlot& slot);
         Detail::AssetSlot AddBuiltinSlot(Detail::AssetKind kind, std::string_view name, Detail::AssetBox data);
         Detail::AssetSlot ReserveBuiltin(Detail::AssetKind kind, std::string_view name);
+        /**
+         * @brief Imports the model file `file`, keyed `fileKey`, storing its model and sub-assets for `owner`, and
+         * watches it; why it did not import, or empty. With Detail::ReloadOwnerId as `owner` it is the file's reload:
+         * each asset the store holds from it is replaced under its handle, and one the file now adds is stored for
+         * their owners.
+         */
         [[nodiscard]] std::string ImportModelFile(const std::filesystem::path& file, const std::string& fileKey,
                                                   std::uint32_t owner);
         void ShareModel(const Model& model, std::uint32_t owner);

@@ -1,5 +1,7 @@
 // Turning an imported model file into assets (ADR-0021, ADR-0024, ADR-0031): its images, materials, skeletons, meshes,
 // clips and the model itself, each stored under the file's path and a label.
+#include <algorithm>
+#include <array>
 #include <cstddef>
 #include <format>
 #include <optional>
@@ -9,6 +11,7 @@
 #include <vector>
 
 #include "AssetStoreState.hpp"
+#include "AssetWatcher.hpp"
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirAssets/ClipData.hpp"
 #include "FenrirAssets/ImageData.hpp"
@@ -52,6 +55,11 @@ namespace Fenrir
             return shader == Detail::ImportedShader::Unlit ? "builtin:unlit" : "builtin:lit";
         }
 
+        // The kinds of asset a model file is stored as: the model, then the sub-assets it holds by label.
+        constexpr std::array ModelFileKinds{Detail::AssetKind::Model,    Detail::AssetKind::Mesh,
+                                            Detail::AssetKind::Material, Detail::AssetKind::Image,
+                                            Detail::AssetKind::Skeleton, Detail::AssetKind::Clip};
+
         template <typename T>
         AssetHandle<T> HandleOf(Detail::AssetSlot slot)
         {
@@ -62,6 +70,42 @@ namespace Fenrir
     std::string AssetStore::ImportModelFile(const std::filesystem::path& file, const std::string& fileKey,
                                             std::uint32_t owner)
     {
+        const bool reloading = owner == Detail::ReloadOwnerId;
+        // What the store holds from the file, which a reload replaces, and every owner of any of it, who own what the
+        // reloaded file adds.
+        std::vector<std::pair<Detail::AssetKind, std::uint32_t>> held;
+        std::vector<Detail::OwnerId> owners;
+        if (reloading)
+        {
+            const std::string prefix = fileKey + '#';
+            for (const Detail::AssetKind kind : ModelFileKinds)
+            {
+                const Detail::AssetTable& table = m_state->tables[static_cast<std::size_t>(kind)];
+                for (const auto& [key, index] : table.byKey)
+                {
+                    if (key != fileKey && !key.starts_with(prefix))
+                    {
+                        continue;
+                    }
+                    held.emplace_back(kind, index);
+                    for (const Detail::OwnerId holder : table.records[index].owners)
+                    {
+                        if (std::ranges::find(owners, holder) == owners.end())
+                        {
+                            owners.push_back(holder);
+                        }
+                    }
+                }
+            }
+            if (held.empty())
+            {
+                return {};
+            }
+        }
+
+        // Looked at before the import, so a write during it is a change the watcher sees.
+        const std::optional<ReloadWatcher::Stamp> stamp = m_state->watcher ? Detail::StampOf(file) : std::nullopt;
+        // Imported whole before anything is stored, so a file that does not import leaves the store as it was.
         Detail::ModelImport imported = Detail::ImportModel(file);
         if (!imported.error.empty())
         {
@@ -73,17 +117,41 @@ namespace Fenrir
             logger.Warn("Model '{}': {}", fileKey, warning);
         }
 
+        // A reload replaces an asset the store holds from the file under its handle, bumping its revision and listing
+        // it in Reloaded(), and strikes it off `held`.
+        const auto replace = [&](Detail::AssetKind kind, std::uint32_t index, Detail::AssetBox data) {
+            const Detail::AssetRecord& record = m_state->tables[static_cast<std::size_t>(kind)].records[index];
+            const Detail::AssetSlot slot{index, record.generation};
+            (void)ReplaceSlot(kind, slot, std::move(data));
+            m_state->reloaded.push_back({Detail::PathOf(*m_state, kind, slot).value_or(record.key), kind, slot});
+            std::erase(held, std::pair(kind, index));
+            return slot;
+        };
         // Each sub-asset is stored under the file's key and its label. One already stored under it (the model was
-        // unloaded, but its sub-assets live on) is shared instead of stored again.
+        // unloaded, but its sub-assets live on) is shared instead of stored again, or replaced by a reload; one a
+        // reloaded file adds is stored for every owner of what the file loaded.
         const auto store = [&](Detail::AssetKind kind, Detail::AssetBox data, std::string_view label) {
             Detail::AssetTable& table = m_state->tables[static_cast<std::size_t>(kind)];
             std::string key = fileKey + '#' + std::string(label);
             if (const auto found = table.byKey.find(key); found != table.byKey.end())
             {
+                if (reloading)
+                {
+                    return replace(kind, found->second, std::move(data));
+                }
                 Detail::AddOwner(table.records[found->second], owner);
                 return Detail::AssetSlot{found->second, table.records[found->second].generation};
             }
-            return Detail::InsertAsset(table, std::move(data), owner, std::move(key));
+            if (!reloading)
+            {
+                return Detail::InsertAsset(table, std::move(data), owner, std::move(key));
+            }
+            const Detail::AssetSlot slot = Detail::InsertAsset(table, std::move(data), owners.front(), std::move(key));
+            for (const Detail::OwnerId holder : owners)
+            {
+                Detail::AddOwner(table.records[slot.index], holder);
+            }
+            return slot;
         };
 
         // Images: decoded, or white in their place, then given the colour space of their first use.
@@ -262,8 +330,30 @@ namespace Fenrir
         }
 
         Detail::AssetBox data(new Model(std::move(model)), &Detail::DestroyAssetData<Model>);
-        Detail::InsertAsset(m_state->tables[static_cast<std::size_t>(Detail::AssetKind::Model)], std::move(data), owner,
-                            fileKey);
+        Detail::AssetTable& models = m_state->tables[static_cast<std::size_t>(Detail::AssetKind::Model)];
+        if (!reloading)
+        {
+            Detail::InsertAsset(models, std::move(data), owner, fileKey);
+        }
+        // A model unloaded while its sub-assets live on is not stored again by their reload: the next load of it
+        // imports the file afresh.
+        else if (const auto found = models.byKey.find(fileKey); found != models.byKey.end())
+        {
+            replace(Detail::AssetKind::Model, found->second, std::move(data));
+        }
+
+        // A sub-asset the reloaded file no longer has keeps what it loaded, as a data asset's does (ADR-0081 §2).
+        const std::string assetPath = Detail::RootRelative(m_state->root, file).value_or(fileKey);
+        for (const auto& [kind, index] : held)
+        {
+            const std::string& key = m_state->tables[static_cast<std::size_t>(kind)].records[index].key;
+            logger.Warn("The model file '{}' no longer has its sub-asset '{}': what it loaded is kept", assetPath,
+                        key.substr(key.find('#') + 1));
+        }
+        if (m_state->watcher)
+        {
+            m_state->watcher->Track(fileKey, assetPath, Detail::AssetKind::Model, stamp, ReloadWatcher::Clock::now());
+        }
         return {};
     }
 } // namespace Fenrir

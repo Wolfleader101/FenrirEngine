@@ -25,7 +25,8 @@ namespace Fenrir::Detail
      * @brief The store's watch over the files it loaded (ADR-0081 §1): one ReloadWatcher per file, polled between
      * frames, their looks spread across the interval. It decides when a file changed and has settled; the store reloads
      * it. A file is watched under its key, the absolute path the store keys its assets by, with the kind of asset it
-     * holds, so a kind with its own way of reloading (ticket 09's imported files) is told apart from a data asset.
+     * holds, so each kind reloads its own way: a data asset through its envelope, an imported file through its
+     * importer.
      */
     class AssetWatcher
     {
@@ -44,6 +45,12 @@ namespace Fenrir::Detail
 
         /** @brief Stops watching the file `key` names: the store holds nothing from it any more. */
         void Forget(const std::string& key);
+
+        /** @brief Whether the file `key` names is watched. */
+        [[nodiscard]] bool Watches(const std::string& key) const
+        {
+            return m_files.contains(key);
+        }
 
         /**
          * @brief Looks at the files due a look at `now`. A file that has gone is warned about once and keeps its data;
