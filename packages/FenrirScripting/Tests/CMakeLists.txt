@@ -42,7 +42,6 @@ fenrir_deploy_scripting(FenrirScriptingTests)
 add_executable(FenrirScriptingRulesTests
     Rules/ChangeBufferTests.cpp
     Rules/RegistryTableTests.cpp
-    Rules/ReloadWatcherTests.cpp
     Rules/ScriptDataTests.cpp
     Rules/QueriesTests.cpp
     Rules/GenerationLifecycleTests.cpp
@@ -58,7 +57,9 @@ add_executable(FenrirScriptingRulesTests
     TestExtension.cpp
     TestExtension.hpp
 )
-target_link_libraries(FenrirScriptingRulesTests PRIVATE FenrirScripting FenrirScriptingTestSupport Catch2::Catch2WithMain)
+# GenerationLifecycle.hpp includes FenrirCore's reload watcher, which FenrirScripting links privately.
+target_link_libraries(FenrirScriptingRulesTests PRIVATE FenrirScripting FenrirCore FenrirScriptingTestSupport
+                      Catch2::Catch2WithMain)
 target_include_directories(FenrirScriptingRulesTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src"
     "${CMAKE_CURRENT_SOURCE_DIR}")
 add_test(NAME FenrirScriptingRules COMMAND FenrirScriptingRulesTests --order decl)

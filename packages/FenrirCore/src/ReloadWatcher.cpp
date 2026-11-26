@@ -1,6 +1,6 @@
-#include "ReloadWatcher.hpp"
+#include "FenrirCore/ReloadWatcher.hpp"
 
-namespace Fenrir::Detail
+namespace Fenrir
 {
     ReloadWatcher::Watch ReloadWatcher::Poll(Clock::time_point now,
                                              const std::function<std::optional<Stamp>()>& lookAtFile,
@@ -30,4 +30,4 @@ namespace Fenrir::Detail
         }
         return Watch::Ready;
     }
-} // namespace Fenrir::Detail
+} // namespace Fenrir
