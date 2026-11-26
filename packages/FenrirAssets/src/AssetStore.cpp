@@ -363,10 +363,7 @@ namespace Fenrir
                 if (kind == AssetKind::Data)
                 {
                     const std::string file = record.key.substr(0, record.key.find('#'));
-                    const std::string prefix = file + '#';
-                    if (!table.byKey.contains(file) && std::ranges::none_of(table.byKey, [&](const auto& keyed) {
-                            return keyed.first.starts_with(prefix);
-                        }))
+                    if (!FileInUse(table, file))
                     {
                         fileTrees.erase(file);
                     }
@@ -1091,7 +1088,8 @@ namespace Fenrir
         // The file the save is about, as its diagnostics name it: the path given, then the file resolved.
         std::string named = path ? std::string(*path) : std::string();
         const auto fail = [&](std::string message) -> SaveResult {
-            m_state->logger->Error("Could not save {} '{}' as {}: {}", KindName(Detail::AssetKind::Data), named,
+            m_state->logger->Error("Could not save {} {} as {}: {}", KindName(Detail::AssetKind::Data),
+                                   named.empty() ? std::string("added with no name") : std::format("'{}'", named),
                                    type.name, message);
             result.status = SaveStatus::Failed;
             result.diagnostics.push_back(

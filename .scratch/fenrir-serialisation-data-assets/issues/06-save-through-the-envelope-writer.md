@@ -18,10 +18,10 @@
 
 **Touches:** `packages/FenrirAssets/` (`include/FenrirAssets/AssetStore.hpp`, `src/AssetStore.cpp`, `src/Envelope.cpp`, `Tests/` (a new `Saving.cpp`, the golden fixture), `Tests/Package/` if the test types need the golden's fields)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Loading then saving the golden sword reproduces its bytes, and so does a second save.
-- [ ] A comment in a fixture survives a load, an `Edit` of another field, and a save.
-- [ ] Saving an unnamed asset to a path gives it that path. Saving a named asset to a new path leaves its own path unchanged.
-- [ ] A reference to an unnamed asset writes `null`, is counted in `SaveResult`, and has one diagnostic.
-- [ ] A save to an absolute or escaping path is refused. A save interrupted before the rename leaves the old file intact.
+- [x] Loading then saving the golden sword reproduces its bytes, and so does a second save.
+- [x] A comment in a fixture survives a load, an `Edit` of another field, and a save.
+- [x] Saving an unnamed asset to a path gives it that path. Saving a named asset to a new path leaves its own path unchanged.
+- [x] A reference to an unnamed asset writes `null`, is counted in `SaveResult`, and has one diagnostic.
+- [x] A save to an absolute or escaping path is refused. A save interrupted before the rename leaves the old file intact.
