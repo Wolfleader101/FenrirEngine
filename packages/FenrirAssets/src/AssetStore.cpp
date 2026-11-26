@@ -41,6 +41,10 @@ namespace Fenrir
 {
     namespace
     {
+        using Detail::BuiltinPrefix;
+        using Detail::Utf8Path;
+        using Detail::Utf8Text;
+
         // The words log messages use for each kind, in AssetKind's order.
         constexpr std::array<std::string_view, Detail::AssetKindCount> kindNames = {
             "mesh", "image",     "material",      "shader", "model",     "skeleton",
@@ -91,18 +95,6 @@ namespace Fenrir
 #endif
         }
 
-        std::filesystem::path Utf8Path(std::string_view text)
-        {
-            return std::filesystem::path(
-                std::u8string_view(reinterpret_cast<const char8_t*>(text.data()), text.size()));
-        }
-
-        std::string Utf8Text(const std::filesystem::path& path)
-        {
-            const std::u8string text = path.generic_u8string();
-            return {reinterpret_cast<const char*>(text.data()), text.size()};
-        }
-
         // A load request taken apart: the file resolved against the root, its label, and the key both make.
         struct AssetPath
         {
@@ -142,8 +134,17 @@ namespace Fenrir
             return resolved;
         }
 
-        // The prefix of a built-in asset's name, which is its key rather than a path.
-        constexpr std::string_view BuiltinPrefix = "builtin:";
+        // `file`, absolute and normal, relative to `root` with forward slashes: its asset path (ADR-0076). None when it
+        // is not under the root.
+        std::optional<std::string> RootRelative(const std::filesystem::path& root, const std::filesystem::path& file)
+        {
+            const std::filesystem::path relative = file.lexically_relative(root);
+            if (relative.empty() || relative.is_absolute() || relative.has_root_name() || *relative.begin() == "..")
+            {
+                return std::nullopt;
+            }
+            return Utf8Text(relative);
+        }
 
         std::string_view ReasonText(LoadFailure reason)
         {
@@ -171,12 +172,28 @@ namespace Fenrir
             {
                 return "wrong type";
             }
+            if (reason == LoadFailure::OutsideRoot)
+            {
+                return "outside the asset root";
+            }
             return "no importer";
         }
     } // namespace
 
     namespace Detail
     {
+        std::filesystem::path Utf8Path(std::string_view text)
+        {
+            return std::filesystem::path(
+                std::u8string_view(reinterpret_cast<const char8_t*>(text.data()), text.size()));
+        }
+
+        std::string Utf8Text(const std::filesystem::path& path)
+        {
+            const std::u8string text = path.generic_u8string();
+            return {reinterpret_cast<const char*>(text.data()), text.size()};
+        }
+
         bool ReadAssetFile(const std::filesystem::path& file, std::vector<std::byte>& bytes)
         {
             std::ifstream stream(file, std::ios::binary);
@@ -312,6 +329,7 @@ namespace Fenrir
         const std::filesystem::path root =
             config.root.empty() ? ExecutableDirectory() / "assets" : std::filesystem::absolute(config.root);
         m_state->root = root.lexically_normal();
+        m_state->source = Detail::MakeDirectorySource(m_state->root, logger);
     }
 
     AssetStore::~AssetStore() = default;
@@ -496,6 +514,13 @@ namespace Fenrir
             return fail(LoadFailure::NotADataAsset,
                         std::format("the type registry has no `{}`: register its package's types first", type.name));
         }
+        // A data asset's identity is its path under the root (ADR-0076), so one outside it has none.
+        const std::optional<std::string> assetPath = RootRelative(m_state->root, resolved.file);
+        if (!assetPath)
+        {
+            return fail(LoadFailure::OutsideRoot,
+                        std::format("a data asset loads from under the asset root '{}'", Utf8Text(m_state->root)));
+        }
 
         Detail::AssetTable& table = TableOf(*m_state, Detail::AssetKind::Data);
         if (const auto loaded = table.byKey.find(resolved.key); loaded != table.byKey.end())
@@ -516,20 +541,17 @@ namespace Fenrir
         {
             return fail(LoadFailure::LabelNotFound, "a data asset's sub-assets are not read yet");
         }
-        std::error_code error;
-        if (!std::filesystem::is_regular_file(resolved.file, error))
+        Detail::AssetSource& source = *m_state->source;
+        const std::optional<std::vector<std::byte>> bytes = source.Read(*assetPath);
+        if (!bytes)
         {
-            return fail(LoadFailure::FileNotFound, "there is no file at this path");
-        }
-        std::vector<std::byte> bytes;
-        if (!Detail::ReadAssetFile(resolved.file, bytes))
-        {
-            return fail(LoadFailure::ImportFailed, "the file could not be read");
+            return source.Exists(*assetPath) ? fail(LoadFailure::ImportFailed, "the file could not be read")
+                                             : fail(LoadFailure::FileNotFound, "there is no file at this path");
         }
 
         // No references resolve yet: a later ticket gives the store's resolvers.
-        Detail::EnvelopeRead read =
-            Detail::ReadDataEnvelope(bytes, resolved.key, type, registry, Serialisation::Resolvers{}, *m_state->logger);
+        Detail::EnvelopeRead read = Detail::ReadDataEnvelope(*bytes, resolved.key, type, registry,
+                                                             Serialisation::Resolvers{}, *m_state->logger);
         diagnostics = std::move(read.diagnostics);
         if (read.failure)
         {
@@ -683,6 +705,31 @@ namespace Fenrir
     {
         const Detail::AssetRecord* record = m_state->Find(kind, slot);
         return record != nullptr && record->data != nullptr ? record->revision : 0;
+    }
+
+    std::optional<std::string> AssetStore::PathOfSlot(Detail::AssetKind kind, Detail::AssetSlot slot) const
+    {
+        const Detail::AssetRecord* record = m_state->Find(kind, slot);
+        if (record == nullptr || record->key.empty())
+        {
+            return std::nullopt;
+        }
+        // A built-in's key is its name, which a material names before the renderer registers its data.
+        if (record->key.starts_with(BuiltinPrefix))
+        {
+            return record->key;
+        }
+        // A loaded asset's key is its file resolved against the root, then `#` and its label for a sub-asset.
+        if (record->data == nullptr)
+        {
+            return std::nullopt;
+        }
+        const std::size_t hash = record->key.find('#');
+        const std::string_view file = std::string_view(record->key).substr(0, hash);
+        const std::string_view label =
+            hash == std::string::npos ? std::string_view() : std::string_view(record->key).substr(hash);
+        const std::optional<std::string> relative = RootRelative(m_state->root, Utf8Path(file));
+        return (relative ? *relative : std::string(file)) + std::string(label);
     }
 
     bool AssetStore::SameFileOf(Detail::AssetKind kindA, Detail::AssetSlot a, Detail::AssetKind kindB,

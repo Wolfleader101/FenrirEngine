@@ -43,6 +43,13 @@ namespace Fenrir::Detail
     };
 
     /**
+     * @brief Why `path`, an asset path written in a file, is refused, or none when it is not (ADR-0076 §1, ADR-0085
+     * §1): it is absolute, or it climbs through `..`. Only the part before its last `#`, its label, is checked, as Load
+     * splits it; a `builtin:` name and a bare `#label` pass.
+     */
+    [[nodiscard]] std::optional<std::string> FilePathProblem(std::string_view path);
+
+    /**
      * @brief Reads the `.asset.json5` envelope in `bytes` (ADR-0077) as a value of `expected` or a type extending it,
      * in these steps: ReadTree the bytes; check `format` is 1; find `type` in `registry`, by its canonical or a former
      * name, and check it is `expected` or extends it; Upgrade `data` from `version`; FromTree it into an instance the

@@ -32,6 +32,8 @@ namespace Fenrir
     class ILogger;
     class Scene;
     class TypeRegistry;
+    /** @brief FenrirAssets's tests' way inside the store (Tests/AssetsProbe.hpp): no part of its interface. */
+    struct AssetsProbe;
 
     namespace Detail
     {
@@ -154,6 +156,11 @@ namespace Fenrir
          * knows.
          */
         WrongType,
+        /**
+         * @brief The data asset path resolves outside the asset root, so it has no root-relative asset path (ADR-0076):
+         * an absolute path elsewhere, or a relative one climbing out through `..`.
+         */
+        OutsideRoot,
     };
 
     /** @brief Why a load failed, for a log or an editor. */
@@ -255,7 +262,9 @@ namespace Fenrir
 
         /**
          * @brief Loads the asset at `path` for `owner`, blocking until it is read. A relative path resolves against
-         * the asset root, an absolute one is taken as given, and `file#Label` names a sub-asset inside the file.
+         * the asset root, and `file#Label` names a sub-asset inside the file. An absolute path under the root names the
+         * same asset as its root-relative path; for an imported kind, an absolute path outside the root is taken as
+         * given, and for a data asset it fails (LoadFailure::OutsideRoot).
          *
          * A path already loaded as this kind of asset is not read again: it gives back the same handle and adds
          * `owner` to the asset's owners. A failure is logged and gives a diagnostic instead of a handle. Images are
@@ -287,7 +296,10 @@ namespace Fenrir
          * then read tolerantly: an unknown key is warned and dropped, a value that does not read keeps its default with
          * an error, and either makes the load `Partial`, each in LoadResult::diagnostics with its line and column.
          * Sub-assets (`sub`) are not read yet: a file with them warns so. A file that does not parse, or whose
-         * `format` or `type` is wrong, fails.
+         * `format` or `type` is wrong, fails. A path the file names (a reference) that is absolute or climbs through
+         * `..` is refused, left empty with a located error (ADR-0076). The file's bytes are read through the store's
+         * asset source (ADR-0085), which matches paths case-sensitively; in a development build it warns, once per
+         * path, of a path that finds its file only when case is ignored.
          */
         template <typename T>
         [[nodiscard]] LoadResult<T> Load(std::string_view path, AssetOwner owner)
@@ -427,6 +439,19 @@ namespace Fenrir
                 return static_cast<const AssetData<T>*>(
                     Find(Detail::AssetTraits<T>::kind, {handle.index, handle.generation}));
             }
+        }
+
+        /**
+         * @brief The asset path of the asset `handle` names (ADR-0076): for a loaded asset, its path relative to the
+         * asset root with forward slashes and its extension, then `#` and its label for a sub-asset (`models/hero.glb#
+         * Mesh0`); for a built-in, its `builtin:` name, even before its data is registered. An imported asset loaded
+         * from outside the root gives its absolute path. Empty for an asset added with no name, and when the handle is
+         * empty or stale.
+         */
+        template <typename T>
+        [[nodiscard]] std::optional<std::string> PathOf(AssetHandle<T> handle) const
+        {
+            return PathOfSlot(Detail::AssetTraits<T>::kind, {handle.index, handle.generation});
         }
 
         /** @brief Whether `handle` names a live asset: false for an empty or stale handle. */
@@ -637,6 +662,7 @@ namespace Fenrir
         [[nodiscard]] const void* Find(Detail::AssetKind kind, Detail::AssetSlot slot) const;
         [[nodiscard]] const void* FindData(Detail::AssetSlot slot, const TypeDescription& type) const;
         [[nodiscard]] std::uint32_t RevisionOf(Detail::AssetKind kind, Detail::AssetSlot slot) const;
+        [[nodiscard]] std::optional<std::string> PathOfSlot(Detail::AssetKind kind, Detail::AssetSlot slot) const;
         [[nodiscard]] bool SameFileOf(Detail::AssetKind kindA, Detail::AssetSlot a, Detail::AssetKind kindB,
                                       Detail::AssetSlot b) const;
         void Refuse(std::string_view assetName, std::string_view action, const std::string& problem);
@@ -650,6 +676,8 @@ namespace Fenrir
         [[nodiscard]] std::optional<MaterialValue> OverrideValue(AssetHandle<Material> material, std::string_view name,
                                                                  ShaderParameterType type) const;
         void WarnOverridesShaderLacks(AssetHandle<Shader> shader);
+
+        friend struct AssetsProbe;
 
         // Shared with the scenes that own assets, which hold it weakly: a scene that ends after the store frees
         // nothing.

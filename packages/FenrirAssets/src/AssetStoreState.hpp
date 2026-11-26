@@ -14,6 +14,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "AssetSource.hpp"
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirTypes/TypeDescription.hpp"
 
@@ -88,6 +89,9 @@ namespace Fenrir::Detail
         /** @brief The app's type registry, which data asset types are found and checked in. */
         const TypeRegistry* types = nullptr;
         std::filesystem::path root;
+        /** @brief Where data asset envelopes are read from: the directory source over `root`, unless a test swapped it.
+         */
+        std::unique_ptr<AssetSource> source;
         std::array<AssetTable, AssetKindCount> tables;
         OwnerId nextSceneOwner = 1;
         /** @brief By model file key, the units its last import left out, for the files that left any out. */
@@ -113,6 +117,15 @@ namespace Fenrir::Detail
      * files it under `key` unless the key is empty.
      */
     AssetSlot InsertAsset(AssetTable& table, AssetBox data, OwnerId owner, std::string key);
+
+    /** @brief The prefix of a built-in asset's name, which is its key rather than a path. */
+    inline constexpr std::string_view BuiltinPrefix = "builtin:";
+
+    /** @brief The path UTF-8 `text` spells. */
+    [[nodiscard]] std::filesystem::path Utf8Path(std::string_view text);
+
+    /** @brief `path` as UTF-8 text, with forward slashes. */
+    [[nodiscard]] std::string Utf8Text(const std::filesystem::path& path);
 
     /** @brief Reads the whole file into `bytes`; false if it could not be read. */
     bool ReadAssetFile(const std::filesystem::path& file, std::vector<std::byte>& bytes);

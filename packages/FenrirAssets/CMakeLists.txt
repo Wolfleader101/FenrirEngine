@@ -30,6 +30,8 @@ add_library(FenrirAssets STATIC
     src/Assets.cpp
     src/AssetStore.cpp
     src/AssetStoreState.hpp
+    src/AssetSource.hpp
+    src/DirectorySource.cpp
     src/Envelope.hpp
     src/Envelope.cpp
     src/AssetData.cpp
