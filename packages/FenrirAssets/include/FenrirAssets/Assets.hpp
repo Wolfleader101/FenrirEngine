@@ -64,7 +64,9 @@ namespace Fenrir
          * envelope, or names a type `registry` lacks, in its top level or a sub-asset, is left as it was and listed in
          * MoveResult::unscanned.
          *
-         * The moved file is moved first, so a failure there writes nothing. Fields are found by the types' current
+         * A reference is matched as Load resolves it, so `./from` and one spelled with backslashes are rewritten too,
+         * and a rename that changes only the case is allowed where the disk ignores case. The file is moved first, so a
+         * failure there writes nothing. Fields are found by the types' current
          * descriptions, so a reference in a file at an older version is found where its field kept its name or a
          * former one.
          *

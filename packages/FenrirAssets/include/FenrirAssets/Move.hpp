@@ -15,7 +15,10 @@ namespace Fenrir
          * MoveResult lists what would have been.
          */
         Succeeded,
-        /** @brief Nothing was written, and MoveResult::problem says why: a path refused, or `from` not a file. */
+        /**
+         * @brief Nothing was written, and MoveResult::problem says why: a path refused, `from` not a file, or the root
+         * not scanned through.
+         */
         Refused,
         /**
          * @brief A write failed partway, MoveResult::problem saying which. The file was moved unless the move itself

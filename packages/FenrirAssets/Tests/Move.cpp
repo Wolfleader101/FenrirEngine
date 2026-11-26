@@ -168,18 +168,21 @@ namespace
 TEST_CASE("Moving a sword rewrites the references of two files and of its own sub-asset", "[assets][move]")
 {
     MoveRoot test;
+    INFO("the test package's types register into a registry of the test's own");
     REQUIRE(test.registered);
 
     const Fenrir::MoveResult result = Fenrir::Assets::Move(test.root.Path(), SwordPath, BladePath, test.registry);
 
     INFO(result.problem);
+    INFO("the move succeeds");
     REQUIRE(result.status == Fenrir::MoveStatus::Succeeded);
     INFO("the moved file, by its new path, and the two files naming it are the files changed");
     REQUIRE(result.changed == Sorted(ChangedByTheMove));
     INFO("the axe's, the shield's and the spare blade's references are the three rewritten");
     REQUIRE(result.references == 3);
-    INFO("the file is at its new path and no longer at its old one");
+    INFO("the file is at its new path");
     REQUIRE(test.Exists(BladePath));
+    INFO("the file is no longer at its old path");
     REQUIRE_FALSE(test.Exists(SwordPath));
 }
 
@@ -189,6 +192,8 @@ TEST_CASE("A move changes the reference strings alone, keeping every other byte"
 
     const Fenrir::MoveResult result = Fenrir::Assets::Move(test.root.Path(), SwordPath, BladePath, test.registry);
 
+    INFO(result.problem);
+    INFO("the move succeeds");
     REQUIRE(result.status == Fenrir::MoveStatus::Succeeded);
     INFO("the moved file's own reference is rewritten, its comments kept");
     REQUIRE(test.Read(BladePath) == ReplacedAll(std::string(SwordText), SwordPath, BladePath));
@@ -200,6 +205,23 @@ TEST_CASE("A move changes the reference strings alone, keeping every other byte"
     REQUIRE(test.Read(ClubPath) == ClubText);
 }
 
+TEST_CASE("A reference spelling the moved file's path as Load also reads it is rewritten too", "[assets][move]")
+{
+    MoveRoot test;
+    constexpr std::string_view DaggerPath = "dagger.asset.json5";
+    constexpr std::string_view KnifePath = "knife.asset.json5";
+    test.root.Write(DaggerPath, ReplacedAll(std::string(AxeText), SwordPath, "./weapons/sword.asset.json5"));
+    test.root.Write(KnifePath, ReplacedAll(std::string(AxeText), SwordPath, "weapons\\\\sword.asset.json5"));
+
+    const Fenrir::MoveResult result = Fenrir::Assets::Move(test.root.Path(), SwordPath, BladePath, test.registry);
+
+    INFO(result.problem);
+    INFO("the dagger names the sword through `./`, which Load resolves to the sword");
+    REQUIRE(test.Read(DaggerPath) == ReplacedAll(std::string(AxeText), SwordPath, BladePath));
+    INFO("the knife names the sword with a backslash, which the path rules read as a slash");
+    REQUIRE(test.Read(KnifePath) == ReplacedAll(std::string(AxeText), SwordPath, BladePath));
+}
+
 TEST_CASE("A dry run reports the same files and writes nothing", "[assets][move][dry-run]")
 {
     MoveRoot test;
@@ -207,21 +229,32 @@ TEST_CASE("A dry run reports the same files and writes nothing", "[assets][move]
     const Fenrir::MoveResult dry = Fenrir::Assets::Move(test.root.Path(), SwordPath, BladePath, test.registry, true);
 
     INFO(dry.problem);
+    INFO("the dry run succeeds");
     REQUIRE(dry.status == Fenrir::MoveStatus::Succeeded);
     INFO("the dry run lists the files the move would change");
     REQUIRE(dry.changed == Sorted(ChangedByTheMove));
+    INFO("the dry run counts the three references the move would rewrite");
     REQUIRE(dry.references == 3);
-    INFO("nothing moved");
+    INFO("nothing moved: the sword is at its old path");
     REQUIRE(test.Exists(SwordPath));
+    INFO("nothing moved: nothing is at the new path");
     REQUIRE_FALSE(test.Exists(BladePath));
     INFO("no file was rewritten");
     REQUIRE(test.Read(SwordPath) == SwordText);
     REQUIRE(test.Read(AxePath) == AxeText);
     REQUIRE(test.Read(ShieldPath) == ShieldText);
+}
 
+TEST_CASE("A move changes exactly the files a dry run before it listed", "[assets][move][dry-run]")
+{
+    MoveRoot test;
+
+    const Fenrir::MoveResult dry = Fenrir::Assets::Move(test.root.Path(), SwordPath, BladePath, test.registry, true);
     const Fenrir::MoveResult moved = Fenrir::Assets::Move(test.root.Path(), SwordPath, BladePath, test.registry);
-    INFO("the move after it changes exactly the files the dry run listed");
+
+    INFO("the move lists the files the dry run listed as changed");
     REQUIRE(moved.changed == dry.changed);
+    INFO("the move lists the files the dry run listed as unscanned");
     REQUIRE(UnscannedPaths(moved) == UnscannedPaths(dry));
 }
 
@@ -234,33 +267,81 @@ TEST_CASE("A move to a destination that exists is refused, writing nothing", "[a
     INFO("a move never writes over a file");
     REQUIRE(result.status == Fenrir::MoveStatus::Refused);
     INFO(result.problem);
+    INFO("the refusal says the destination exists");
     REQUIRE(result.problem.find("exists") != std::string::npos);
+    INFO("a refused move changes no file");
     REQUIRE(result.changed.empty());
     INFO("both files are as they were");
     REQUIRE(test.Read(SwordPath) == SwordText);
     REQUIRE(test.Read(AxePath) == AxeText);
 }
 
-TEST_CASE("A move of a path that leaves the root, names a sub-asset or names no file is refused",
-          "[assets][move][refused]")
+TEST_CASE("A move to a path climbing out of the root is refused", "[assets][move][refused]")
 {
     MoveRoot test;
 
-    const auto refused = [&](std::string_view from, std::string_view to) {
-        const Fenrir::MoveResult result = Fenrir::Assets::Move(test.root.Path(), from, to, test.registry);
-        return result.status == Fenrir::MoveStatus::Refused && result.changed.empty();
-    };
+    const Fenrir::MoveResult result =
+        Fenrir::Assets::Move(test.root.Path(), SwordPath, "../outside.asset.json5", test.registry);
 
-    INFO("a destination climbing through `..` leaves the root");
-    REQUIRE(refused(SwordPath, "../outside.asset.json5"));
-    INFO("a sub-asset moves with its file, never alone");
-    REQUIRE(refused("weapons/sword.asset.json5#spare", BladePath));
-    INFO("an absolute destination is no asset path");
-    REQUIRE(refused(SwordPath, "/arms/blade.asset.json5"));
-    INFO("a file that is not there cannot move");
-    REQUIRE(refused("weapons/missing.asset.json5", BladePath));
+    INFO("a destination through `..` is no asset path");
+    REQUIRE(result.status == Fenrir::MoveStatus::Refused);
     INFO("the sword is where it was");
     REQUIRE(test.Read(SwordPath) == SwordText);
+}
+
+TEST_CASE("A move to an absolute path is refused", "[assets][move][refused]")
+{
+    MoveRoot test;
+
+    const Fenrir::MoveResult result =
+        Fenrir::Assets::Move(test.root.Path(), SwordPath, "/arms/blade.asset.json5", test.registry);
+
+    INFO("an absolute destination is no asset path");
+    REQUIRE(result.status == Fenrir::MoveStatus::Refused);
+    INFO("the sword is where it was");
+    REQUIRE(test.Read(SwordPath) == SwordText);
+}
+
+TEST_CASE("A move of a sub-asset alone is refused", "[assets][move][refused]")
+{
+    MoveRoot test;
+
+    const Fenrir::MoveResult result =
+        Fenrir::Assets::Move(test.root.Path(), "weapons/sword.asset.json5#spare", BladePath, test.registry);
+
+    INFO("a sub-asset moves with its file, never alone");
+    REQUIRE(result.status == Fenrir::MoveStatus::Refused);
+    INFO("the sword is where it was");
+    REQUIRE(test.Read(SwordPath) == SwordText);
+}
+
+TEST_CASE("A move of a file that is not there is refused", "[assets][move][refused]")
+{
+    MoveRoot test;
+
+    const Fenrir::MoveResult result =
+        Fenrir::Assets::Move(test.root.Path(), "weapons/missing.asset.json5", BladePath, test.registry);
+
+    INFO("a file that is not there cannot move");
+    REQUIRE(result.status == Fenrir::MoveStatus::Refused);
+    INFO("nothing is written at the destination");
+    REQUIRE_FALSE(test.Exists(BladePath));
+}
+
+TEST_CASE("A rename that changes only the case moves the file and rewrites its references", "[assets][move]")
+{
+    MoveRoot test;
+    constexpr std::string_view Capitalised = "weapons/Sword.asset.json5";
+
+    const Fenrir::MoveResult result = Fenrir::Assets::Move(test.root.Path(), SwordPath, Capitalised, test.registry);
+
+    INFO(result.problem);
+    INFO("where the disk ignores case it finds the file itself at the destination, which is no other file");
+    REQUIRE(result.status == Fenrir::MoveStatus::Succeeded);
+    INFO("the renamed file's own reference names its new spelling");
+    REQUIRE(test.Read(Capitalised) == ReplacedAll(std::string(SwordText), SwordPath, Capitalised));
+    INFO("the axe names the new spelling");
+    REQUIRE(test.Read(AxePath) == ReplacedAll(std::string(AxeText), SwordPath, Capitalised));
 }
 
 TEST_CASE("A file of an unregistered type, or one that does not parse, is named as unscanned and left as it was",
@@ -270,25 +351,32 @@ TEST_CASE("A file of an unregistered type, or one that does not parse, is named 
 
     const Fenrir::MoveResult result = Fenrir::Assets::Move(test.root.Path(), SwordPath, BladePath, test.registry);
 
+    INFO(result.problem);
+    INFO("the move succeeds");
     REQUIRE(result.status == Fenrir::MoveStatus::Succeeded);
     INFO("the spear, of a type the registry lacks, and the file with a syntax error are unscanned, in path order");
     REQUIRE(UnscannedPaths(result) == std::vector<std::string>{std::string(BrokenPath), std::string(SpearPath)});
     INFO(result.unscanned[1].reason);
+    INFO("the spear's reason names the type the registry lacks");
     REQUIRE(result.unscanned[1].reason.find("AssetsTest::Spear") != std::string::npos);
     INFO(result.unscanned[0].reason);
+    INFO("the broken file's reason is its located syntax error");
     REQUIRE(result.unscanned[0].reason.find("notes/broken.json5:") != std::string::npos);
     INFO("the spear still names the old path, as it was written");
     REQUIRE(test.Read(SpearPath) == SpearText);
+    INFO("the broken file is as it was");
     REQUIRE(test.Read(BrokenPath) == BrokenText);
 }
 
 TEST_CASE("After a move, each file loads with every reference resolved", "[assets][move][load]")
 {
     MoveRoot test;
+    INFO("the move succeeds");
     REQUIRE(Fenrir::Assets::Move(test.root.Path(), SwordPath, BladePath, test.registry).status ==
             Fenrir::MoveStatus::Succeeded);
 
     DataApp app(Fenrir::AssetsConfig{test.root.Path()});
+    INFO("the test package's types register into the app's registry");
     REQUIRE(app.registered);
     const Fenrir::AssetOwner owner = Fenrir::AssetOwner::App();
 

@@ -37,7 +37,7 @@ namespace Fenrir
         using Detail::Utf8Text;
 
         // ReadText logs each diagnostic; a move has no logger, and returns a file's syntax error in its result.
-        class QuietLogger final : public ILogger
+        class NullLogger final : public ILogger
         {
           public:
             void AddLogger(std::shared_ptr<ILogger>) override
@@ -110,7 +110,7 @@ namespace Fenrir
             // The rewritten references of `data`, of `type`, in place; how many.
             std::size_t Rewrite(Ser::Value& data, const TypeDescription& type)
             {
-                const Detail::DataValue scratch(type);
+                Detail::DataValue scratch(type);
                 const ValueType valueType{.kind = Kind::Struct, .type = &type};
                 m_count = 0;
                 Walk(data, ValueRef(scratch.value, valueType));
@@ -153,7 +153,8 @@ namespace Fenrir
             }
 
             // `from` becomes `to`, and `from#name` becomes `to#name`; a bare `#name` names the file it is in, which
-            // moves with it.
+            // moves with it. The file part is compared as Load resolves it, so `./a/b.json5` and `a\b.json5` name
+            // `a/b.json5` too, and are rewritten in the form `to` is given.
             void RewriteReference(Ser::Value& node)
             {
                 if (node.Kind() != Ser::ValueKind::String)
@@ -161,13 +162,17 @@ namespace Fenrir
                     return;
                 }
                 const std::string& path = node.AsString();
-                if (path == m_from)
+                const std::size_t hash = std::min(path.rfind('#'), path.size());
+                const std::string_view file = std::string_view(path).substr(0, hash);
+                if (file.empty() || file.starts_with(Detail::BuiltinPrefix) || Detail::FilePathProblem(file))
                 {
-                    Replace(node, std::string(m_to));
+                    return;
                 }
-                else if (path.size() > m_from.size() && path.starts_with(m_from) && path[m_from.size()] == '#')
+                std::string normal(file);
+                std::ranges::replace(normal, '\\', '/');
+                if (Utf8Text(Utf8Path(normal).lexically_normal()) == m_from)
                 {
-                    Replace(node, std::string(m_to) + path.substr(m_from.size()));
+                    Replace(node, std::string(m_to) + path.substr(hash));
                 }
             }
 
@@ -433,7 +438,10 @@ namespace Fenrir
         {
             return refuse(std::format("`from` '{}' names no file", fromPath));
         }
-        if (std::filesystem::exists(toFile, error) || error)
+        // A rename that changes only the case finds the file itself at `to` where the disk ignores case.
+        const bool caseOnly = fromPath != toPath && std::filesystem::exists(toFile, error) &&
+                              std::filesystem::equivalent(fromFile, toFile, error);
+        if (!caseOnly && (std::filesystem::exists(toFile, error) || error))
         {
             return refuse(std::format("`to` '{}' exists already: a move never writes over a file", toPath));
         }
@@ -441,38 +449,43 @@ namespace Fenrir
         // Every edit is made in memory first, so a dry run lists exactly what a move writes.
         std::vector<Rewritten> rewritten;
         std::optional<std::string> movedText;
-        QuietLogger quiet;
+        NullLogger quiet;
         ReferenceRewriter rewriter(fromPath, toPath);
         for (std::filesystem::recursive_directory_iterator it(normalRoot, error), end; !error && it != end;
              it.increment(error))
         {
-            if (!it->is_regular_file(error) || it->path().extension() != ".json5")
+            // An entry whose status cannot be read is no file this scan can read, and ends nothing.
+            std::error_code entryError;
+            if (!it->is_regular_file(entryError) || it->path().extension() != ".json5")
             {
                 continue;
             }
-            const std::optional<std::string> relative = RootRelative(normalRoot, it->path().lexically_normal());
-            if (!relative)
+            const std::optional<std::string> found = RootRelative(normalRoot, it->path().lexically_normal());
+            if (!found)
             {
                 continue;
             }
+            // The moved file is named by the path it moves to, in both lists.
+            const bool isMoved = *found == fromPath;
+            const std::string& relative = isMoved ? toPath : *found;
             const std::optional<std::string> text = ReadFileText(it->path());
             if (!text)
             {
-                result.unscanned.push_back({*relative, "it could not be read"});
+                result.unscanned.push_back({relative, "it could not be read"});
                 continue;
             }
-            Ser::ReadTreeResult read = Ser::ReadText(*text, *relative, quiet);
+            Ser::ReadTreeResult read = Ser::ReadText(*text, *found, quiet);
             if (!read.tree)
             {
-                result.unscanned.push_back({*relative, read.diagnostics.empty()
-                                                           ? std::string("it does not parse")
-                                                           : Ser::FormatDiagnostic(read.diagnostics.front())});
+                result.unscanned.push_back({relative, read.diagnostics.empty()
+                                                          ? std::string("it does not parse")
+                                                          : Ser::FormatDiagnostic(read.diagnostics.front())});
                 continue;
             }
             std::vector<ScanEntry> entries;
             if (std::optional<std::string> problem = EntriesOf(*read.tree, registry, entries))
             {
-                result.unscanned.push_back({*relative, std::move(*problem)});
+                result.unscanned.push_back({relative, std::move(*problem)});
                 continue;
             }
             std::size_t count = 0;
@@ -486,19 +499,21 @@ namespace Fenrir
             }
             result.references += count;
             std::string written = Ser::WriteText(*read.tree);
-            if (*relative == fromPath)
+            result.changed.push_back(relative);
+            if (isMoved)
             {
                 movedText = std::move(written);
-                result.changed.push_back(toPath);
             }
             else
             {
-                rewritten.push_back({*relative, std::move(written)});
-                result.changed.push_back(*relative);
+                rewritten.push_back({relative, std::move(written)});
             }
         }
         if (error)
         {
+            result.changed.clear();
+            result.unscanned.clear();
+            result.references = 0;
             return refuse(
                 std::format("the asset root '{}' could not be scanned ({})", Utf8Text(normalRoot), error.message()));
         }
@@ -509,44 +524,32 @@ namespace Fenrir
             return result;
         }
 
-        const auto fail = [&](std::string problem) {
+        const auto fail = [&](std::vector<std::string> done, std::string problem) {
+            std::ranges::sort(done);
             result.status = MoveStatus::Failed;
+            result.changed = std::move(done);
             result.problem = std::move(problem);
             return result;
         };
-        // The file moves first, so a move that cannot happen leaves every other file as it was.
+        // The file moves first, so a move that cannot happen leaves every other file as it was; it is renamed before
+        // its references are written, so a rename that changes only the case writes into the renamed file.
+        std::filesystem::create_directories(toFile.parent_path(), error);
+        if (!error)
+        {
+            std::filesystem::rename(fromFile, toFile, error);
+        }
+        if (error)
+        {
+            return fail({}, std::format("'{}' could not be moved to '{}' ({})", fromPath, toPath, error.message()));
+        }
+        std::vector<std::string> done;
         if (movedText)
         {
             if (std::optional<std::string> problem = Detail::WriteAtomically(toFile, *movedText))
             {
-                result.changed.clear();
-                return fail(std::format("'{}' could not be written: {}", toPath, *problem));
+                return fail(
+                    {}, std::format("'{}' was moved, but its references could not be written: {}", toPath, *problem));
             }
-            std::filesystem::remove(fromFile, error);
-            if (error)
-            {
-                result.changed = {toPath};
-                return fail(std::format("'{}' was written, but '{}' could not be removed ({})", toPath, fromPath,
-                                        error.message()));
-            }
-        }
-        else
-        {
-            std::filesystem::create_directories(toFile.parent_path(), error);
-            if (!error)
-            {
-                std::filesystem::rename(fromFile, toFile, error);
-            }
-            if (error)
-            {
-                result.changed.clear();
-                return fail(std::format("'{}' could not be moved to '{}' ({})", fromPath, toPath, error.message()));
-            }
-        }
-
-        std::vector<std::string> done;
-        if (movedText)
-        {
             done.push_back(toPath);
         }
         for (const Rewritten& file : rewritten)
@@ -554,9 +557,7 @@ namespace Fenrir
             if (std::optional<std::string> problem =
                     Detail::WriteAtomically(normalRoot / Utf8Path(file.assetPath), file.text))
             {
-                std::ranges::sort(done);
-                result.changed = std::move(done);
-                return fail(std::format("'{}' could not be written: {}", file.assetPath, *problem));
+                return fail(std::move(done), std::format("'{}' could not be written: {}", file.assetPath, *problem));
             }
             done.push_back(file.assetPath);
         }

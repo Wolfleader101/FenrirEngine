@@ -16,9 +16,9 @@
 
 **Touches:** `packages/FenrirAssets/` (`include/FenrirAssets/Assets.hpp` or a new `include/FenrirAssets/Move.hpp`, a new `src/Move.cpp`, `Tests/` (a new `Move.cpp` over a temporary root))
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Moving a sword referenced by two files and by its own sub-asset rewrites all three references. Every other byte in those files stays the same.
-- [ ] A dry run reports the same files and writes nothing.
-- [ ] An existing destination is refused, and a file of an unregistered type is named as unscanned.
-- [ ] After the move, each file loads with every reference resolved.
+- [x] Moving a sword referenced by two files and by its own sub-asset rewrites all three references. Every other byte in those files stays the same.
+- [x] A dry run reports the same files and writes nothing.
+- [x] An existing destination is refused, and a file of an unregistered type is named as unscanned.
+- [x] After the move, each file loads with every reference resolved.
