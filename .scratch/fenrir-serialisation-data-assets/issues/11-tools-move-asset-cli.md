@@ -13,9 +13,9 @@
 
 **Touches:** `tools/move-asset/` (new: `CMakeLists.txt`, `src/main.cpp`, `README.md`), the root `CMakeLists.txt`, `README.md` (the tool's one line), `packages/FenrirAssets/Tests/` for the smoke run's fixtures if shared
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `fenrir-move-asset` builds on msvc-x64-debug.
-- [ ] The CTest smoke run passes: a dry run lists the changes and writes nothing, then a real move rewrites them.
-- [ ] A refused move exits non-zero with its reason.
-- [ ] The tool's README names its arguments and how a game links its own registration.
+- [x] `fenrir-move-asset` builds on msvc-x64-debug.
+- [x] The CTest smoke run passes: a dry run lists the changes and writes nothing, then a real move rewrites them.
+- [x] A refused move exits non-zero with its reason.
+- [x] The tool's README names its arguments and how a game links its own registration.

@@ -1,0 +1,9 @@
+// A type no registration holds: the tool lists it as unscanned and leaves its reference to the sword.
+{
+  format: 1,
+  type: "AssetsTest::Spear",
+  version: 1,
+  data: {
+    upgradesTo: "weapons/sword.asset.json5",
+  },
+}
