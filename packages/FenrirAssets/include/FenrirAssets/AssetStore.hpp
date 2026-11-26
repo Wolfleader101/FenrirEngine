@@ -802,13 +802,16 @@ namespace Fenrir
         /**
          * @brief The assets the store replaced at this frame's reload poll because their files changed on disk
          * (ADR-0081), in the order it replaced them, each once: a game or an editor reacts to a reload here. A data
-         * asset file's top level and each of its sub-assets that the store holds are listed apiece. Cleared at the
-         * next poll; empty with AssetsConfig::hotReload off.
+         * asset file's top level and each of its sub-assets that the store holds are listed apiece, as are a model
+         * file's model and each of its sub-assets, and an image, cubemap or font file's one asset. Cleared at the next
+         * poll; empty with AssetsConfig::hotReload off.
          *
          * Each is replaced under the handle it had, its revision bumped, and a reference the new file adds is loaded
-         * for every owner of the asset. A file that fails to read keeps what it loaded, its located diagnostics
-         * logged once per change of the file; a deleted file keeps it too, with one warning, and reloads when it comes
-         * back. A reload makes a new instance, so a pointer TryGet gave before it no longer points at the asset.
+         * for every owner of the asset, as is a sub-asset a model file adds. A file that fails to read or import keeps
+         * what it loaded, its located diagnostics or its importer's message logged once per change of the file; a
+         * sub-asset the new file no longer has keeps its data, with one warning; a deleted file keeps it too, with one
+         * warning, and reloads when it comes back. A reload makes a new instance, so a pointer TryGet gave before it no
+         * longer points at the asset.
          */
         [[nodiscard]] std::span<const ReloadedAsset> Reloaded() const noexcept;
 

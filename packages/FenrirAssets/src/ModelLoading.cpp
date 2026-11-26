@@ -117,15 +117,19 @@ namespace Fenrir
             logger.Warn("Model '{}': {}", fileKey, warning);
         }
 
-        // A reload replaces an asset the store holds from the file under its handle, bumping its revision and listing
-        // it in Reloaded(), and strikes it off `held`.
+        // A reload is all or nothing (ADR-0081 §2): each asset the store holds from the file waits here with its new
+        // data, and each the file adds is noted, until the whole file is known to have imported.
+        struct Replacement
+        {
+            Detail::AssetKind kind;
+            std::uint32_t index;
+            Detail::AssetBox data;
+        };
+        std::vector<Replacement> replacements;
+        std::vector<std::pair<Detail::AssetKind, std::uint32_t>> added;
         const auto replace = [&](Detail::AssetKind kind, std::uint32_t index, Detail::AssetBox data) {
-            const Detail::AssetRecord& record = m_state->tables[static_cast<std::size_t>(kind)].records[index];
-            const Detail::AssetSlot slot{index, record.generation};
-            (void)ReplaceSlot(kind, slot, std::move(data));
-            m_state->reloaded.push_back({Detail::PathOf(*m_state, kind, slot).value_or(record.key), kind, slot});
-            std::erase(held, std::pair(kind, index));
-            return slot;
+            replacements.push_back({kind, index, std::move(data)});
+            return Detail::AssetSlot{index, m_state->tables[static_cast<std::size_t>(kind)].records[index].generation};
         };
         // Each sub-asset is stored under the file's key and its label. One already stored under it (the model was
         // unloaded, but its sub-assets live on) is shared instead of stored again, or replaced by a reload; one a
@@ -151,6 +155,7 @@ namespace Fenrir
             {
                 Detail::AddOwner(table.records[slot.index], holder);
             }
+            added.emplace_back(kind, slot.index);
             return slot;
         };
 
@@ -175,8 +180,17 @@ namespace Fenrir
                 }
                 problem = decoded.image ? "its pixels do not fit its size" : std::move(decoded.error);
             }
-            logger.Warn("Model '{}': its texture '{}' could not be loaded ({}); a 1x1 white image stands in", fileKey,
-                        source.name, problem);
+            // A reload keeps the image it has rather than whitening it: the texture is a unit the file left out.
+            if (reloading)
+            {
+                imported.failures.push_back(
+                    std::format("its texture '{}' could not be loaded ({})", source.name, problem));
+            }
+            else
+            {
+                logger.Warn("Model '{}': its texture '{}' could not be loaded ({}); a 1x1 white image stands in",
+                            fileKey, source.name, problem);
+            }
             images.push_back(WhitePixel());
         }
         std::vector<std::optional<ColourSpace>> firstUse(images.size());
@@ -255,7 +269,8 @@ namespace Fenrir
             Detail::AssetWarnings meshWarnings;
             if (std::string problem = Detail::PrepareAsset(source.data, meshWarnings); !problem.empty())
             {
-                if (source.skeleton >= 0)
+                // A reload that left a mesh out would give the next mesh its label, so it counts as failed too.
+                if (source.skeleton >= 0 || reloading)
                 {
                     imported.failures.push_back(std::format("mesh '{}' is left out: {}", source.name, problem));
                 }
@@ -315,6 +330,20 @@ namespace Fenrir
             model.nodes.push_back(std::move(node));
         }
 
+        // A reloaded file that left any unit out replaces nothing: what it added goes, and the store is as it was.
+        if (reloading && !imported.failures.empty())
+        {
+            for (const auto& [kind, index] : added)
+            {
+                m_state->Free(kind, index);
+            }
+            std::string problem = "it imported only in part";
+            for (const std::string& failure : imported.failures)
+            {
+                problem += "; " + failure;
+            }
+            return problem;
+        }
         // What failed leaves the rest usable: the load is Partial, and each load of the file says so.
         for (const std::string& failure : imported.failures)
         {
@@ -340,6 +369,19 @@ namespace Fenrir
         else if (const auto found = models.byKey.find(fileKey); found != models.byKey.end())
         {
             replace(Detail::AssetKind::Model, found->second, std::move(data));
+        }
+        // The file imported whole: each held asset takes its new data, a revision on, listed in Reloaded().
+        for (Replacement& replacement : replacements)
+        {
+            const Detail::AssetRecord& record =
+                m_state->tables[static_cast<std::size_t>(replacement.kind)].records[replacement.index];
+            const Detail::AssetSlot slot{replacement.index, record.generation};
+            if (ReplaceSlot(replacement.kind, slot, std::move(replacement.data)))
+            {
+                m_state->reloaded.push_back(
+                    {Detail::PathOf(*m_state, replacement.kind, slot).value_or(record.key), replacement.kind, slot});
+            }
+            std::erase(held, std::pair(replacement.kind, replacement.index));
         }
 
         // A sub-asset the reloaded file no longer has keeps what it loaded, as a data asset's does (ADR-0081 §2).

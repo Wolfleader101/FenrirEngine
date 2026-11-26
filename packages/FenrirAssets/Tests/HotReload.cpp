@@ -652,3 +652,55 @@ TEST_CASE("A model file stays watched while a mesh outlives its model", "[assets
     REQUIRE(TimesReloaded(test, second.handle) == 1);
     REQUIRE_FALSE(test.store.IsValid(model));
 }
+
+TEST_CASE("A mesh a rewritten model file adds loads under its label for the model's owners",
+          "[assets][models][reload][owners]")
+{
+    TempRoot root;
+    root.Copy(Fixtures() / "models/owners.gltf", ModelPath);
+    root.Copy(Fixtures() / "models/owners.bin", "models/owners.bin");
+    root.Copy(Fixtures() / "models/tangents.bin", "models/tangents.bin");
+    DataApp test(Watching(root));
+    Fenrir::Scene& level = test.app.CreateScene("Level");
+    const Fenrir::LoadResult<Fenrir::Model> loaded = test.store.Load<Fenrir::Model>(ModelPath, level);
+    INFO("the two-mesh prop loads for the scene");
+    REQUIRE(loaded.Ok());
+    RunFrames(test, 1);
+
+    root.Copy(Fixtures() / "models/tangents.gltf", ModelPath);
+    RunFrames(test, 2);
+
+    INFO("the model reads three meshes, the third loadable by its label");
+    REQUIRE(test.store.TryGet(loaded.handle)->meshes.size() == 3);
+    const Fenrir::AssetHandle<Fenrir::Mesh> third = test.store.TryGet(loaded.handle)->meshes.at(2);
+    REQUIRE(test.store.PathOf(third) == std::string(ModelPath) + "#Mesh2");
+    INFO("an added mesh is no replacement, so Reloaded() does not list it");
+    REQUIRE(TimesReloaded(test, third) == 0);
+
+    test.app.DestroyScene("Level");
+    INFO("the scene was the model's only owner, so the added mesh goes with it");
+    REQUIRE_FALSE(test.store.IsValid(third));
+}
+
+TEST_CASE("A rewritten model file that imports only in part replaces nothing and says why once",
+          "[assets][models][reload]")
+{
+    TempRoot root;
+    CopyModel(root);
+    root.Copy(Fixtures() / "models/missing-texture.bin", "models/missing-texture.bin");
+    DataApp test(Watching(root));
+    const Fenrir::AssetHandle<Fenrir::Model> model = LoadModel(test);
+    const std::uint32_t revision = test.store.Revision(model);
+
+    // Its one mesh would import, but its texture names a file that is not there.
+    root.Copy(Fixtures() / "models/missing-texture.gltf", ModelPath);
+    RunFrames(test, 5);
+
+    INFO("the model keeps its three meshes at the same revision, and nothing is listed as reloaded");
+    REQUIRE(test.store.TryGet(model)->meshes.size() == 3);
+    REQUIRE(test.store.Revision(model) == revision);
+    REQUIRE(test.store.Reloaded().empty());
+    INFO("one error over five frames names the file and the texture it left out");
+    REQUIRE(CountContaining(*test.errors, "Could not reload model 'models/prop.gltf': it imported only in part") == 1);
+    REQUIRE(test.errors->size() == 1);
+}
