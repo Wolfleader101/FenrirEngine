@@ -1,9 +1,17 @@
+#include <optional>
+#include <string>
+
 #include <catch2/catch_test_macros.hpp>
 
 #include "AssetsTest.hpp"
+#include "DataAssetsTest.hpp"
 
 using AssetsTest::AssetsApp;
+using AssetsTest::CountContaining;
+using AssetsTest::DataApp;
+using AssetsTest::Sword;
 using AssetsTest::Triangle;
+using AssetsTest::WeaponData;
 
 TEST_CASE("Add never shares an asset, even for equal data", "[assets][revisions]")
 {
@@ -130,4 +138,128 @@ TEST_CASE("A mesh whose streams or indices do not fit together is refused", "[as
 
     INFO("each refusal is logged");
     REQUIRE(test.errors->size() == 4);
+}
+
+TEST_CASE("Edit changes a data asset in place and bumps the revision every reader sees", "[assets][revisions][data]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+    const Fenrir::LoadResult<Sword> loaded =
+        test.store.Load<Sword>("data/sword.asset.json5", Fenrir::AssetOwner::App());
+    REQUIRE(loaded.Ok());
+    const Sword* before = test.store.TryGet(loaded.handle);
+
+    Sword* sword = test.store.Edit(loaded.handle, "sharpen a sword");
+    INFO("Edit gives the one shared instance, mutable, and moves the revision on by one");
+    REQUIRE(sword != nullptr);
+    REQUIRE(sword == before);
+    REQUIRE(test.store.Revision(loaded.handle) == 2);
+
+    sword->edge = 1.0f;
+    INFO("the same handle reads the change");
+    REQUIRE(test.store.TryGet(loaded.handle)->edge == 1.0f);
+
+    REQUIRE(test.store.Edit(loaded.handle, "sharpen a sword") != nullptr);
+    INFO("each edit bumps it again");
+    REQUIRE(test.store.Revision(loaded.handle) == 3);
+}
+
+TEST_CASE("Edit through a base type's handle edits the base part of a data asset", "[assets][revisions][data]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+    const Fenrir::LoadResult<WeaponData> loaded =
+        test.store.Load<WeaponData>("data/sword.asset.json5", Fenrir::AssetOwner::App());
+    REQUIRE(loaded.Ok());
+
+    WeaponData* weapon = test.store.Edit(loaded.handle, "rename a weapon");
+    INFO("a Sword edits as a WeaponData, bumping its revision");
+    REQUIRE(weapon != nullptr);
+    weapon->displayName = "Blunted";
+    REQUIRE(test.store.TryGet(loaded.handle)->displayName == "Blunted");
+    REQUIRE(test.store.Revision(loaded.handle) == 2);
+}
+
+TEST_CASE("Edit of a stale data asset handle gives null and logs its action", "[assets][revisions][data]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+    const Fenrir::AssetHandle<Sword> sword = test.store.Add<Sword>(Sword{}, Fenrir::AssetOwner::App());
+    REQUIRE(test.store.Unload(sword));
+
+    INFO("editing a freed data asset gives nothing, and one error says what was tried");
+    REQUIRE(test.store.Edit(sword, "sharpen a sword") == nullptr);
+    REQUIRE(test.errors->size() == 1);
+    REQUIRE(CountContaining(*test.errors, "sharpen a sword") == 1);
+}
+
+TEST_CASE("Edit of a data asset as a type it is not gives null and is logged", "[assets][revisions][data]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+    const Fenrir::AssetHandle<WeaponData> weapon = test.store.Add<WeaponData>(WeaponData{}, Fenrir::AssetOwner::App());
+    const Fenrir::AssetHandle<Sword> asSword{weapon.index, weapon.generation};
+
+    INFO("a WeaponData record does not edit as a Sword, and its revision stays");
+    REQUIRE(test.store.Edit(asSword, "sharpen a sword") == nullptr);
+    REQUIRE(CountContaining(*test.errors, "sharpen a sword") == 1);
+    REQUIRE(test.store.Revision(weapon) == 1);
+}
+
+TEST_CASE("Replace swaps a data asset's value and bumps its revision", "[assets][revisions][data]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+    const Fenrir::LoadResult<Sword> loaded =
+        test.store.Load<Sword>("data/sword.asset.json5", Fenrir::AssetOwner::App());
+    REQUIRE(loaded.Ok());
+
+    Sword blunt;
+    blunt.displayName = "Blunt";
+    blunt.edge = 0.1f;
+    INFO("replacing a live sword with a Sword succeeds and moves the revision on by one");
+    REQUIRE(test.store.Replace(loaded.handle, blunt));
+    REQUIRE(test.store.Revision(loaded.handle) == 2);
+    INFO("the same handle reads the new value, path and all");
+    REQUIRE(test.store.TryGet(loaded.handle)->displayName == "Blunt");
+    REQUIRE(test.store.TryGet(loaded.handle)->edge == 0.1f);
+    REQUIRE(test.store.PathOf(loaded.handle) == std::optional<std::string>("data/sword.asset.json5"));
+}
+
+TEST_CASE("Replace of a data asset through a base type's handle is refused and logged", "[assets][revisions][data]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+    const Fenrir::LoadResult<WeaponData> loaded =
+        test.store.Load<WeaponData>("data/sword.asset.json5", Fenrir::AssetOwner::App());
+    REQUIRE(loaded.Ok());
+
+    WeaponData plain;
+    plain.displayName = "Plain";
+    INFO("a WeaponData does not replace a Sword record: Replace takes exactly the record's type");
+    REQUIRE_FALSE(test.store.Replace(loaded.handle, plain));
+    REQUIRE(CountContaining(*test.errors, "AssetsTest::Sword") == 1);
+    INFO("the sword is unchanged, at its first revision");
+    REQUIRE(test.store.TryGet(loaded.handle)->displayName == "Longsword");
+    REQUIRE(test.store.Revision(loaded.handle) == 1);
+}
+
+TEST_CASE("Replace of a stale data asset handle is refused and logged", "[assets][revisions][data]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+    const Fenrir::AssetHandle<Sword> sword = test.store.Add<Sword>(Sword{}, Fenrir::AssetOwner::App());
+    REQUIRE(test.store.Unload(sword));
+
+    INFO("replacing a freed data asset fails with one error, and does not bring it back");
+    REQUIRE_FALSE(test.store.Replace(sword, Sword{}));
+    REQUIRE(test.errors->size() == 1);
+    REQUIRE_FALSE(test.store.IsValid(sword));
 }

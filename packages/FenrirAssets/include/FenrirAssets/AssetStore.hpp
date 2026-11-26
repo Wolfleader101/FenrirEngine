@@ -243,9 +243,9 @@ namespace Fenrir
      * @brief The asset store: every asset the app holds, as plain CPU-side data behind asset handles (ADR-0021). An app
      * resource, made by Assets::Install and reached with `app.GetResource<AssetStore>()`.
      *
-     * Main thread only: loading, adding, replacing, unloading and material edits must not run alongside anything else
-     * that uses the store. Reads (TryGet, IsValid, Revision, the material TryGet calls) may run together from any
-     * thread while nothing writes.
+     * Main thread only: loading, adding, replacing, unloading and edits (Edit, and the material, clip, bone mask and
+     * image edits) must not run alongside anything else that uses the store. Reads (TryGet, IsValid, Revision, the
+     * material TryGet calls) may run together from any thread while nothing writes.
      */
     class AssetStore
     {
@@ -337,21 +337,49 @@ namespace Fenrir
          * but suspect (a skinned vertex with no weight, a repeated bone name) is taken with a warning. What the store
          * derives (a mesh's bounds and skin boxes, a skeleton's engine names and bind signature, a clip's duration) is
          * computed here.
+         *
+         * A data asset (`T` a data asset type) is stored as a `T`, whose type must be in the store's type registry; one
+         * that is not is refused with a logged error.
          */
         template <typename T>
         [[nodiscard]] AssetHandle<T> Add(AssetData<T> data, AssetOwner owner)
         {
-            using Data = AssetData<T>;
-            Detail::AssetWarnings warnings;
-            if (const std::string problem = Detail::PrepareAsset(data, warnings); !problem.empty())
+            if constexpr (Detail::AssetTraits<T>::kind == Detail::AssetKind::Data)
             {
-                Refuse(Detail::AssetTraits<T>::name, "add", problem);
-                return {};
+                return AddData<T>(std::move(data), owner, std::nullopt);
             }
-            Warn(Detail::AssetTraits<T>::name, "added", warnings);
-            Detail::AssetBox box(new Data(std::move(data)), &Detail::DestroyAssetData<Data>);
-            const Detail::AssetSlot slot = AddSlot(Detail::AssetTraits<T>::kind, std::move(box), owner);
-            return {slot.index, slot.generation};
+            else
+            {
+                return AddEngineAsset<T>(std::move(data), owner);
+            }
+        }
+
+        /**
+         * @brief Adds the data asset `data` for `owner` under the asset path `name` (ADR-0076), so it is keyed like a
+         * loaded one: PathOf gives `name` (root-relative, as a load's path is), and a later Load of `name` gives this
+         * handle and reads no file. A relative `name` resolves against the asset root and an absolute one under it
+         * names its root-relative path. A `name` an asset of this kind has already (loaded, loading or added), or one
+         * outside the root, is refused with a logged error, and the handle is empty; so is a `T` the store's type
+         * registry lacks. Only data assets are added with a name.
+         */
+        template <Detail::DataAssetType T>
+        [[nodiscard]] AssetHandle<T> Add(AssetData<T> data, AssetOwner owner, std::string_view name)
+        {
+            return AddData<T>(std::move(data), owner, name);
+        }
+
+        /**
+         * @brief The data asset `handle` names, to change in place (ADR-0075): the one shared instance every reader
+         * sees, with its revision bumped now, so a holder that compares revisions takes the change. Through the handle
+         * of a base type it is the instance's base part, as TryGet's is. Null, with a logged error that `action` (what
+         * the caller was doing, `"sharpen a sword"`) words, if the handle does not resolve or names a record of a type
+         * that is neither `T` nor extends it; the revision then stays. The pointer is valid until the asset is freed,
+         * and an edit made through it after a later Edit or Replace is not a revision of its own.
+         */
+        template <Detail::DataAssetType T>
+        [[nodiscard]] T* Edit(AssetHandle<T> handle, std::string_view action)
+        {
+            return static_cast<T*>(EditData({handle.index, handle.generation}, Describe<T>::Description(), action));
         }
 
         /**
@@ -383,20 +411,27 @@ namespace Fenrir
          * data breaks its type's rules; the asset is then unchanged. What Add derives is derived here too. Replacing a
          * shader logs a warning, once per material, for each parameter override of a material on it that the new
          * shader lacks or types differently: the override is kept and ignored.
+         *
+         * A data asset's value is assigned to its one instance, which keeps its address, so a pointer TryGet or Edit
+         * gave stays valid and reads `data`. Its record's type must be exactly `T`, never a type `T` is a base of: a
+         * `Sword` record is not replaced through an `AssetHandle<WeaponData>`, which is refused with a logged error.
          */
         template <typename T>
         bool Replace(AssetHandle<T> handle, AssetData<T> data)
         {
-            using Data = AssetData<T>;
-            Detail::AssetWarnings warnings;
-            if (const std::string problem = Detail::PrepareAsset(data, warnings); !problem.empty())
+            if constexpr (Detail::AssetTraits<T>::kind == Detail::AssetKind::Data)
             {
-                Refuse(Detail::AssetTraits<T>::name, "replace", problem);
-                return false;
+                void* instance = ReplaceData({handle.index, handle.generation}, Describe<T>::Description());
+                if (instance != nullptr)
+                {
+                    *static_cast<T*>(instance) = std::move(data);
+                }
+                return instance != nullptr;
             }
-            Warn(Detail::AssetTraits<T>::name, "replaced", warnings);
-            Detail::AssetBox box(new Data(std::move(data)), &Detail::DestroyAssetData<Data>);
-            return ReplaceSlot(Detail::AssetTraits<T>::kind, {handle.index, handle.generation}, std::move(box));
+            else
+            {
+                return ReplaceEngineAsset<T>(handle, std::move(data));
+            }
         }
 
         /**
@@ -474,9 +509,9 @@ namespace Fenrir
         }
 
         /**
-         * @brief The asset's revision: 1 when it is loaded or added, one more on each Replace, each material set and
-         * each Reset that removes an override. Users that keep a copy made from the data (the renderer's GPU side)
-         * compare it to know when to remake it. Zero if the handle does not resolve.
+         * @brief The asset's revision: 1 when it is loaded or added, one more on each Replace, each Edit, each material
+         * set and each Reset that removes an override. Users that keep a copy made from the data (the renderer's GPU
+         * side) compare it to know when to remake it. Zero if the handle does not resolve.
          */
         template <typename T>
         [[nodiscard]] std::uint32_t Revision(AssetHandle<T> handle) const
@@ -658,12 +693,60 @@ namespace Fenrir
         [[nodiscard]] ILogger& Logger() const noexcept;
 
       private:
+        template <typename T>
+        [[nodiscard]] AssetHandle<T> AddEngineAsset(AssetData<T> data, AssetOwner owner)
+        {
+            using Data = AssetData<T>;
+            Detail::AssetWarnings warnings;
+            if (const std::string problem = Detail::PrepareAsset(data, warnings); !problem.empty())
+            {
+                Refuse(Detail::AssetTraits<T>::name, "add", problem);
+                return {};
+            }
+            Warn(Detail::AssetTraits<T>::name, "added", warnings);
+            Detail::AssetBox box(new Data(std::move(data)), &Detail::DestroyAssetData<Data>);
+            const Detail::AssetSlot slot = AddSlot(Detail::AssetTraits<T>::kind, std::move(box), owner);
+            return {slot.index, slot.generation};
+        }
+
+        template <typename T>
+        [[nodiscard]] AssetHandle<T> AddData(T data, AssetOwner owner, std::optional<std::string_view> name)
+        {
+            Detail::AssetSlot slot;
+            if (void* instance = AddDataSlot(Describe<T>::Description(), owner, name, slot))
+            {
+                *static_cast<T*>(instance) = std::move(data);
+            }
+            return {slot.index, slot.generation};
+        }
+
+        template <typename T>
+        bool ReplaceEngineAsset(AssetHandle<T> handle, AssetData<T> data)
+        {
+            using Data = AssetData<T>;
+            Detail::AssetWarnings warnings;
+            if (const std::string problem = Detail::PrepareAsset(data, warnings); !problem.empty())
+            {
+                Refuse(Detail::AssetTraits<T>::name, "replace", problem);
+                return false;
+            }
+            Warn(Detail::AssetTraits<T>::name, "replaced", warnings);
+            Detail::AssetBox box(new Data(std::move(data)), &Detail::DestroyAssetData<Data>);
+            return ReplaceSlot(Detail::AssetTraits<T>::kind, {handle.index, handle.generation}, std::move(box));
+        }
+
         Detail::AssetSlot LoadSlot(Detail::AssetKind kind, std::string_view path, AssetOwner owner,
                                    std::optional<LoadDiagnostic>& diagnostic, std::vector<std::string>& failedUnits);
         Detail::AssetSlot LoadDataSlot(std::string_view path, AssetOwner owner, const TypeDescription& type,
                                        std::optional<LoadDiagnostic>& diagnostic,
                                        std::vector<Serialisation::Diagnostic>& diagnostics, bool& incomplete);
         Detail::AssetSlot AddSlot(Detail::AssetKind kind, Detail::AssetBox data, AssetOwner owner);
+        /**
+         * @brief Stores a value-initialised instance of `type` for `owner`, keyed by `name` when there is one, and
+         * gives the instance to move the added value into, with its slot in `slot`; null, logged, when refused.
+         */
+        [[nodiscard]] void* AddDataSlot(const TypeDescription& type, AssetOwner owner,
+                                        std::optional<std::string_view> name, Detail::AssetSlot& slot);
         Detail::AssetSlot AddBuiltinSlot(Detail::AssetKind kind, std::string_view name, Detail::AssetBox data);
         Detail::AssetSlot ReserveBuiltin(Detail::AssetKind kind, std::string_view name);
         [[nodiscard]] std::string ImportModelFile(const std::filesystem::path& file, const std::string& fileKey,
@@ -672,6 +755,11 @@ namespace Fenrir
         /** @brief Adds `owner` to the data asset in slot `index`, and to every asset its references loaded, in turn. */
         void ShareData(std::uint32_t index, std::uint32_t owner);
         bool ReplaceSlot(Detail::AssetKind kind, Detail::AssetSlot slot, Detail::AssetBox data);
+        /**
+         * @brief The instance of the data asset `slot` names, its revision bumped, to assign a `type` to; null, logged,
+         * when the slot does not resolve or its record is not exactly of `type`.
+         */
+        [[nodiscard]] void* ReplaceData(Detail::AssetSlot slot, const TypeDescription& type);
         bool UnloadSlot(Detail::AssetKind kind, Detail::AssetSlot slot);
         [[nodiscard]] const void* Find(Detail::AssetKind kind, Detail::AssetSlot slot) const;
         [[nodiscard]] const void* FindData(Detail::AssetSlot slot, const TypeDescription& type) const;
@@ -681,8 +769,16 @@ namespace Fenrir
                                       Detail::AssetSlot b) const;
         void Refuse(std::string_view assetName, std::string_view action, const std::string& problem);
         void Warn(std::string_view assetName, std::string_view action, const Detail::AssetWarnings& warnings);
-        [[nodiscard]] Detail::AssetRecord* EditRecord(Detail::AssetKind kind, Detail::AssetSlot slot,
-                                                      std::string_view action);
+        /**
+         * @brief Every edit's core (Edit, and the material, clip, bone mask and image edits): the live record `slot`
+         * names, for the caller to change and bump the revision of, or null when the slot does not resolve, logged
+         * through `stale` formatted with `action` and the kind's word.
+         */
+        [[nodiscard]] Detail::AssetRecord* EditRecord(
+            Detail::AssetKind kind, Detail::AssetSlot slot, std::string_view action,
+            std::string_view stale = "Could not {}: the {} handle is empty or stale");
+        /** @brief Edit's untyped part: the instance, as `type`, of the data asset `slot` names, its revision bumped. */
+        [[nodiscard]] void* EditData(Detail::AssetSlot slot, const TypeDescription& type, std::string_view action);
         bool SetParameter(AssetHandle<Material> material, std::string_view name, MaterialValue value);
         [[nodiscard]] MaterialData* EditMaterial(AssetHandle<Material> material, std::string_view action);
         [[nodiscard]] std::optional<MaterialValue> EffectiveValue(AssetHandle<Material> material, std::string_view name,

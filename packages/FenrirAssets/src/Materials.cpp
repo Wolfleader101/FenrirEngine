@@ -268,10 +268,10 @@ namespace Fenrir
 
     MaterialData* AssetStore::EditMaterial(AssetHandle<Material> material, std::string_view action)
     {
-        Detail::AssetRecord* record = m_state->Find(Detail::AssetKind::Material, SlotOf(material));
+        Detail::AssetRecord* record = EditRecord(Detail::AssetKind::Material, SlotOf(material), action,
+                                                 "Could not {} a {}: its handle is empty or stale");
         if (record == nullptr)
         {
-            m_state->logger->Error("Could not {} a material: its handle is empty or stale", action);
             return nullptr;
         }
         ++record->revision;
@@ -280,10 +280,10 @@ namespace Fenrir
 
     bool AssetStore::SetParameter(AssetHandle<Material> material, std::string_view name, MaterialValue value)
     {
-        Detail::AssetRecord* record = m_state->Find(Detail::AssetKind::Material, SlotOf(material));
+        Detail::AssetRecord* record = EditRecord(Detail::AssetKind::Material, SlotOf(material), name,
+                                                 "Could not set parameter '{}' of a {}: its handle is empty or stale");
         if (record == nullptr)
         {
-            m_state->logger->Error("Could not set parameter '{}' of a material: its handle is empty or stale", name);
             return false;
         }
         auto& data = *static_cast<MaterialData*>(record->data.get());

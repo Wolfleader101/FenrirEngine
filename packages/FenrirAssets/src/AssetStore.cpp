@@ -6,7 +6,9 @@
 #include <format>
 #include <fstream>
 #include <iterator>
+#include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -814,6 +816,47 @@ namespace Fenrir
         return Detail::InsertAsset(TableOf(*m_state, kind), std::move(data), Detail::OwnerIdOf(m_state, owner), {});
     }
 
+    void* AssetStore::AddDataSlot(const TypeDescription& type, AssetOwner owner, std::optional<std::string_view> name,
+                                  Detail::AssetSlot& slot)
+    {
+        const std::string_view word = KindName(Detail::AssetKind::Data);
+        const TypeDescription* registered = m_state->types->Find(type.name);
+        if (registered == nullptr)
+        {
+            Refuse(word, "add",
+                   std::format("the type registry has no `{}`: register its package's types first", type.name));
+            return nullptr;
+        }
+        Detail::AssetTable& table = TableOf(*m_state, Detail::AssetKind::Data);
+        std::string key;
+        if (name)
+        {
+            // Keyed as a load of the name is (ADR-0076), so a later load of it finds this asset.
+            const AssetPath resolved = Resolve(m_state->root, *name);
+            const std::optional<std::string> assetPath = RootRelative(m_state->root, resolved.file);
+            if (!assetPath || *assetPath == ".")
+            {
+                Refuse(word, "add",
+                       std::format("its name '{}' is outside the asset root '{}', so it has no asset path", *name,
+                                   Utf8Text(m_state->root)));
+                return nullptr;
+            }
+            if (table.byKey.contains(resolved.key))
+            {
+                Refuse(word, "add", std::format("its name '{}' names an asset the store has already", *name));
+                return nullptr;
+            }
+            key = resolved.key;
+        }
+        auto value = std::make_unique<Detail::DataValue>(*registered);
+        void* instance = value->value;
+        slot =
+            Detail::InsertAsset(table, Detail::AssetBox(value.release(), &Detail::DestroyAssetData<Detail::DataValue>),
+                                Detail::OwnerIdOf(m_state, owner), std::move(key));
+        m_state->Find(Detail::AssetKind::Data, slot)->typeName = registered->name;
+        return instance;
+    }
+
     Detail::AssetSlot AssetStore::AddBuiltinSlot(Detail::AssetKind kind, std::string_view name, Detail::AssetBox data)
     {
         if (!name.starts_with(BuiltinPrefix))
@@ -897,6 +940,27 @@ namespace Fenrir
             WarnOverridesShaderLacks({slot.index, slot.generation});
         }
         return true;
+    }
+
+    void* AssetStore::ReplaceData(Detail::AssetSlot slot, const TypeDescription& type)
+    {
+        const std::string_view word = KindName(Detail::AssetKind::Data);
+        Detail::AssetRecord* record = m_state->Find(Detail::AssetKind::Data, slot);
+        if (record == nullptr || record->data == nullptr)
+        {
+            Refuse(word, "replace", "its handle is empty or stale");
+            return nullptr;
+        }
+        // Exactly its type: a base's value would leave the fields of the type extending it as they were.
+        if (record->typeName != type.name)
+        {
+            Refuse(word, "replace",
+                   std::format("it is a `{}`, and only a value of exactly its type replaces it, not a `{}`",
+                               record->typeName, type.name));
+            return nullptr;
+        }
+        ++record->revision;
+        return static_cast<Detail::DataValue*>(record->data.get())->value;
     }
 
     bool AssetStore::UnloadSlot(Detail::AssetKind kind, Detail::AssetSlot slot)
@@ -987,14 +1051,34 @@ namespace Fenrir
         }
     }
 
-    Detail::AssetRecord* AssetStore::EditRecord(Detail::AssetKind kind, Detail::AssetSlot slot, std::string_view action)
+    Detail::AssetRecord* AssetStore::EditRecord(Detail::AssetKind kind, Detail::AssetSlot slot, std::string_view action,
+                                                std::string_view stale)
     {
         Detail::AssetRecord* record = m_state->Find(kind, slot);
         if (record == nullptr || record->data == nullptr)
         {
-            m_state->logger->Error("Could not {}: the {} handle is empty or stale", action, KindName(kind));
+            m_state->logger->Error(stale, action, KindName(kind));
             return nullptr;
         }
         return record;
+    }
+
+    void* AssetStore::EditData(Detail::AssetSlot slot, const TypeDescription& type, std::string_view action)
+    {
+        Detail::AssetRecord* record = EditRecord(Detail::AssetKind::Data, slot, action);
+        if (record == nullptr)
+        {
+            return nullptr;
+        }
+        if (!m_state->types->IsA(record->typeName, type.name))
+        {
+            m_state->logger->Error("Could not {}: the data asset handle names a `{}`, which is not a `{}`", action,
+                                   record->typeName, type.name);
+            return nullptr;
+        }
+        ++record->revision;
+        // A data asset type extends at most one other and has no virtual functions (ADR-0075), so its base is at the
+        // instance's own address.
+        return static_cast<Detail::DataValue*>(record->data.get())->value;
     }
 } // namespace Fenrir
