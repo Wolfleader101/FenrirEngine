@@ -15,7 +15,19 @@ namespace Fenrir
         Generated::RegisterFenrirAssetsTypes(app.GetResource<TypeRegistry>());
 
         // The store reads data asset types from the app's registry, which outlives it.
+        const bool hotReload = config.hotReload;
         app.AddResource<AssetStore>(*app.Logger(), std::move(config), app.GetResource<TypeRegistry>());
+        // The watcher looks before anything else runs in a frame, on the main thread, so a reload happens between
+        // frames (ADR-0081 §1). It finds the store each frame: one this owner removed reloads nothing.
+        if (hotReload)
+        {
+            app.AddSequentialSystems(SchedulePriority::PreUpdate, {[](App& running) {
+                                         if (AssetStore* store = running.TryGetResource<AssetStore>())
+                                         {
+                                             store->PollForReload();
+                                         }
+                                     }});
+        }
         return Assets(app);
     }
 

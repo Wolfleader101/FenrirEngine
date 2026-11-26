@@ -60,7 +60,7 @@ namespace Fenrir
     } // namespace
 
     std::string AssetStore::ImportModelFile(const std::filesystem::path& file, const std::string& fileKey,
-                                            AssetOwner owner)
+                                            std::uint32_t owner)
     {
         Detail::ModelImport imported = Detail::ImportModel(file);
         if (!imported.error.empty())
@@ -72,7 +72,7 @@ namespace Fenrir
         {
             logger.Warn("Model '{}': {}", fileKey, warning);
         }
-        const Detail::OwnerId ownerId = Detail::OwnerIdOf(m_state, owner);
+        const Detail::OwnerId ownerId = owner;
 
         // Each sub-asset is stored under the file's key and its label. One already stored under it (the model was
         // unloaded, but its sub-assets live on) is shared instead of stored again.

@@ -32,6 +32,8 @@ add_library(FenrirAssets STATIC
     src/AssetStore.cpp
     src/AssetStoreState.hpp
     src/AssetSource.hpp
+    src/AssetWatcher.hpp
+    src/AssetWatcher.cpp
     src/DirectorySource.cpp
     src/Move.cpp
     src/Envelope.hpp
@@ -59,7 +61,7 @@ add_library(FenrirAssets STATIC
     src/Importers/Ufbx/UfbxModelImporter.cpp
 )
 
-target_link_libraries(FenrirAssets PUBLIC FenrirApp FenrirScene FenrirMath FenrirShaderContainer PRIVATE FenrirStbImage FenrirCgltf FenrirUfbx meshoptimizer)
+target_link_libraries(FenrirAssets PUBLIC FenrirApp FenrirScene FenrirMath FenrirShaderContainer PRIVATE FenrirCore FenrirStbImage FenrirCgltf FenrirUfbx meshoptimizer)
 
 target_include_directories(FenrirAssets PUBLIC include PRIVATE src)
 

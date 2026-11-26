@@ -29,7 +29,9 @@ namespace Fenrir
       public:
         /**
          * @brief Turns assets on for `app`: adds the AssetStore app resource, with its asset root from `config`. It
-         * cannot fail, and it adds no systems: assets are loaded, added and freed only when called.
+         * cannot fail. Assets are loaded, added and freed only when called; with AssetsConfig::hotReload on, it adds
+         * one sequential system at SchedulePriority::PreUpdate that reloads, between frames, each file the store loaded
+         * that changed on disk (AssetStore::Reloaded), and with it off it adds none.
          */
         [[nodiscard]] static Assets Install(App& app, AssetsConfig config = {});
 

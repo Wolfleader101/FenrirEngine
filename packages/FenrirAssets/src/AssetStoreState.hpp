@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <deque>
 #include <filesystem>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <new>
@@ -28,6 +29,15 @@ namespace Fenrir::Detail
 
     /** @brief The app's owner number. Scenes are numbered from one, in the order they first own an asset. */
     inline constexpr OwnerId AppOwnerId = 0;
+
+    /**
+     * @brief The owner a reload reads a changed file for: what the read reserves and loads is held for it until the
+     * read is known good, then given the reloaded asset's owners, and it is released either way, so a failed reload
+     * leaves nothing behind. No scene is ever numbered it.
+     */
+    inline constexpr OwnerId ReloadOwnerId = std::numeric_limits<OwnerId>::max();
+
+    class AssetWatcher;
 
     /**
      * @brief A data asset's instance (ADR-0075): of its file's type, which may extend the type it was loaded as, so it
@@ -91,6 +101,11 @@ namespace Fenrir::Detail
 
     struct AssetStoreState
     {
+        AssetStoreState();
+        AssetStoreState(const AssetStoreState&) = delete;
+        AssetStoreState& operator=(const AssetStoreState&) = delete;
+        ~AssetStoreState();
+
         ILogger* logger = nullptr;
         /** @brief The app's type registry, which data asset types are found and checked in. */
         const TypeRegistry* types = nullptr;
@@ -118,6 +133,10 @@ namespace Fenrir::Detail
          * own: the referencing file's located diagnostic says why the reference resolved to nothing, once.
          */
         bool quietNextLoad = false;
+        /** @brief The watch over every file the store loaded (ADR-0081); null with AssetsConfig::hotReload off. */
+        std::unique_ptr<AssetWatcher> watcher;
+        /** @brief What the last reload poll replaced, in order: AssetStore::Reloaded. */
+        std::vector<ReloadedAsset> reloaded;
 
         /** @brief The live record `slot` names in `kind`'s table, or null. */
         [[nodiscard]] AssetRecord* Find(AssetKind kind, AssetSlot slot);
