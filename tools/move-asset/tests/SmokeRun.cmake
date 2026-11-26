@@ -53,7 +53,8 @@ function(expect_untouched when)
 endfunction()
 
 set(changed_lines "changed: arms/blade.asset.json5\nchanged: shields/shield.asset.json5\nchanged: weapons/axe.asset.json5\n")
-set(unscanned_line "unscanned: spear.asset.json5: the type registry has no `AssetsTest::Spear`")
+set(unscanned_line
+    "unscanned: spear.asset.json5: the type registry has no `AssetsTest::Spear`, the type of its top level\n")
 
 # The dry run: what would change, and nothing written.
 run("${GAME_TOOL}" "${WORK}" "${from}" "${to}" --dry-run)
@@ -61,8 +62,7 @@ if(NOT code EQUAL 0)
     fail("the dry run exited ${code}:\n${out}${err}")
 endif()
 set(expected_dry "would move ${from} to ${to}, rewriting 3 references in 3 files\n${changed_lines}${unscanned_line}")
-string(FIND "${out}" "${expected_dry}" at)
-if(NOT at EQUAL 0)
+if(NOT out STREQUAL expected_dry)
     fail("the dry run printed\n${out}\nnot\n${expected_dry}")
 endif()
 expect_untouched("after the dry run")
@@ -93,7 +93,7 @@ expect_untouched("after the engine's dry run")
 
 # Arguments it cannot read: the usage, exit 2.
 run("${ENGINE_TOOL}" "${WORK}" "${from}")
-if(NOT code EQUAL 2 OR NOT err MATCHES "^usage: move-asset <root> <from> <to> \\[--dry-run\\]")
+if(NOT code EQUAL 2 OR NOT err MATCHES "^usage: fenrir-move-asset <root> <from> <to> \\[--dry-run\\]")
     fail("two arguments exited ${code}, printing:\n${err}")
 endif()
 
@@ -103,8 +103,7 @@ if(NOT code EQUAL 0)
     fail("the move exited ${code}:\n${out}${err}")
 endif()
 set(expected_move "moved ${from} to ${to}, rewriting 3 references in 3 files\n${changed_lines}${unscanned_line}")
-string(FIND "${out}" "${expected_move}" at)
-if(NOT at EQUAL 0)
+if(NOT out STREQUAL expected_move)
     fail("the move printed\n${out}\nnot\n${expected_move}")
 endif()
 if(EXISTS "${WORK}/${from}")

@@ -3,7 +3,9 @@
 #include <filesystem>
 #include <iostream>
 #include <optional>
+#include <ostream>
 #include <span>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -19,11 +21,18 @@ namespace Fenrir
 {
     namespace
     {
-        constexpr std::string_view Usage = "usage: move-asset <root> <from> <to> [--dry-run]\n"
-                                           "  <root>      the asset root\n"
-                                           "  <from>      the asset path of the file to move, under the root\n"
-                                           "  <to>        its new asset path, which must name nothing yet\n"
-                                           "  --dry-run   write nothing; print what would change\n";
+        // The usage, under the name the program was run by: the engine's copy and a game's are named differently.
+        void PrintUsage(std::ostream& stream, const char* program)
+        {
+            const std::string name =
+                program != nullptr ? std::filesystem::path(program).stem().string() : "fenrir-move-asset";
+            stream << "usage: " << name << " <root> <from> <to> [--dry-run]\n"
+                   << "  <root>      the asset root\n"
+                   << "  <from>      the asset path of the file to move, under the root\n"
+                   << "  <to>        its new asset path, which must name nothing yet\n"
+                   << "  --dry-run   write nothing; print what would change\n"
+                   << "  --help, -h  print this\n";
+        }
 
         struct Arguments
         {
@@ -84,26 +93,32 @@ namespace Fenrir
         {
             if (std::string_view(arg) == "--help" || std::string_view(arg) == "-h")
             {
-                std::cout << Usage;
+                PrintUsage(std::cout, argc > 0 ? argv[0] : nullptr);
                 return 0;
             }
         }
         const std::optional<Arguments> arguments = Parse(args);
         if (!arguments)
         {
-            std::cerr << Usage;
+            PrintUsage(std::cerr, argc > 0 ? argv[0] : nullptr);
             return 2;
         }
 
         // As App's constructor and Assets::Install fill the app's registry, then the game's on top.
         TypeRegistry registry([](std::string_view message) { std::cerr << "type registry: " << message << '\n'; });
-        Generated::RegisterFenrirMathTypes(registry);
-        Generated::RegisterFenrirECSTypes(registry);
-        Generated::RegisterFenrirAppTypes(registry);
-        Generated::RegisterFenrirAssetsTypes(registry);
+        // A registry missing types would leave their files unscanned, and so their references to the old path: stop.
+        bool registered = Generated::RegisterFenrirMathTypes(registry);
+        registered = Generated::RegisterFenrirECSTypes(registry) && registered;
+        registered = Generated::RegisterFenrirAppTypes(registry) && registered;
+        registered = Generated::RegisterFenrirAssetsTypes(registry) && registered;
         for (TypeRegistration registration : registrations)
         {
-            registration(registry);
+            registered = registration(registry) && registered;
+        }
+        if (!registered)
+        {
+            std::cerr << "refused: a type registration failed, so nothing was moved\n";
+            return 1;
         }
 
         const MoveResult result = Assets::Move(std::filesystem::path(arguments->root), arguments->from, arguments->to,

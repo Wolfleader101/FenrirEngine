@@ -14,14 +14,14 @@ fenrir-move-asset <root> <from> <to> [--dry-run]
 - `<from>`: the asset path of the file to move: root-relative, with forward slashes, as files name it.
 - `<to>`: its new asset path, which must name nothing yet (a rename that changes only the case is allowed).
 - `--dry-run`: write and move nothing, and print the same report.
-- `--help`: print the usage.
+- `--help` or `-h`: print the usage, under the name the program was run by.
 
 It prints, on standard output, one line saying what was moved and how many references were rewritten in how many files, then each changed file (`changed: <path>`, by its path after the move, the moved file's own included) and then each `.json5` file it could not scan (`unscanned: <path>: <reason>`). An unscanned file keeps any reference to the old path, so fix it by hand.
 
 | Exit code | Meaning |
 | --- | --- |
 | 0 | The file moved, or the dry run found that it could |
-| 1 | Refused, nothing written; the reason is on standard error (`refused: ...`) |
+| 1 | Refused, nothing written; the reason is on standard error (`refused: ...`), a type registration that failed among them |
 | 2 | Arguments it cannot read; the usage is on standard error |
 | 3 | A write failed partway; the reason is on standard error (`failed: ...`), and standard output lists the files already rewritten |
 
