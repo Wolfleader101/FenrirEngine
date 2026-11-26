@@ -13,6 +13,13 @@
           "name": "block",
           "kind": "f32",
           "default": 0.5
+        },
+        {
+          "name": "parries",
+          "kind": "reference",
+          "target": "AssetsTest::Sword",
+          "default": null,
+          "doc": "The sword the shield is made to parry: a sword, not any weapon."
         }
       ]
     },

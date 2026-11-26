@@ -1,0 +1,10 @@
+// The first of a pair of weapons that each upgrade to the other.
+{
+  format: 1,
+  type: "AssetsTest::WeaponData",
+  version: 1,
+  data: {
+    displayName: "Dawn blade",
+    upgradesTo: "data/pair-second.asset.json5",
+  },
+}

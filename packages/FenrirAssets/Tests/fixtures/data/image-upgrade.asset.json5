@@ -1,0 +1,10 @@
+// A weapon that upgrades to an image, which is no weapon.
+{
+  format: 1,
+  type: "AssetsTest::WeaponData",
+  version: 1,
+  data: {
+    displayName: "Painted blade",
+    upgradesTo: "fourbytwo.png",
+  },
+}

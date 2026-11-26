@@ -15,6 +15,7 @@
 
 #include "AssetStoreState.hpp"
 #include "FenrirLogger/ILogger.hpp"
+#include "FenrirSerialisation/Bridge.hpp"
 #include "FenrirSerialisation/ReadTree.hpp"
 #include "FenrirSerialisation/Upgrade.hpp"
 #include "FenrirSerialisation/Value.hpp"
@@ -140,8 +141,8 @@ namespace Fenrir::Detail
             }
         }
 
-        // A reference path the file names that the path rules refuse: where its text is, which field held it, and
-        // why.
+        // A reference path the file names that is left empty, refused by the path rules or naming no fitting target:
+        // where its text is, which field held it, and why.
         struct RefusedPath
         {
             const char* text = nullptr;
@@ -190,13 +191,13 @@ namespace Fenrir::Detail
 
     namespace
     {
-        // What every step of one envelope's read shares: the file's path its diagnostics name, where types and
-        // references are found, the log, and the file's diagnostics so far.
+        // What every step of one envelope's read shares: the file's path its diagnostics name, where types are found,
+        // the store's part in the read, the log, and the file's diagnostics so far.
         struct EnvelopeReader
         {
             std::string_view path;
             const TypeRegistry& registry;
-            const Ser::Resolvers& resolvers;
+            const EnvelopeHooks& hooks;
             ILogger& logger;
             std::vector<Ser::Diagnostic>& diagnostics;
 
@@ -208,27 +209,36 @@ namespace Fenrir::Detail
             }
         };
 
-        // What reading one entry of an envelope gave: the top level's, or one of its `sub`'s.
-        struct EntryRead
+        // What checking one entry of an envelope gave: the top level's, or one of its `sub`'s. Either the type,
+        // version and data it is read from, or why it is not read.
+        struct EntryCheck
         {
-            AssetBox value{nullptr, nullptr};
+            std::string name;
             const TypeDescription* type = nullptr;
+            std::uint32_t version = 0;
+            Ser::Value* data = nullptr;
             std::optional<LoadFailure> failure;
             // The located diagnostic that failed the entry, also in the read's diagnostics.
             std::optional<Ser::Diagnostic> failureDiagnostic;
+        };
+
+        // What filling one checked entry gave.
+        struct EntryRead
+        {
+            AssetBox value{nullptr, nullptr};
             bool incomplete = false;
         };
 
-        // Reads one entry, the sub-asset `name` or the top level when it is empty: its `type`, `version` and `data`,
-        // into an instance. With `expected`, the type must be it or extend it; without, it must be a data asset type.
-        // A sub-asset holding a `sub` of its own is refused. Every diagnostic goes into the reader's, and each is
-        // logged here but the one that fails the entry.
-        EntryRead ReadEntry(const EnvelopeReader& reader, Ser::Object& entry, const Ser::Value& at,
-                            std::string_view name, const TypeDescription* expected)
+        // Checks one entry, the sub-asset `name` or the top level when it is empty: its `type`, `version` and `data`.
+        // With `expected`, the type must be it or extend it; without, it must be a data asset type. A sub-asset
+        // holding a `sub` of its own is refused. The diagnostic that fails the entry goes into the reader's, not logged
+        // here.
+        EntryCheck CheckEntry(const EnvelopeReader& reader, Ser::Object& entry, const Ser::Value& at,
+                              std::string_view name, const TypeDescription* expected)
         {
             const std::string where = name.empty() ? std::string() : std::format("sub-asset `{}`: ", name);
-            EntryRead read;
-            const auto fail = [&](LoadFailure reason, const Ser::Value* node, std::string message) -> EntryRead {
+            EntryCheck read{.name = std::string(name)};
+            const auto fail = [&](LoadFailure reason, const Ser::Value* node, std::string message) -> EntryCheck {
                 Ser::Diagnostic diagnostic = LocatedAt(Ser::DiagnosticSeverity::Error, reader.path, node, at,
                                                        std::format("{}{}", where, message));
                 reader.diagnostics.push_back(diagnostic);
@@ -280,18 +290,31 @@ namespace Fenrir::Detail
                             "expected no `sub`, found sub-assets of a sub-asset, which only a file's top level holds; "
                             "it is not loaded");
             }
+            read.type = type;
+            read.version = static_cast<std::uint32_t>(*fromVersion);
+            read.data = data;
+            return read;
+        }
 
+        // Fills a checked entry: Upgrades its data from its version, then reads it into an instance of its type, its
+        // references named through the store's hook. Every diagnostic goes into the reader's, each logged once.
+        EntryRead FillEntry(const EnvelopeReader& reader, const EntryCheck& entry)
+        {
+            const std::string where = entry.name.empty() ? std::string() : std::format("sub-asset `{}`: ", entry.name);
+            Ser::Value& data = *entry.data;
             Ser::UpgradeResult upgraded =
-                Ser::Upgrade(reader.registry, type->name, static_cast<std::uint32_t>(*fromVersion), *data, reader.path,
-                             reader.logger);
+                Ser::Upgrade(reader.registry, entry.type->name, entry.version, data, reader.path, reader.logger);
             Append(reader.diagnostics, std::move(upgraded.diagnostics));
 
-            // Every path the entry names passes the path rules before the resolvers see it (ADR-0076): a refused one
-            // is left empty with the reader's own located error, and with no resolver to ask a path is unresolved, as
-            // the bridge counts one.
+            // Every path the entry names passes the path rules before the store sees it (ADR-0076): a refused one is
+            // left empty with the reader's own located error, and with no store to ask a path is unresolved, as the
+            // bridge counts one. A target the store finds none for, or one of the wrong kind or type, is left empty
+            // with one located error saying what was expected and what was found. No entity callbacks are given: a
+            // data asset holds no entity (ADR-0075).
             std::vector<RefusedPath> refused;
+            std::vector<RefusedPath> unnamed;
             bool unresolved = false;
-            Ser::Resolvers checked = reader.resolvers;
+            Ser::Resolvers checked;
             checked.readReference = [&](std::string_view reference,
                                         const FieldInfo& field) -> std::optional<ReferenceValue> {
                 if (std::optional<std::string> problem = FilePathProblem(reference))
@@ -300,30 +323,41 @@ namespace Fenrir::Detail
                         {reference.data(), std::string(reference), std::string(field.name), std::move(*problem)});
                     return ReferenceValue{};
                 }
-                if (!reader.resolvers.readReference)
+                if (!reader.hooks.readReference)
                 {
                     unresolved = true;
                     return ReferenceValue{};
                 }
-                return reader.resolvers.readReference(reference, field);
+                ReferenceRead named = reader.hooks.readReference(reference, field);
+                if (!named.problem.empty())
+                {
+                    unnamed.push_back(
+                        {reference.data(), std::string(reference), std::string(field.name), std::move(named.problem)});
+                    return ReferenceValue{};
+                }
+                return named.value;
             };
 
-            auto instance = std::make_unique<DataValue>(*type);
+            auto instance = std::make_unique<DataValue>(*entry.type);
             Ser::BridgeResult bridged =
-                Ser::FromTree(*data, *type, reader.registry, checked, instance->value, reader.path, reader.logger);
+                Ser::FromTree(data, *entry.type, reader.registry, checked, instance->value, reader.path, reader.logger);
             Append(reader.diagnostics, std::move(bridged.diagnostics));
             for (const RefusedPath& refusal : refused)
             {
                 reader.Report(LocatedAt(
-                    Ser::DiagnosticSeverity::Error, reader.path, StringAt(*data, refusal.text), *data,
+                    Ser::DiagnosticSeverity::Error, reader.path, StringAt(data, refusal.text), data,
                     std::format("{}expected `{}` to name an asset path under the asset root, found \"{}\", which {}; "
                                 "it is left empty",
                                 where, refusal.field, refusal.path, refusal.problem)));
             }
-            read.incomplete = bridged.status == Ser::BridgeStatus::Partial || unresolved;
-            read.type = type;
-            read.value = AssetBox(instance.release(), &DestroyAssetData<DataValue>);
-            return read;
+            for (const RefusedPath& target : unnamed)
+            {
+                reader.Report(LocatedAt(Ser::DiagnosticSeverity::Error, reader.path, StringAt(data, target.text), data,
+                                        std::format("{}`{}` names \"{}\": {}; it is left empty", where, target.field,
+                                                    target.path, target.problem)));
+            }
+            return {AssetBox(instance.release(), &DestroyAssetData<DataValue>),
+                    bridged.status == Ser::BridgeStatus::Partial || unresolved};
         }
 
         // Why `name` cannot name a sub-asset, or none: Load splits a path at its last `#`, so no path names a
@@ -344,11 +378,10 @@ namespace Fenrir::Detail
 
     EnvelopeRead ReadDataEnvelope(std::span<const std::byte> bytes, std::string_view path,
                                   std::optional<std::string_view> label, const TypeDescription& expected,
-                                  const TypeRegistry& registry, const Serialisation::Resolvers& resolvers,
-                                  ILogger& logger)
+                                  const TypeRegistry& registry, const EnvelopeHooks& hooks, ILogger& logger)
     {
         EnvelopeRead read;
-        const EnvelopeReader reader{path, registry, resolvers, logger, read.diagnostics};
+        const EnvelopeReader reader{path, registry, hooks, logger, read.diagnostics};
         // The read fails with `reason`; `diagnostic`, the reader's own, is the store's to log with the failure.
         const auto fail = [&](LoadFailure reason, Ser::Diagnostic diagnostic) -> EnvelopeRead {
             read.failure = reason;
@@ -402,64 +435,85 @@ namespace Fenrir::Detail
             return read;
         }
 
-        // Reads one entry into `read`, as the one asked for when `requested`: a failure there fails the read, its
-        // diagnostic left for the store to log; any other entry's failure is logged here and leaves that entry out.
-        // False when the read failed.
-        const auto readEntryInto = [&](Ser::Object& entry, const Ser::Value& at, std::string_view name,
-                                       bool requested) {
-            EntryRead entryRead = ReadEntry(reader, entry, at, name, requested ? &expected : nullptr);
-            if (entryRead.failure)
+        // Every entry is checked before any is filled, and the store told of each that will read, so every slot the
+        // file fills is reserved before any of its references load: one naming this file, or a sub-asset of it, gets
+        // its handle at once, and cycles resolve (ADR-0076 §3).
+        std::vector<EntryCheck> checked;
+        std::optional<std::size_t> requested;
+        // Checks one entry into `checked`, as the one asked for when `isRequested`: a failure there fails the read,
+        // its diagnostic left for the store to log; any other entry's failure is logged here and leaves that entry
+        // out. False when the read failed.
+        const auto checkEntry = [&](Ser::Object& entry, const Ser::Value& at, std::string_view name, bool isRequested) {
+            EntryCheck check = CheckEntry(reader, entry, at, name, isRequested ? &expected : nullptr);
+            if (check.failure)
             {
-                if (requested)
+                if (isRequested)
                 {
-                    read.failure = entryRead.failure;
-                    read.failureMessage = Ser::FormatDiagnostic(*entryRead.failureDiagnostic);
-                    read.entries.clear();
+                    read.failure = check.failure;
+                    read.failureMessage = Ser::FormatDiagnostic(*check.failureDiagnostic);
                     return false;
                 }
-                logger.Error("{}", Ser::FormatDiagnostic(*entryRead.failureDiagnostic));
+                logger.Error("{}", Ser::FormatDiagnostic(*check.failureDiagnostic));
                 return true;
             }
-            read.incomplete = read.incomplete || entryRead.incomplete;
-            if (requested)
+            if (isRequested)
             {
-                read.requested = read.entries.size();
+                requested = checked.size();
             }
-            read.entries.push_back({std::string(name), std::move(entryRead.value), entryRead.type});
+            checked.push_back(std::move(check));
             return true;
         };
 
-        if (!readEntryInto(envelope, root, {}, !label) || sub == nullptr)
+        if (!checkEntry(envelope, root, {}, !label))
         {
             return read;
         }
-        for (Ser::Member& member : sub->AsObject().members)
+        if (sub != nullptr)
         {
-            const bool requested = label && member.key == *label;
-            // The label asked for passed this check above, so a name refused here is never the one asked for.
-            if (std::optional<std::string> problem = SubNameProblem(member.key))
+            for (Ser::Member& member : sub->AsObject().members)
             {
-                reader.Report(LocatedAt(Ser::DiagnosticSeverity::Error, path, &member.value, *sub,
-                                        std::format("{}; it is not loaded", *problem)));
-                continue;
-            }
-            if (member.value.Kind() != Ser::ValueKind::Object)
-            {
-                Ser::Diagnostic error = LocatedAt(
-                    Ser::DiagnosticSeverity::Error, path, &member.value, *sub,
-                    std::format("sub-asset `{}`: expected an object of `type`, `version` and `data`, found {}",
-                                member.key, Found(&member.value)));
-                if (requested)
+                const bool isRequested = label && member.key == *label;
+                // The label asked for passed this check above, so a name refused here is never the one asked for.
+                if (std::optional<std::string> problem = SubNameProblem(member.key))
                 {
-                    return fail(LoadFailure::ImportFailed, std::move(error));
+                    reader.Report(LocatedAt(Ser::DiagnosticSeverity::Error, path, &member.value, *sub,
+                                            std::format("{}; it is not loaded", *problem)));
+                    continue;
                 }
-                reader.Report(std::move(error));
-                continue;
+                if (member.value.Kind() != Ser::ValueKind::Object)
+                {
+                    Ser::Diagnostic error = LocatedAt(
+                        Ser::DiagnosticSeverity::Error, path, &member.value, *sub,
+                        std::format("sub-asset `{}`: expected an object of `type`, `version` and `data`, found {}",
+                                    member.key, Found(&member.value)));
+                    if (isRequested)
+                    {
+                        return fail(LoadFailure::ImportFailed, std::move(error));
+                    }
+                    reader.Report(std::move(error));
+                    continue;
+                }
+                if (!checkEntry(member.value.AsObject(), member.value, member.key, isRequested))
+                {
+                    return read;
+                }
             }
-            if (!readEntryInto(member.value.AsObject(), member.value, member.key, requested))
+        }
+
+        // The entry asked for passed, so nothing fails the read from here.
+        if (hooks.reading)
+        {
+            for (const EntryCheck& check : checked)
             {
-                return read;
+                hooks.reading(check.name, *check.type);
             }
+        }
+        read.requested = requested.value_or(0);
+        for (const EntryCheck& check : checked)
+        {
+            EntryRead filled = FillEntry(reader, check);
+            read.incomplete = read.incomplete || filled.incomplete;
+            read.entries.push_back({check.name, std::move(filled.value), check.type});
         }
         return read;
     }

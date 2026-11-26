@@ -209,14 +209,15 @@ namespace Fenrir
         /**
          * @brief For a data asset, the located diagnostics of its file's read, each already logged once: those of the
          * read of its text, its upgrade and its fields (an unknown key dropped, a wrong-typed value left at its
-         * default), and the store's own about its envelope. Kept when the load failed too, as a syntax error's. A
-         * later load of a path already loaded gives its first load's again, not logged again, as a model's
+         * default), and the store's own about its envelope and its references (a path refused, or naming a missing
+         * target or one of the wrong kind or type, each left empty). Kept when the load failed too, as a syntax
+         * error's. A later load of a path already loaded gives its first load's again, not logged again, as a model's
          * failedUnits are.
          */
         std::vector<Serialisation::Diagnostic> diagnostics;
         /**
-         * @brief For a data asset, whether its fields' read left something out that no diagnostic names: a reference
-         * no resolver was given for.
+         * @brief For a data asset, whether its fields' read left something out that no diagnostic names, as the bridge
+         * counts it. The store resolves every reference, so a reference it left empty has a diagnostic instead.
          */
         bool incomplete = false;
 
@@ -302,7 +303,13 @@ namespace Fenrir
          * or holds a `sub` of its own, is left out with a located error, making the load of its siblings `Partial`,
          * and loading it by name fails. A file that does not parse, or whose
          * `format` or `type` is wrong, fails. A path the file names (a reference) that is absolute or climbs through
-         * `..` is refused, left empty with a located error (ADR-0076). The file's bytes are read through the store's
+         * `..` is refused, left empty with a located error (ADR-0076). Any other loads before its field is filled,
+         * synchronously and for `owner` (ADR-0076 §3): an `AssetHandle<U>` field's target must be of `U`'s kind, and
+         * for a data asset a `U` or a type extending it, and a bare `#name` is a sub-asset of the same file. A
+         * missing or wrong target leaves the handle empty with one located error naming the field, the path, what was
+         * expected and what was found. A file and its sub-assets have their slots before any of their references load,
+         * so a reference back to a file still loading gets its handle at once, and files that name each other all
+         * load. The file's bytes are read through the store's
          * asset source (ADR-0085), which matches paths case-sensitively; in a development build it warns, once per
          * path, of a path that finds its file only when case is ignored.
          */

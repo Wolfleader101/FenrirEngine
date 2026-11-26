@@ -33,6 +33,7 @@
 #include "FenrirAssets/ShaderData.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirScene/Scene.hpp"
+#include "FenrirTypes/FieldInfo.hpp"
 #include "FenrirTypes/TypeRegistry.hpp"
 #include "Importers/ImageImporter.hpp"
 #include "Importers/ModelImporter.hpp"
@@ -264,12 +265,17 @@ namespace Fenrir
 
         AssetRecord* AssetStoreState::Find(AssetKind kind, AssetSlot slot)
         {
-            AssetTable& table = TableOf(*this, kind);
+            return const_cast<AssetRecord*>(std::as_const(*this).Find(kind, slot));
+        }
+
+        const AssetRecord* AssetStoreState::Find(AssetKind kind, AssetSlot slot) const
+        {
+            const AssetTable& table = tables[static_cast<std::size_t>(kind)];
             if (slot.generation == 0 || slot.index >= table.records.size())
             {
                 return nullptr;
             }
-            AssetRecord& record = table.records[slot.index];
+            const AssetRecord& record = table.records[slot.index];
             return record.revision != 0 && record.generation == slot.generation ? &record : nullptr;
         }
 
@@ -296,6 +302,55 @@ namespace Fenrir
                 record.generation = 1;
             }
             table.freeIndices.push_back(index);
+        }
+
+        std::optional<AssetKind> KindOfTarget(std::string_view target)
+        {
+            // In AssetKind's order, as a description names each kind's handle target.
+            constexpr std::array<std::string_view, AssetKindCount - 1> targets = {
+                "Fenrir::Mesh",     "Fenrir::Image", "Fenrir::Material", "Fenrir::Shader",       "Fenrir::Model",
+                "Fenrir::Skeleton", "Fenrir::Clip",  "Fenrir::BoneMask", "Fenrir::InstanceList", "Fenrir::Font"};
+            const auto found = std::ranges::find(targets, target);
+            if (found == targets.end())
+            {
+                return std::nullopt;
+            }
+            return static_cast<AssetKind>(std::distance(targets.begin(), found));
+        }
+
+        std::optional<std::string> PathOf(const AssetStoreState& state, AssetKind kind, AssetSlot slot)
+        {
+            const AssetRecord* record = state.Find(kind, slot);
+            if (record == nullptr || record->key.empty())
+            {
+                return std::nullopt;
+            }
+            // A built-in's key is its name, which a material names before the renderer registers its data.
+            if (record->key.starts_with(BuiltinPrefix))
+            {
+                return record->key;
+            }
+            // A loaded asset's key is its file resolved against the root, then `#` and its label for a sub-asset.
+            if (record->data == nullptr)
+            {
+                return std::nullopt;
+            }
+            const std::size_t hash = record->key.find('#');
+            const std::string_view file = std::string_view(record->key).substr(0, hash);
+            const std::string_view label =
+                hash == std::string::npos ? std::string_view() : std::string_view(record->key).substr(hash);
+            const std::optional<std::string> relative = RootRelative(state.root, Utf8Path(file));
+            return (relative ? *relative : std::string(file)) + std::string(label);
+        }
+
+        Serialisation::Resolvers WritingResolvers(const AssetStoreState& state)
+        {
+            Serialisation::Resolvers resolvers;
+            resolvers.writeReference = [&state](ReferenceValue reference, const FieldInfo& field) -> std::string {
+                const AssetKind kind = KindOfTarget(field.type.target).value_or(AssetKind::Data);
+                return PathOf(state, kind, {reference.index, reference.generation}).value_or(std::string());
+            };
+            return resolvers;
         }
 
         void AssetStoreState::ReleaseOwner(OwnerId owner)
@@ -348,6 +403,7 @@ namespace Fenrir
                                            std::optional<LoadDiagnostic>& diagnostic,
                                            std::vector<std::string>& failedUnits)
     {
+        const bool quiet = std::exchange(m_state->quietNextLoad, false);
         const bool builtin = path.starts_with(BuiltinPrefix);
         const AssetPath resolved = builtin ? AssetPath{{}, {}, false, std::string(path)} : Resolve(m_state->root, path);
         Detail::AssetTable& table = TableOf(*m_state, kind);
@@ -372,8 +428,11 @@ namespace Fenrir
         }
 
         const auto fail = [&](LoadFailure reason, std::string message) -> Detail::AssetSlot {
-            m_state->logger->Error("Could not load {} '{}': {} ({})", KindName(kind), resolved.key, ReasonText(reason),
-                                   message);
+            if (!quiet)
+            {
+                m_state->logger->Error("Could not load {} '{}': {} ({})", KindName(kind), resolved.key,
+                                       ReasonText(reason), message);
+            }
             diagnostic = LoadDiagnostic{resolved.key, reason, std::move(message)};
             failedUnits.clear();
             return {};
@@ -500,10 +559,14 @@ namespace Fenrir
                                                std::optional<LoadDiagnostic>& diagnostic,
                                                std::vector<Serialisation::Diagnostic>& diagnostics, bool& incomplete)
     {
+        const bool quiet = std::exchange(m_state->quietNextLoad, false);
         const AssetPath resolved = Resolve(m_state->root, path);
         const auto fail = [&](LoadFailure reason, std::string message) -> Detail::AssetSlot {
-            m_state->logger->Error("Could not load {} '{}' as {}: {} ({})", KindName(Detail::AssetKind::Data),
-                                   resolved.key, type.name, ReasonText(reason), message);
+            if (!quiet)
+            {
+                m_state->logger->Error("Could not load {} '{}' as {}: {} ({})", KindName(Detail::AssetKind::Data),
+                                       resolved.key, type.name, ReasonText(reason), message);
+            }
             diagnostic = LoadDiagnostic{resolved.key, reason, std::move(message)};
             return {};
         };
@@ -558,11 +621,102 @@ namespace Fenrir
                                              : fail(LoadFailure::FileNotFound, "there is no file at this path");
         }
 
-        // No references resolve yet: a later ticket gives the store's resolvers.
+        // What a reference in this file names (ADR-0076 §2, §3): its target, loaded first with this load's owner, of
+        // the kind the field holds and, for a data asset, of a type extending the field's; or why it names none.
+        const auto readReference = [&](std::string_view reference, const FieldInfo& field) -> Detail::ReferenceRead {
+            // A bare `#name` is a sub-asset of the file that names it (ADR-0076).
+            const std::string target =
+                reference.starts_with('#') ? *assetPath + std::string(reference) : std::string(reference);
+            const std::string_view targetFile = std::string_view(target).substr(0, target.rfind('#'));
+            const auto refuse = [](std::string problem) { return Detail::ReferenceRead{{}, std::move(problem)}; };
+            // The target's load logs nothing of its own: the problem is reported once, at the path in this file.
+            std::optional<LoadDiagnostic> failure;
+            Detail::AssetSlot slot;
+            std::string expected;
+
+            if (const std::optional<Detail::AssetKind> kind = Detail::KindOfTarget(field.type.target))
+            {
+                const std::string_view name = KindName(*kind);
+                expected = std::format(
+                    "{} {}", std::string_view("aeiou").find(name.front()) != std::string_view::npos ? "an" : "a", name);
+                if (targetFile.ends_with(".json5"))
+                {
+                    return refuse(std::format("expected {}, found a data asset's `.json5` envelope", expected));
+                }
+                std::vector<std::string> failedUnits;
+                m_state->quietNextLoad = true;
+                slot = LoadSlot(*kind, target, owner, failure, failedUnits);
+            }
+            else
+            {
+                const TypeDescription* targetType = registry.Find(field.type.target);
+                if (targetType == nullptr || targetType->role != Role::DataAsset)
+                {
+                    return refuse(std::format("expected `{}`, which the type registry has as no data asset type",
+                                              field.type.target));
+                }
+                expected = std::format("`{}` or a type extending it", targetType->name);
+                if (!targetFile.ends_with(".asset.json5"))
+                {
+                    const std::string extension = Utf8Text(Utf8Path(targetFile).extension());
+                    return refuse(std::format("expected {}, found {}, not a data asset's `.asset.json5` envelope",
+                                              expected,
+                                              extension.empty() ? std::string("a file with no extension")
+                                                                : std::format("a `{}` file", extension)));
+                }
+                // One loaded already, or still loading, is checked by the type it was stored with.
+                if (const auto loaded = table.byKey.find(Resolve(m_state->root, target).key);
+                    loaded != table.byKey.end() &&
+                    !registry.IsA(table.records[loaded->second].typeName, targetType->name))
+                {
+                    return refuse(
+                        std::format("expected {}, found `{}`", expected, table.records[loaded->second].typeName));
+                }
+                std::vector<Serialisation::Diagnostic> targetDiagnostics;
+                bool targetIncomplete = false;
+                m_state->quietNextLoad = true;
+                slot = LoadDataSlot(target, owner, *targetType, failure, targetDiagnostics, targetIncomplete);
+                // A file of the wrong type says what it found in the diagnostic that failed its read, its last.
+                if (failure && failure->reason == LoadFailure::WrongType && !targetDiagnostics.empty())
+                {
+                    return refuse(targetDiagnostics.back().message);
+                }
+            }
+
+            if (!failure)
+            {
+                return {{slot.index, slot.generation}, {}};
+            }
+            if (failure->reason == LoadFailure::FileNotFound)
+            {
+                return refuse(std::format("expected {}, found no file", expected));
+            }
+            return refuse(std::format("expected {}, found a file that did not load: {} ({})", expected,
+                                      ReasonText(failure->reason), failure->importerMessage));
+        };
+
         const std::string fileKey = Utf8Text(resolved.file);
+        const Detail::OwnerId ownerId = Detail::OwnerIdOf(m_state, owner);
+        Detail::EnvelopeHooks hooks;
+        // Each entry's slot is reserved under its key, typed but with no data, before any of the file's references
+        // load, as ReserveBuiltin reserves a built-in's: a reference back to this file, or to a sub-asset of it, finds
+        // the slot through deduplication and gets its handle at once (ADR-0076 §3). One stored already (its file's
+        // top level was freed, but it lives on) is shared below instead.
+        hooks.reading = [&](std::string_view label, const TypeDescription& entryType) {
+            std::string key = label.empty() ? fileKey : fileKey + '#' + std::string(label);
+            if (table.byKey.contains(key))
+            {
+                return;
+            }
+            const Detail::AssetSlot slot =
+                Detail::InsertAsset(table, Detail::AssetBox(nullptr, &Detail::DestroyAssetData<Detail::DataValue>),
+                                    ownerId, std::move(key));
+            m_state->Find(Detail::AssetKind::Data, slot)->typeName = entryType.name;
+        };
+        hooks.readReference = readReference;
         Detail::EnvelopeRead read = Detail::ReadDataEnvelope(
             *bytes, fileKey, resolved.labelled ? std::optional<std::string_view>(resolved.label) : std::nullopt, type,
-            registry, Serialisation::Resolvers{}, *m_state->logger);
+            registry, hooks, *m_state->logger);
         diagnostics = std::move(read.diagnostics);
         if (read.failure)
         {
@@ -571,10 +725,8 @@ namespace Fenrir
         incomplete = read.incomplete;
 
         // One read gives the file's top level and every sub-asset, each stored under the file's key and its label for
-        // the one owner, as a model's sub-assets are; one stored already (its file's top level was freed, but it lives
-        // on) is shared instead. Each repeats the whole file's diagnostics to a later load, as a model's left-out
-        // units are.
-        const Detail::OwnerId ownerId = Detail::OwnerIdOf(m_state, owner);
+        // the one owner, as a model's sub-assets are, in the slot reserved for it. Each repeats the whole file's
+        // diagnostics to a later load, as a model's left-out units are.
         Detail::AssetSlot requested;
         for (std::size_t entry = 0; entry < read.entries.size(); ++entry)
         {
@@ -583,8 +735,15 @@ namespace Fenrir
             Detail::AssetSlot slot;
             if (const auto found = table.byKey.find(key); found != table.byKey.end())
             {
-                Detail::AddOwner(table.records[found->second], ownerId);
-                slot = {found->second, table.records[found->second].generation};
+                Detail::AssetRecord& record = table.records[found->second];
+                Detail::AddOwner(record, ownerId);
+                slot = {found->second, record.generation};
+                if (record.data == nullptr)
+                {
+                    record.data = std::move(stored.value);
+                    record.loadDiagnostics = diagnostics;
+                    record.loadIncomplete = incomplete;
+                }
             }
             else
             {
@@ -744,27 +903,7 @@ namespace Fenrir
 
     std::optional<std::string> AssetStore::PathOfSlot(Detail::AssetKind kind, Detail::AssetSlot slot) const
     {
-        const Detail::AssetRecord* record = m_state->Find(kind, slot);
-        if (record == nullptr || record->key.empty())
-        {
-            return std::nullopt;
-        }
-        // A built-in's key is its name, which a material names before the renderer registers its data.
-        if (record->key.starts_with(BuiltinPrefix))
-        {
-            return record->key;
-        }
-        // A loaded asset's key is its file resolved against the root, then `#` and its label for a sub-asset.
-        if (record->data == nullptr)
-        {
-            return std::nullopt;
-        }
-        const std::size_t hash = record->key.find('#');
-        const std::string_view file = std::string_view(record->key).substr(0, hash);
-        const std::string_view label =
-            hash == std::string::npos ? std::string_view() : std::string_view(record->key).substr(hash);
-        const std::optional<std::string> relative = RootRelative(m_state->root, Utf8Path(file));
-        return (relative ? *relative : std::string(file)) + std::string(label);
+        return Detail::PathOf(*m_state, kind, slot);
     }
 
     bool AssetStore::SameFileOf(Detail::AssetKind kindA, Detail::AssetSlot a, Detail::AssetKind kindB,

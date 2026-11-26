@@ -1,0 +1,10 @@
+// A weapon that upgrades to a file that is not there.
+{
+  format: 1,
+  type: "AssetsTest::WeaponData",
+  version: 1,
+  data: {
+    displayName: "Lost blade",
+    upgradesTo: "data/no-such-weapon.asset.json5",
+  },
+}

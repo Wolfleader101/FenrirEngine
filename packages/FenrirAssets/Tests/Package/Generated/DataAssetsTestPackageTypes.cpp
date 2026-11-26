@@ -17,11 +17,13 @@ namespace Fenrir::Generated::DataAssetsTestPackageTypes
     // AssetsTest::ShieldData
     constexpr Fenrir::FieldInfo AssetsTest_ShieldData_Fields[] = {
         {.name = "block", .type = {.kind = Fenrir::Kind::F32}},
+        {.name = "parries", .type = {.kind = Fenrir::Kind::Reference, .target = "AssetsTest::Sword"}, .doc = "The sword the shield is made to parry: a sword, not any weapon."},
     };
     void AssetsTest_ShieldData_Visit(void* instance, Fenrir::FieldVisitor& visitor)
     {
         auto& value = *static_cast<AssetsTest::ShieldData*>(instance);
         visitor.Field(AssetsTest_ShieldData_Fields[0], Fenrir::ValueRef(&value.block, AssetsTest_ShieldData_Fields[0].type));
+        visitor.Field(AssetsTest_ShieldData_Fields[1], Fenrir::ValueRef(&value.parries, AssetsTest_ShieldData_Fields[1].type));
     }
     constexpr Fenrir::TypeDescription AssetsTest_ShieldData{
         .name = "AssetsTest::ShieldData",

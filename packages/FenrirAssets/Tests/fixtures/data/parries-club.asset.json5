@@ -1,0 +1,10 @@
+// A shield made to parry a sword, naming a plain weapon instead, which is not a sword.
+{
+  format: 1,
+  type: "AssetsTest::ShieldData",
+  version: 1,
+  data: {
+    block: 0.7,
+    parries: "data/weapon.asset.json5",
+  },
+}

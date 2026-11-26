@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <functional>
 #include <optional>
 #include <span>
 #include <string>
@@ -8,13 +9,14 @@
 #include <vector>
 
 #include "FenrirAssets/AssetStore.hpp"
-#include "FenrirSerialisation/Bridge.hpp"
 #include "FenrirSerialisation/Diagnostic.hpp"
+#include "FenrirTypes/ValueRef.hpp"
 
 namespace Fenrir
 {
     class ILogger;
     class TypeRegistry;
+    struct FieldInfo;
     struct TypeDescription;
 } // namespace Fenrir
 
@@ -60,6 +62,35 @@ namespace Fenrir::Detail
         bool incomplete = false;
     };
 
+    /** @brief What a reference in a file names: the asset, or why it names none. */
+    struct ReferenceRead
+    {
+        /** @brief The target's slot, or the empty handle when `problem` says why there is none. */
+        ReferenceValue value;
+        /**
+         * @brief Empty when `value` names the target; otherwise what was expected and what was found instead, such as
+         * "expected `AssetsTest::Sword` or a type extending it, found `AssetsTest::WeaponData`".
+         */
+        std::string problem;
+    };
+
+    /** @brief How the store takes part in one envelope's read. */
+    struct EnvelopeHooks
+    {
+        /**
+         * @brief Names the target of a reference the file holds, given its path as written (already past the path
+         * rules) and its field, whose `type.target` names the target's type. A problem becomes one located error at
+         * the path's string. None leaves every reference empty, counted as the bridge counts a missing resolver.
+         */
+        std::function<ReferenceRead(std::string_view path, const FieldInfo& field)> readReference;
+        /**
+         * @brief Told each entry that will read, by its label (empty for the top level) and its type, once every
+         * entry is checked and before any entry's fields, so before any of its references resolve. A read told of an
+         * entry never fails after.
+         */
+        std::function<void(std::string_view label, const TypeDescription& type)> reading;
+    };
+
     /**
      * @brief Why `path`, an asset path written in a file, is refused, or none when it is not (ADR-0076 §1, ADR-0085
      * §1): it is absolute, or it climbs through `..`. Only the part before its last `#`, its label, is checked, as Load
@@ -70,9 +101,11 @@ namespace Fenrir::Detail
     /**
      * @brief Reads the `.asset.json5` envelope in `bytes` (ADR-0077), in these steps: ReadTree the bytes; check
      * `format` is 1; find the top level's `type` in `registry`, by its canonical or a former name, and check its type
-     * (below); Upgrade `data` from `version`; FromTree it into an instance the
-     * type's description constructs, through `resolvers`. Then each entry of `sub` the same way, from its own `type`,
-     * `version` and `data` (ADR-0076, ADR-0079): a sub-asset holding a `sub` of its own is refused.
+     * (below), its `version` and its `data`; check each entry of `sub` the same way, from its own `type`, `version` and
+     * `data` (ADR-0076, ADR-0079), refusing a sub-asset holding a `sub` of its own. Then, once `hooks.reading` is told
+     * of every entry that passed, each in turn: Upgrade its `data` from its `version`, and FromTree it into an
+     * instance its type's description constructs, its references named through `hooks.readReference` and no entity
+     * callbacks, since a data asset holds no entity.
      *
      * The entry asked for, the top level or the sub-asset `label`, must be of `expected`; the others may be of any data
      * asset type. When it does not read, or `sub` has no `label`, the read fails. Any other entry that does not read is
@@ -83,6 +116,6 @@ namespace Fenrir::Detail
      */
     [[nodiscard]] EnvelopeRead ReadDataEnvelope(std::span<const std::byte> bytes, std::string_view path,
                                                 std::optional<std::string_view> label, const TypeDescription& expected,
-                                                const TypeRegistry& registry, const Serialisation::Resolvers& resolvers,
+                                                const TypeRegistry& registry, const EnvelopeHooks& hooks,
                                                 ILogger& logger);
 } // namespace Fenrir::Detail
