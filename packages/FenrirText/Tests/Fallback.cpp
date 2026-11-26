@@ -69,7 +69,7 @@ TEST_CASE("A family's nearest face by style and weight is tried first", "[text][
     TextApp test;
     const Fenrir::AssetHandle<Fenrir::Font> regular = test.Register("Noto", FullFont("Roboto-Regular.ttf"));
     const Fenrir::AssetHandle<Fenrir::Font> bold =
-        test.store.Load<Fenrir::Font>(SubsetFont("NotoSans-Bold.ttf").string(), Fenrir::AssetOwner::App()).handle;
+        test.store.Load<Fenrir::Font>(SubsetFont("NotoSans-Bold.ttf"), Fenrir::AssetOwner::App()).handle;
     test.fonts.AddFace("Noto", bold, Fenrir::FontWeightBold);
 
     INFO("600 is nearer 700 than 400");

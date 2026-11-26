@@ -17,7 +17,7 @@
 **Status:** resolved
 
 - [x] A data asset loads through the directory source, and a test double source serves the same bytes from memory with no file on disk.
-- [x] An absolute path under the root and its relative form give one handle. An absolute path outside the root fails with `OutsideRoot`, and the old "taken as given" test is changed to match. *Decided with the user on 2026-11-24:* `OutsideRoot` is for data assets only. Imported kinds still take an absolute path outside the root as given, since six other packages' tests load their fixtures that way, so the old test is renamed to say it covers imported kinds, and ADR-0021's amendment says so.
+- [x] An absolute path under the root and its relative form give one handle. An absolute path outside the root fails with `OutsideRoot`, and the old "taken as given" test is changed to match. *Decided with the user on 2026-11-24:* `OutsideRoot` is for data assets only. Imported kinds still take an absolute path outside the root as given, since six other packages' tests load their fixtures that way, so the old test is renamed to say it covers imported kinds, and ADR-0021's amendment says so. *Extended on 2026-11-25 by the follow-up:* those packages' tests load their fixtures under roots of their own, every kind refuses a path outside the root, and the test in `Loading.cpp` expects the refusal.
 - [x] A `..` path in a file is refused with a located diagnostic.
 - [x] A path matching a file only case-insensitively warns once in a development build.
 - [x] `PathOf` answers for a loaded data asset, a loaded image and a sub-asset label. It is empty for an unnamed `Add` and for a stale handle.

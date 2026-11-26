@@ -63,8 +63,8 @@ namespace AnimationTest
     // Frame deltas the tests step by: exact in binary, so cursor arithmetic in the expectations is exact too.
     inline constexpr double Eighth = 0.125;
 
-    // An App with assets, skeletons and animation installed and one scene, "Level", active. Members end in reverse
-    // order, so the owners are destroyed before the App and Animation before Skeletons, as they must be.
+    // An App with assets over the fixtures, skeletons and animation installed and one scene, "Level", active. Members
+    // end in reverse order, so the owners are destroyed before the App and Animation before Skeletons, as they must be.
     struct AnimationApp
     {
         explicit AnimationApp(Fenrir::AnimationConfig config = {})
@@ -77,7 +77,7 @@ namespace AnimationTest
         std::shared_ptr<std::vector<std::string>> warnings = std::make_shared<std::vector<std::string>>();
         Fenrir::App app{std::make_unique<RecordingLogger>(errors, warnings)};
         Fenrir::Scene& level = app.CreateScene("Level");
-        Fenrir::Assets assets = Fenrir::Assets::Install(app);
+        Fenrir::Assets assets = Fenrir::Assets::Install(app, {FENRIR_ANIMATION_FIXTURES});
         Fenrir::AssetStore& store = assets.Store();
         Fenrir::Skeletons skeletons = Fenrir::Skeletons::Install(app);
         Fenrir::Animation animation;

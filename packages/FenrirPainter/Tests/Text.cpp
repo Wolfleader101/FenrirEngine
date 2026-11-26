@@ -372,8 +372,7 @@ TEST_CASE("An SDF face's glyphs are SdfGlyph quads over its SDF atlas, carrying 
 {
     TextTest::TextApp test;
     const Fenrir::AssetHandle<Fenrir::Font> roboto =
-        test.store.Load<Fenrir::Font>(TextTest::FullFont("Roboto-Regular.ttf").string(), Fenrir::AssetOwner::App())
-            .handle;
+        test.store.Load<Fenrir::Font>(TextTest::FullFont("Roboto-Regular.ttf"), Fenrir::AssetOwner::App()).handle;
     test.fonts.AddFace("Field", roboto, Fenrir::FontWeightNormal, Fenrir::FontStyle::Normal,
                        Fenrir::FontRendering::Sdf);
     Fenrir::Paragraph paragraph;

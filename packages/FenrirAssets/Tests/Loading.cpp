@@ -79,14 +79,43 @@ TEST_CASE("Relative paths resolve against the asset root", "[assets][loading][pa
     REQUIRE(test.store.IsValid(image.handle));
 }
 
-TEST_CASE("An imported asset's absolute path outside the root is taken as given", "[assets][loading][paths]")
+TEST_CASE("An imported asset's absolute path outside the root fails with OutsideRoot", "[assets][loading][paths]")
 {
-    AssetsApp test({Fixtures() / "no-such-root"});
+    AssetsApp test({Fixtures() / "models"});
     const Fenrir::LoadResult<Fenrir::Image> image =
         test.store.Load<Fenrir::Image>((Fixtures() / "fourbytwo.png").string(), Fenrir::AssetOwner::App());
 
-    INFO("an image loads by an absolute path whatever the asset root is; a data asset's may not (AssetPaths.cpp)");
-    REQUIRE(image.Ok());
+    INFO("the file is there, but not under the root, so it has no asset path");
+    REQUIRE(std::filesystem::exists(Fixtures() / "fourbytwo.png"));
+    REQUIRE_FALSE(image.Ok());
+    REQUIRE(image.handle.IsEmpty());
+    REQUIRE(image.diagnostic.has_value());
+    REQUIRE(image.diagnostic->reason == Fenrir::LoadFailure::OutsideRoot);
+}
+
+TEST_CASE("An imported asset's relative path climbing out of the root fails with OutsideRoot",
+          "[assets][loading][paths]")
+{
+    AssetsApp test({Fixtures() / "models"});
+    const Fenrir::LoadResult<Fenrir::Font> font =
+        test.store.Load<Fenrir::Font>("../no-such-font.ttf", Fenrir::AssetOwner::App());
+
+    INFO("`..` resolves beside the root, not under it, and is refused before the file is looked for");
+    REQUIRE_FALSE(font.Ok());
+    REQUIRE(font.diagnostic.has_value());
+    REQUIRE(font.diagnostic->reason == Fenrir::LoadFailure::OutsideRoot);
+}
+
+TEST_CASE("A model's sub-asset outside the root fails with OutsideRoot", "[assets][loading][paths]")
+{
+    AssetsApp test({Fixtures() / "no-such-root"});
+    const Fenrir::LoadResult<Fenrir::Mesh> mesh =
+        test.store.Load<Fenrir::Mesh>((Fixtures() / "models/scene.gltf#Mesh0").string(), Fenrir::AssetOwner::App());
+
+    INFO("a labelled path is refused by its file, before the model is imported");
+    REQUIRE_FALSE(mesh.Ok());
+    REQUIRE(mesh.diagnostic.has_value());
+    REQUIRE(mesh.diagnostic->reason == Fenrir::LoadFailure::OutsideRoot);
 }
 
 TEST_CASE("The default asset root is assets beside the executable", "[assets][loading][paths]")

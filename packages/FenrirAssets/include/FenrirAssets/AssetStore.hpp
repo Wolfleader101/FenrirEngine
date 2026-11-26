@@ -157,8 +157,8 @@ namespace Fenrir
          */
         WrongType,
         /**
-         * @brief The data asset path resolves outside the asset root, so it has no root-relative asset path (ADR-0076):
-         * an absolute path elsewhere, or a relative one climbing out through `..`.
+         * @brief The path resolves outside the asset root, so it has no root-relative asset path (ADR-0076): an
+         * absolute path elsewhere, or a relative one climbing out through `..`. Every kind refuses it.
          */
         OutsideRoot,
     };
@@ -263,8 +263,8 @@ namespace Fenrir
         /**
          * @brief Loads the asset at `path` for `owner`, blocking until it is read. A relative path resolves against
          * the asset root, and `file#Label` names a sub-asset inside the file. An absolute path under the root names the
-         * same asset as its root-relative path; for an imported kind, an absolute path outside the root is taken as
-         * given, and for a data asset it fails (LoadFailure::OutsideRoot).
+         * same asset as its root-relative path; a path outside the root, absolute or climbing out through `..`, fails
+         * for every kind (LoadFailure::OutsideRoot).
          *
          * A path already loaded as this kind of asset is not read again: it gives back the same handle and adds
          * `owner` to the asset's owners. A failure is logged and gives a diagnostic instead of a handle. Images are
@@ -444,9 +444,8 @@ namespace Fenrir
         /**
          * @brief The asset path of the asset `handle` names (ADR-0076): for a loaded asset, its path relative to the
          * asset root with forward slashes and its extension, then `#` and its label for a sub-asset (`models/hero.glb#
-         * Mesh0`); for a built-in, its `builtin:` name, even before its data is registered. An imported asset loaded
-         * from outside the root gives its absolute path. Empty for an asset added with no name, and when the handle is
-         * empty or stale.
+         * Mesh0`); for a built-in, its `builtin:` name, even before its data is registered. Empty for an asset added
+         * with no name, and when the handle is empty or stale.
          */
         template <typename T>
         [[nodiscard]] std::optional<std::string> PathOf(AssetHandle<T> handle) const

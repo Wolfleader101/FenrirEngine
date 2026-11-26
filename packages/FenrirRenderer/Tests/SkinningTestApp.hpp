@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <utility>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
@@ -81,14 +82,15 @@ namespace RendererTest
 
     /**
      * @brief RendererTestApp with FenrirSkeleton installed too, so the renderer finds a skinning source, unless
-     * `withSkeletons` is false, and the renderer installed with `config`. Its skeleton owner is destroyed before the
-     * renderer's.
+     * `withSkeletons` is false, the renderer installed with `config` and the assets over `assetsConfig`. Its skeleton
+     * owner is destroyed before the renderer's.
      */
     class SkinningTestApp : public RendererTestApp
     {
       public:
-        explicit SkinningTestApp(bool withSkeletons = true, Fenrir::RendererConfig config = NullBackend())
-            : RendererTestApp(config)
+        explicit SkinningTestApp(bool withSkeletons = true, Fenrir::RendererConfig config = NullBackend(),
+                                 Fenrir::AssetsConfig assetsConfig = {})
+            : RendererTestApp(config, std::move(assetsConfig))
         {
             if (withSkeletons)
             {

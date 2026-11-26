@@ -1,7 +1,6 @@
 // Assets under playback (ADR-0034): clips and skeletons that stop resolving and recover with no catch-up, revision
 // changes rebinding and placing the cursor, binding diagnostics, the binding cache's sharing and cleanup, and binding
 // by node identity within a clip's own file.
-#include <filesystem>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
@@ -38,11 +37,6 @@ namespace
             clip.events.push_back({time, "short"});
         }
         return clip;
-    }
-
-    std::filesystem::path Fixture(const char* name)
-    {
-        return std::filesystem::path(FENRIR_ANIMATION_FIXTURES) / name;
     }
 } // namespace
 
@@ -214,7 +208,7 @@ TEST_CASE("a clip binds to a skeleton from its own file by node identity, and to
           "[animation][assets][bindings]")
 {
     AnimationApp test;
-    const auto model = test.store.Load<Fenrir::Model>(Fixture("twins.gltf").string(), test.level);
+    const auto model = test.store.Load<Fenrir::Model>("twins.gltf", test.level);
     REQUIRE(model.Ok());
     const Fenrir::Model& data = *test.store.TryGet(model.handle);
     const Fenrir::SpawnedNodes spawned = test.skeletons.SpawnModel(test.level, model.handle);

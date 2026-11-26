@@ -309,10 +309,10 @@ TEST_CASE("Moving a light moves its record the next frame", "[renderer][lights]"
 TEST_CASE("SpawnModel gives a glTF's point and spot lights their components, with a range where the file has none",
           "[renderer][lights][spawn-model]")
 {
-    RendererTestApp test;
+    RendererTestApp test(RendererTest::NullBackend(), {FENRIR_TEST_MODEL_FIXTURES});
     AddLitCube(test);
     const Fenrir::LoadResult<Fenrir::Model> model =
-        test.Store().Load<Fenrir::Model>(FENRIR_TEST_LIGHTS, Fenrir::AssetOwner::App());
+        test.Store().Load<Fenrir::Model>("lights.gltf", Fenrir::AssetOwner::App());
     REQUIRE(model.Ok());
     Fenrir::SpawnModel(test.app, test.ActiveScene(), model.handle);
 

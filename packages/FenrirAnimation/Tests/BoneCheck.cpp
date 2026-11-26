@@ -1,6 +1,5 @@
 // The headless bone check (spec, seam 9): the checked-in rig.gltf, imported, spawned and played to known times, gives
 // bone world transforms that match values worked out by hand from the rig and its "Swing" clip.
-#include <filesystem>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -15,8 +14,7 @@ using Fenrir::Skeletons;
 TEST_CASE("the rig played to known times puts its bones where the clip's analytic values say", "[animation][bones]")
 {
     AnimationApp test;
-    const auto model = test.store.Load<Fenrir::Model>(
-        (std::filesystem::path(FENRIR_ANIMATION_FIXTURES) / "rig.gltf").string(), test.level);
+    const auto model = test.store.Load<Fenrir::Model>("rig.gltf", test.level);
     REQUIRE(model.Ok());
     const Fenrir::Model& data = *test.store.TryGet(model.handle);
     const Fenrir::SpawnedNodes spawned = test.skeletons.SpawnModel(test.level, model.handle);

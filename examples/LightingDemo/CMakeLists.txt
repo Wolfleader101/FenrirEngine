@@ -38,9 +38,13 @@ fenrir_add_shaders(LightingDemo PROGRAM LightingDemoFacade VERTEX shaders/facade
 fenrir_add_shaders(LightingDemo PROGRAM LightingDemoStreet VERTEX shaders/street.vert FRAGMENT shaders/street.frag EMBED)
 fenrir_add_shaders(LightingDemo PROGRAM LightingDemoSign VERTEX shaders/sign.vert FRAGMENT shaders/sign.frag EMBED)
 
-# With FENRIR_FETCH_DEMO_ASSETS, configure downloads every file of the manifest into the cache, and the app loads them
-# from there: they are never copied into the build.
+# With FENRIR_FETCH_DEMO_ASSETS, configure downloads every file of the manifest into the cache, and each build links
+# them into the asset root's fetched/ folder, since the store loads nothing outside its root: hard links, so the build
+# holds no second copy of them.
 if(FENRIR_FETCH_DEMO_ASSETS)
     fenrir_fetch_demo_assets(MANIFEST fetched-assets.json CACHE_DIR "${FENRIR_DEMO_ASSET_CACHE}")
-    target_compile_definitions(LightingDemo PRIVATE LIGHTING_DEMO_FETCHED_ASSETS="${FENRIR_DEMO_ASSET_CACHE}")
+    fenrir_link_demo_assets(TARGET LightingDemo MANIFEST fetched-assets.json CACHE_DIR "${FENRIR_DEMO_ASSET_CACHE}"
+                            DESTINATION fetched)
+    target_compile_definitions(LightingDemo PRIVATE LIGHTING_DEMO_FETCHED_ASSETS="${FENRIR_DEMO_ASSET_CACHE}"
+                                                    LIGHTING_DEMO_FETCHED_FOLDER="fetched")
 endif()
