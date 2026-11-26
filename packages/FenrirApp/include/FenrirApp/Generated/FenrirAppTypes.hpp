@@ -36,6 +36,7 @@ namespace Fenrir::Generated::FenrirAppTypes
 template <>
 struct Fenrir::Describe<Fenrir::RawEventRange>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 

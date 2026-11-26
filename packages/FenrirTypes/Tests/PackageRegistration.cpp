@@ -118,6 +118,16 @@ TEST_CASE("Describe<T> of a data asset is the description the registration added
     REQUIRE(&Fenrir::Describe<Test::Sword>::Description() == package.registry.Find("Test::Sword"));
 }
 
+TEST_CASE("Describe<T>::role is the role of the description, known at compile time")
+{
+    static_assert(Fenrir::Describe<Test::Sword>::role == Fenrir::Role::DataAsset);
+    static_assert(Fenrir::Describe<Test::Marker>::role == Fenrir::Role::Component);
+    static_assert(Fenrir::Describe<Test::Rarity>::role == Fenrir::Role::Enum);
+
+    INFO("Describe<Test::Options>::role should be the role its registered description has");
+    REQUIRE(Fenrir::Describe<Test::Options>::role == Fenrir::Describe<Test::Options>::Description().role);
+}
+
 TEST_CASE("A data asset, a settings type and a by-member nested struct each have a visit function")
 {
     Registered package;

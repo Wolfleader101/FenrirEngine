@@ -1,0 +1,7 @@
+// A file naming a type nothing registers.
+{
+  format: 1,
+  type: "AssetsTest::Spear",
+  version: 1,
+  data: {},
+}

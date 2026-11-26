@@ -6,12 +6,16 @@
 #include <deque>
 #include <filesystem>
 #include <memory>
+#include <mutex>
+#include <new>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
 #include "FenrirAssets/AssetStore.hpp"
+#include "FenrirTypes/TypeDescription.hpp"
 
 namespace Fenrir::Detail
 {
@@ -20,6 +24,30 @@ namespace Fenrir::Detail
 
     /** @brief The app's owner number. Scenes are numbered from one, in the order they first own an asset. */
     inline constexpr OwnerId AppOwnerId = 0;
+
+    /**
+     * @brief A data asset's instance (ADR-0075): of its file's type, which may extend the type it was loaded as, so it
+     * is made, and destroyed, through that type's description.
+     */
+    struct DataValue
+    {
+        const TypeDescription* type = nullptr;
+        void* value = nullptr;
+
+        /** @brief A value-initialised instance of `description`'s type. */
+        explicit DataValue(const TypeDescription& description)
+            : type(&description), value(::operator new(description.size, std::align_val_t{description.alignment}))
+        {
+            description.Construct(value);
+        }
+        DataValue(const DataValue&) = delete;
+        DataValue& operator=(const DataValue&) = delete;
+        ~DataValue()
+        {
+            type->Destroy(value);
+            ::operator delete(value, std::align_val_t{type->alignment});
+        }
+    };
 
     /** @brief One asset's place in its kind's table. Free slots keep their generation for the next asset. */
     struct AssetRecord
@@ -32,7 +60,14 @@ namespace Fenrir::Detail
         std::vector<OwnerId> owners;
         // The loaded path and label, as deduplication keys it; empty for an added asset.
         std::string key;
-        // The problems already logged for this asset (a material's unknown parameter names), so each is logged once.
+        // For a data asset, the canonical name of its value's type (its description's, so it outlives the record).
+        std::string_view typeName;
+        // For a data asset, what its file's read reported, which every later load of its path reports again, as a
+        // model's left-out units are: the located diagnostics, and whether the bridge read its fields in part.
+        std::vector<Serialisation::Diagnostic> loadDiagnostics;
+        bool loadIncomplete = false;
+        // The problems already logged for this asset (a material's unknown parameter names, a data asset read as a
+        // type it is not), so each is logged once. Cleared when the slot is freed, so the next asset starts afresh.
         std::unordered_set<std::string> logged;
         // An image's last region updates (AssetStore::UpdateImage), each with the revision it made, oldest first.
         // Cleared whenever the whole image changes, so a revision before the first is one a copy cannot catch up from.
@@ -50,11 +85,18 @@ namespace Fenrir::Detail
     struct AssetStoreState
     {
         ILogger* logger = nullptr;
+        /** @brief The app's type registry, which data asset types are found and checked in. */
+        const TypeRegistry* types = nullptr;
         std::filesystem::path root;
         std::array<AssetTable, AssetKindCount> tables;
         OwnerId nextSceneOwner = 1;
         /** @brief By model file key, the units its last import left out, for the files that left any out. */
         std::unordered_map<std::string, std::vector<std::string>> modelFailures;
+        /**
+         * @brief Guards a data asset record's `logged` while TryGet notes a read as a type the record is not: TryGet is
+         * a read, which may run alongside others.
+         */
+        std::mutex readLogMutex;
 
         /** @brief The live record `slot` names in `kind`'s table, or null. */
         [[nodiscard]] AssetRecord* Find(AssetKind kind, AssetSlot slot);

@@ -44,6 +44,7 @@ namespace Fenrir::Generated::FenrirWindowTypes
 template <>
 struct Fenrir::Describe<Fenrir::CursorMode>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -51,6 +52,7 @@ struct Fenrir::Describe<Fenrir::CursorMode>
 template <>
 struct Fenrir::Describe<Fenrir::CursorShape>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -58,6 +60,7 @@ struct Fenrir::Describe<Fenrir::CursorShape>
 template <>
 struct Fenrir::Describe<Fenrir::WindowCloseRequestedEvent>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Event;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -65,6 +68,7 @@ struct Fenrir::Describe<Fenrir::WindowCloseRequestedEvent>
 template <>
 struct Fenrir::Describe<Fenrir::WindowSize>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -72,6 +76,7 @@ struct Fenrir::Describe<Fenrir::WindowSize>
 template <>
 struct Fenrir::Describe<Fenrir::WindowConfig>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Settings;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -79,6 +84,7 @@ struct Fenrir::Describe<Fenrir::WindowConfig>
 template <>
 struct Fenrir::Describe<Fenrir::WindowResizedEvent>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Event;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 

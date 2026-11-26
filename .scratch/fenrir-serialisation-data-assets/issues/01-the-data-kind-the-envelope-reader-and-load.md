@@ -25,13 +25,13 @@
 
 **Touches:** `packages/FenrirAssets/` (`include/FenrirAssets/AssetHandle.hpp`, `AssetStore.hpp`, `src/AssetStore.cpp`, `src/AssetStoreState.hpp`, a new `src/Envelope.cpp` and `.hpp`, `CMakeLists.txt` (linking `FenrirSerialisation` `PUBLIC`), `Tests/` (new `DataAssets.cpp`, `Tests/Package/`, `Tests/fixtures/data/`, `Tests/CMakeLists.txt`))
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `Load<Sword>` of the sword fixture gives a handle whose `TryGet` reads every field, and a second load gives the same handle.
-- [ ] `Load<WeaponData>` of the sword gives a handle, while `Load<Sword>` of a plain `WeaponData` file fails with `WrongType`.
-- [ ] A load of a type the registry lacks fails with `NotADataAsset`.
-- [ ] A file with an unknown and a wrong-typed field loads `Partial`, with both diagnostics carrying their line and column, each logged once.
-- [ ] A file at version 1 loads through its upgrader to the type's version.
-- [ ] A syntax error fails with one located diagnostic.
-- [ ] The test package's description and registration regenerate byte-identical under CI's check.
-- [ ] Owners free a data asset with its last owner, as `Owners.cpp` checks for other kinds.
+- [x] `Load<Sword>` of the sword fixture gives a handle whose `TryGet` reads every field, and a second load gives the same handle.
+- [x] `Load<WeaponData>` of the sword gives a handle, while `Load<Sword>` of a plain `WeaponData` file fails with `WrongType`.
+- [x] A load of a type the registry lacks fails with `NotADataAsset`.
+- [x] A file with an unknown and a wrong-typed field loads `Partial`, with both diagnostics carrying their line and column, each logged once.
+- [x] A file at version 1 loads through its upgrader to the type's version.
+- [x] A syntax error fails with one located diagnostic.
+- [x] The test package's description and registration regenerate byte-identical under CI's check.
+- [x] Owners free a data asset with its last owner, as `Owners.cpp` checks for other kinds.

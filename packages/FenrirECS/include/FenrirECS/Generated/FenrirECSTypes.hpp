@@ -54,6 +54,7 @@ namespace Fenrir::Generated::FenrirECSTypes
 template <>
 struct Fenrir::Describe<Fenrir::Entity>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -61,6 +62,7 @@ struct Fenrir::Describe<Fenrir::Entity>
 template <>
 struct Fenrir::Describe<Fenrir::Name>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -68,6 +70,7 @@ struct Fenrir::Describe<Fenrir::Name>
 template <>
 struct Fenrir::Describe<Fenrir::Relationship>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -75,6 +78,7 @@ struct Fenrir::Describe<Fenrir::Relationship>
 template <>
 struct Fenrir::Describe<Fenrir::Transform>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 

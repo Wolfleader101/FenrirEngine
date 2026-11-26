@@ -1,0 +1,9 @@
+// A plain weapon: a WeaponData, not a Sword.
+{
+  format: 1,
+  type: "AssetsTest::WeaponData",
+  version: 1,
+  data: {
+    displayName: "Club",
+  },
+}

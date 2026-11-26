@@ -16,4 +16,6 @@ public enum AssetKind : byte
     BoneMask = 7,
     InstanceList = 8,
     Font = 9,
+    /// <summary>A game-defined plain struct, read from a `.asset.json5` file (ADR-0075).</summary>
+    Data = 10,
 }

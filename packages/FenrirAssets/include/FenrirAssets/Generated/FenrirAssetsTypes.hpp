@@ -53,6 +53,7 @@ namespace Fenrir::Generated::FenrirAssetsTypes
 template <>
 struct Fenrir::Describe<Fenrir::AssetHandle<Fenrir::BoneMask>>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::BoundType;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -60,6 +61,7 @@ struct Fenrir::Describe<Fenrir::AssetHandle<Fenrir::BoneMask>>
 template <>
 struct Fenrir::Describe<Fenrir::AssetHandle<Fenrir::Clip>>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::BoundType;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -67,6 +69,7 @@ struct Fenrir::Describe<Fenrir::AssetHandle<Fenrir::Clip>>
 template <>
 struct Fenrir::Describe<Fenrir::AssetHandle<Fenrir::Image>>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::BoundType;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -74,6 +77,7 @@ struct Fenrir::Describe<Fenrir::AssetHandle<Fenrir::Image>>
 template <>
 struct Fenrir::Describe<Fenrir::AssetHandle<Fenrir::InstanceList>>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::BoundType;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -81,6 +85,7 @@ struct Fenrir::Describe<Fenrir::AssetHandle<Fenrir::InstanceList>>
 template <>
 struct Fenrir::Describe<Fenrir::AssetHandle<Fenrir::Material>>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::BoundType;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -88,6 +93,7 @@ struct Fenrir::Describe<Fenrir::AssetHandle<Fenrir::Material>>
 template <>
 struct Fenrir::Describe<Fenrir::AssetHandle<Fenrir::Mesh>>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::BoundType;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -95,6 +101,7 @@ struct Fenrir::Describe<Fenrir::AssetHandle<Fenrir::Mesh>>
 template <>
 struct Fenrir::Describe<Fenrir::AssetHandle<Fenrir::Model>>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::BoundType;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -102,6 +109,7 @@ struct Fenrir::Describe<Fenrir::AssetHandle<Fenrir::Model>>
 template <>
 struct Fenrir::Describe<Fenrir::AssetHandle<Fenrir::Shader>>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::BoundType;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -109,6 +117,7 @@ struct Fenrir::Describe<Fenrir::AssetHandle<Fenrir::Shader>>
 template <>
 struct Fenrir::Describe<Fenrir::AssetHandle<Fenrir::Skeleton>>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::BoundType;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -116,6 +125,7 @@ struct Fenrir::Describe<Fenrir::AssetHandle<Fenrir::Skeleton>>
 template <>
 struct Fenrir::Describe<Fenrir::AssetsConfig>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Settings;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -123,6 +133,7 @@ struct Fenrir::Describe<Fenrir::AssetsConfig>
 template <>
 struct Fenrir::Describe<Fenrir::LodSettings>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -130,6 +141,7 @@ struct Fenrir::Describe<Fenrir::LodSettings>
 template <>
 struct Fenrir::Describe<Fenrir::SamplerFilter>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -137,6 +149,7 @@ struct Fenrir::Describe<Fenrir::SamplerFilter>
 template <>
 struct Fenrir::Describe<Fenrir::SamplerWrap>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -144,6 +157,7 @@ struct Fenrir::Describe<Fenrir::SamplerWrap>
 template <>
 struct Fenrir::Describe<Fenrir::SamplerDescription>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -151,6 +165,7 @@ struct Fenrir::Describe<Fenrir::SamplerDescription>
 template <>
 struct Fenrir::Describe<Fenrir::MaterialTexture>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 

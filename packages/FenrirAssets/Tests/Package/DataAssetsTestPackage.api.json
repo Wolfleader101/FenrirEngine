@@ -1,0 +1,99 @@
+{
+  "package": "DataAssetsTestPackage",
+  "pointerSize": 8,
+  "alignment": "natural",
+  "types": [
+    {
+      "name": "AssetsTest::ShieldData",
+      "category": "struct",
+      "role": "data-asset",
+      "doc": "A data asset of its own, extending nothing: not a weapon.",
+      "fields": [
+        {
+          "name": "block",
+          "kind": "f32",
+          "default": 0.5
+        }
+      ]
+    },
+    {
+      "name": "AssetsTest::WeaponStats",
+      "category": "struct",
+      "role": "nested",
+      "size": 8,
+      "alignment": 4,
+      "doc": "A weapon's numbers: a struct a data asset holds by value.",
+      "fields": [
+        {
+          "name": "damage",
+          "offset": 0,
+          "kind": "f32",
+          "default": 10
+        },
+        {
+          "name": "weight",
+          "offset": 4,
+          "kind": "f32",
+          "default": 1
+        }
+      ]
+    },
+    {
+      "name": "AssetsTest::WeaponData",
+      "category": "struct",
+      "role": "data-asset",
+      "doc": "A data asset that others extend: a string, a list, a nested struct, and handles to an image and to another weapon.",
+      "fields": [
+        {
+          "name": "displayName",
+          "kind": "string",
+          "default": "Weapon",
+          "doc": "What a menu calls the weapon."
+        },
+        {
+          "name": "tags",
+          "kind": "list",
+          "elementKind": "string",
+          "default": [],
+          "doc": "Words a shop filters by."
+        },
+        {
+          "name": "stats",
+          "kind": "struct",
+          "type": "AssetsTest::WeaponStats",
+          "default": {}
+        },
+        {
+          "name": "icon",
+          "kind": "reference",
+          "target": "Fenrir::Image",
+          "default": null,
+          "doc": "The icon a menu shows."
+        },
+        {
+          "name": "upgradesTo",
+          "kind": "reference",
+          "target": "AssetsTest::WeaponData",
+          "default": null,
+          "doc": "The weapon this one upgrades to, of any weapon type."
+        }
+      ]
+    },
+    {
+      "name": "AssetsTest::Sword",
+      "category": "struct",
+      "role": "data-asset",
+      "base": "AssetsTest::WeaponData",
+      "doc": "A data asset extending another: its base's fields first, then its own. Version 1 called `edge` `sharpness`.",
+      "version": 2,
+      "fields": [
+        {
+          "name": "edge",
+          "kind": "f32",
+          "default": 0.5,
+          "doc": "How sharp the blade is, from 0 to 1."
+        }
+      ]
+    }
+  ]
+}

@@ -6,6 +6,7 @@
 #include <format>
 #include <fstream>
 #include <iterator>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -26,11 +27,13 @@
 
 #include "AssetStoreState.hpp"
 #include "CubemapLoading.hpp"
+#include "Envelope.hpp"
 #include "FenrirAssets/ImageData.hpp"
 #include "FenrirAssets/Model.hpp"
 #include "FenrirAssets/ShaderData.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirScene/Scene.hpp"
+#include "FenrirTypes/TypeRegistry.hpp"
 #include "Importers/ImageImporter.hpp"
 #include "Importers/ModelImporter.hpp"
 
@@ -40,7 +43,8 @@ namespace Fenrir
     {
         // The words log messages use for each kind, in AssetKind's order.
         constexpr std::array<std::string_view, Detail::AssetKindCount> kindNames = {
-            "mesh", "image", "material", "shader", "model", "skeleton", "clip", "bone mask", "instance list", "font"};
+            "mesh", "image",     "material",      "shader", "model",     "skeleton",
+            "clip", "bone mask", "instance list", "font",   "data asset"};
 
         std::string_view KindName(Detail::AssetKind kind)
         {
@@ -159,6 +163,14 @@ namespace Fenrir
             {
                 return "not registered";
             }
+            if (reason == LoadFailure::NotADataAsset)
+            {
+                return "not a data asset";
+            }
+            if (reason == LoadFailure::WrongType)
+            {
+                return "wrong type";
+            }
             return "no importer";
         }
     } // namespace
@@ -257,6 +269,10 @@ namespace Fenrir
                 table.byKey.erase(record.key);
                 record.key.clear();
             }
+            record.typeName = {};
+            record.loadDiagnostics.clear();
+            record.loadIncomplete = false;
+            record.logged.clear();
             // Generation zero is the empty handle's, so a slot that wraps around skips it.
             if (++record.generation == 0)
             {
@@ -288,9 +304,11 @@ namespace Fenrir
         }
     } // namespace Detail
 
-    AssetStore::AssetStore(ILogger& logger, AssetsConfig config) : m_state(std::make_shared<Detail::AssetStoreState>())
+    AssetStore::AssetStore(ILogger& logger, AssetsConfig config, const TypeRegistry& types)
+        : m_state(std::make_shared<Detail::AssetStoreState>())
     {
         m_state->logger = &logger;
+        m_state->types = &types;
         const std::filesystem::path root =
             config.root.empty() ? ExecutableDirectory() / "assets" : std::filesystem::absolute(config.root);
         m_state->root = root.lexically_normal();
@@ -460,6 +478,73 @@ namespace Fenrir
         return Detail::InsertAsset(table, std::move(data), Detail::OwnerIdOf(m_state, owner), resolved.key);
     }
 
+    Detail::AssetSlot AssetStore::LoadDataSlot(std::string_view path, AssetOwner owner, const TypeDescription& type,
+                                               std::optional<LoadDiagnostic>& diagnostic,
+                                               std::vector<Serialisation::Diagnostic>& diagnostics, bool& incomplete)
+    {
+        const AssetPath resolved = Resolve(m_state->root, path);
+        const auto fail = [&](LoadFailure reason, std::string message) -> Detail::AssetSlot {
+            m_state->logger->Error("Could not load {} '{}' as {}: {} ({})", KindName(Detail::AssetKind::Data),
+                                   resolved.key, type.name, ReasonText(reason), message);
+            diagnostic = LoadDiagnostic{resolved.key, reason, std::move(message)};
+            return {};
+        };
+
+        const TypeRegistry& registry = *m_state->types;
+        if (registry.Find(type.name) == nullptr)
+        {
+            return fail(LoadFailure::NotADataAsset,
+                        std::format("the type registry has no `{}`: register its package's types first", type.name));
+        }
+
+        Detail::AssetTable& table = TableOf(*m_state, Detail::AssetKind::Data);
+        if (const auto loaded = table.byKey.find(resolved.key); loaded != table.byKey.end())
+        {
+            Detail::AssetRecord& record = table.records[loaded->second];
+            if (!registry.IsA(record.typeName, type.name))
+            {
+                return fail(LoadFailure::WrongType, std::format("it is loaded already as a `{}`, which is not a `{}`",
+                                                                record.typeName, type.name));
+            }
+            Detail::AddOwner(record, Detail::OwnerIdOf(m_state, owner));
+            diagnostics = record.loadDiagnostics;
+            incomplete = record.loadIncomplete;
+            return {loaded->second, record.generation};
+        }
+
+        if (resolved.labelled)
+        {
+            return fail(LoadFailure::LabelNotFound, "a data asset's sub-assets are not read yet");
+        }
+        std::error_code error;
+        if (!std::filesystem::is_regular_file(resolved.file, error))
+        {
+            return fail(LoadFailure::FileNotFound, "there is no file at this path");
+        }
+        std::vector<std::byte> bytes;
+        if (!Detail::ReadAssetFile(resolved.file, bytes))
+        {
+            return fail(LoadFailure::ImportFailed, "the file could not be read");
+        }
+
+        // No references resolve yet: a later ticket gives the store's resolvers.
+        Detail::EnvelopeRead read =
+            Detail::ReadDataEnvelope(bytes, resolved.key, type, registry, Serialisation::Resolvers{}, *m_state->logger);
+        diagnostics = std::move(read.diagnostics);
+        if (read.failure)
+        {
+            return fail(*read.failure, std::move(read.failureMessage));
+        }
+        incomplete = read.incomplete;
+        const Detail::AssetSlot slot =
+            Detail::InsertAsset(table, std::move(read.value), Detail::OwnerIdOf(m_state, owner), resolved.key);
+        Detail::AssetRecord& record = *m_state->Find(Detail::AssetKind::Data, slot);
+        record.typeName = read.type->name;
+        record.loadDiagnostics = diagnostics;
+        record.loadIncomplete = incomplete;
+        return slot;
+    }
+
     Detail::AssetSlot AssetStore::AddSlot(Detail::AssetKind kind, Detail::AssetBox data, AssetOwner owner)
     {
         return Detail::InsertAsset(TableOf(*m_state, kind), std::move(data), Detail::OwnerIdOf(m_state, owner), {});
@@ -564,6 +649,27 @@ namespace Fenrir
     {
         const Detail::AssetRecord* record = m_state->Find(kind, slot);
         return record != nullptr ? record->data.get() : nullptr;
+    }
+
+    const void* AssetStore::FindData(Detail::AssetSlot slot, const TypeDescription& type) const
+    {
+        Detail::AssetRecord* record = m_state->Find(Detail::AssetKind::Data, slot);
+        if (record == nullptr || record->data == nullptr)
+        {
+            return nullptr;
+        }
+        if (!m_state->types->IsA(record->typeName, type.name))
+        {
+            // The record's own log, which Free clears, so it is once per handle: a new asset in the slot starts afresh.
+            const std::scoped_lock lock(m_state->readLogMutex);
+            if (record->logged.insert(std::format("read as {}", type.name)).second)
+            {
+                m_state->logger->Error("Could not read a data asset as `{}`: its handle names a `{}`", type.name,
+                                       record->typeName);
+            }
+            return nullptr;
+        }
+        return static_cast<const Detail::DataValue*>(record->data.get())->value;
     }
 
     std::span<const ShaderParameter> AssetStore::GetShaderParameters(AssetHandle<Shader> handle) const

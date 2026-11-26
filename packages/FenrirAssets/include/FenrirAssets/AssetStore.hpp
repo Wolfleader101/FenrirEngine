@@ -24,11 +24,14 @@
 #include "FenrirAssets/SpawnNodes.hpp"
 #include "FenrirMath/Colour.hpp"
 #include "FenrirMath/Math.hpp"
+#include "FenrirSerialisation/Diagnostic.hpp"
+#include "FenrirTypes/Describe.hpp"
 
 namespace Fenrir
 {
     class ILogger;
     class Scene;
+    class TypeRegistry;
 
     namespace Detail
     {
@@ -144,6 +147,13 @@ namespace Fenrir
         NoImporter,
         /** @brief The `builtin:` name has no asset registered under it (AssetStore::AddBuiltin) yet. */
         NotRegistered,
+        /** @brief The data asset type loaded is not in the store's type registry: its package never registered it. */
+        NotADataAsset,
+        /**
+         * @brief The data asset file's `type` is not the type loaded or one extending it, or is no type the registry
+         * knows.
+         */
+        WrongType,
     };
 
     /** @brief Why a load failed, for a log or an editor. */
@@ -154,7 +164,10 @@ namespace Fenrir
         std::string path;
         /** @brief Why it failed. */
         LoadFailure reason = LoadFailure::FileNotFound;
-        /** @brief The importer's own message, or a description of the reason when no importer ran. */
+        /**
+         * @brief The importer's own message, or a description of the reason when no importer ran; for a data asset,
+         * the located diagnostic that failed it, when one did.
+         */
         std::string importerMessage;
     };
 
@@ -165,7 +178,8 @@ namespace Fenrir
         Succeeded,
         /**
          * @brief The asset loaded, but its file's import left units out (a skeleton with its skins and meshes, a skin
-         * with its meshes, a clip); LoadResult::failedUnits says which and why.
+         * with its meshes, a clip), LoadResult::failedUnits saying which and why; or a data asset's file had values
+         * that did not read, LoadResult::diagnostics saying where.
          */
         Partial,
         /** @brief Nothing loaded; LoadResult::diagnostic says why. */
@@ -185,6 +199,19 @@ namespace Fenrir
          * same for every load of the file's model or sub-assets, until the file is imported again.
          */
         std::vector<std::string> failedUnits;
+        /**
+         * @brief For a data asset, the located diagnostics of its file's read, each already logged once: those of the
+         * read of its text, its upgrade and its fields (an unknown key dropped, a wrong-typed value left at its
+         * default), and the store's own about its envelope. Kept when the load failed too, as a syntax error's. A
+         * later load of a path already loaded gives its first load's again, not logged again, as a model's
+         * failedUnits are.
+         */
+        std::vector<Serialisation::Diagnostic> diagnostics;
+        /**
+         * @brief For a data asset, whether its fields' read left something out that no diagnostic names: a reference
+         * no resolver was given for.
+         */
+        bool incomplete = false;
 
         /** @brief Whether the load gave a handle: it succeeded, wholly or in part. */
         [[nodiscard]] bool Ok() const noexcept
@@ -199,7 +226,8 @@ namespace Fenrir
             {
                 return LoadStatus::Failed;
             }
-            return failedUnits.empty() ? LoadStatus::Succeeded : LoadStatus::Partial;
+            return failedUnits.empty() && diagnostics.empty() && !incomplete ? LoadStatus::Succeeded
+                                                                             : LoadStatus::Partial;
         }
     };
 
@@ -214,8 +242,11 @@ namespace Fenrir
     class AssetStore
     {
       public:
-        /** @brief A store whose messages go to `logger`, which must outlive it. Assets::Install makes it. */
-        AssetStore(ILogger& logger, AssetsConfig config);
+        /**
+         * @brief A store whose messages go to `logger`, reading data asset types from `types`, both of which must
+         * outlive it. Assets::Install makes it, with the app's TypeRegistry.
+         */
+        AssetStore(ILogger& logger, AssetsConfig config, const TypeRegistry& types);
         ~AssetStore();
         AssetStore(const AssetStore&) = delete;
         AssetStore& operator=(const AssetStore&) = delete;
@@ -247,13 +278,31 @@ namespace Fenrir
          * must start as a font file does.
          *
          * A `builtin:` name loads what AssetStore::AddBuiltin registered under it, and fails until something has.
+         *
+         * A data asset (`T` a data asset type, ADR-0075) loads from a `.asset.json5` file: one object of `format` (1),
+         * `type` (the canonical or a former name of its type), `version` (the type's version it was written at) and
+         * `data` (its fields), read as text or the tree encoding alike (ADR-0077). Its `type` must be `T` or a type
+         * extending it, so an `AssetHandle<WeaponData>` loads a `Sword` file, and `T` must be in the store's type
+         * registry (LoadFailure::NotADataAsset). The tree is upgraded from `version` through the type's upgraders,
+         * then read tolerantly: an unknown key is warned and dropped, a value that does not read keeps its default with
+         * an error, and either makes the load `Partial`, each in LoadResult::diagnostics with its line and column.
+         * Sub-assets (`sub`) are not read yet: a file with them warns so. A file that does not parse, or whose
+         * `format` or `type` is wrong, fails.
          */
         template <typename T>
         [[nodiscard]] LoadResult<T> Load(std::string_view path, AssetOwner owner)
         {
             LoadResult<T> result;
-            const Detail::AssetSlot slot =
-                LoadSlot(Detail::AssetTraits<T>::kind, path, owner, result.diagnostic, result.failedUnits);
+            Detail::AssetSlot slot;
+            if constexpr (Detail::AssetTraits<T>::kind == Detail::AssetKind::Data)
+            {
+                slot = LoadDataSlot(path, owner, Describe<T>::Description(), result.diagnostic, result.diagnostics,
+                                    result.incomplete);
+            }
+            else
+            {
+                slot = LoadSlot(Detail::AssetTraits<T>::kind, path, owner, result.diagnostic, result.failedUnits);
+            }
             result.handle = {slot.index, slot.generation};
             return result;
         }
@@ -359,12 +408,25 @@ namespace Fenrir
         /**
          * @brief The data `handle` names, or null if the handle is empty or stale. The pointer is valid until the
          * asset is replaced or freed.
+         *
+         * A data asset's is the one shared, read-only instance, of its file's type: a `Sword` read through an
+         * `AssetHandle<WeaponData>` is the sword's WeaponData part. Null, too, for a record whose type is not `T` or a
+         * type extending it (a handle made from another's numbers), logged once per handle.
          */
         template <typename T>
         [[nodiscard]] const AssetData<T>* TryGet(AssetHandle<T> handle) const
         {
-            return static_cast<const AssetData<T>*>(
-                Find(Detail::AssetTraits<T>::kind, {handle.index, handle.generation}));
+            if constexpr (Detail::AssetTraits<T>::kind == Detail::AssetKind::Data)
+            {
+                // A data asset type extends at most one other and has no virtual functions (ADR-0075), so its base is
+                // at the instance's own address.
+                return static_cast<const T*>(FindData({handle.index, handle.generation}, Describe<T>::Description()));
+            }
+            else
+            {
+                return static_cast<const AssetData<T>*>(
+                    Find(Detail::AssetTraits<T>::kind, {handle.index, handle.generation}));
+            }
         }
 
         /** @brief Whether `handle` names a live asset: false for an empty or stale handle. */
@@ -561,6 +623,9 @@ namespace Fenrir
       private:
         Detail::AssetSlot LoadSlot(Detail::AssetKind kind, std::string_view path, AssetOwner owner,
                                    std::optional<LoadDiagnostic>& diagnostic, std::vector<std::string>& failedUnits);
+        Detail::AssetSlot LoadDataSlot(std::string_view path, AssetOwner owner, const TypeDescription& type,
+                                       std::optional<LoadDiagnostic>& diagnostic,
+                                       std::vector<Serialisation::Diagnostic>& diagnostics, bool& incomplete);
         Detail::AssetSlot AddSlot(Detail::AssetKind kind, Detail::AssetBox data, AssetOwner owner);
         Detail::AssetSlot AddBuiltinSlot(Detail::AssetKind kind, std::string_view name, Detail::AssetBox data);
         Detail::AssetSlot ReserveBuiltin(Detail::AssetKind kind, std::string_view name);
@@ -570,6 +635,7 @@ namespace Fenrir
         bool ReplaceSlot(Detail::AssetKind kind, Detail::AssetSlot slot, Detail::AssetBox data);
         bool UnloadSlot(Detail::AssetKind kind, Detail::AssetSlot slot);
         [[nodiscard]] const void* Find(Detail::AssetKind kind, Detail::AssetSlot slot) const;
+        [[nodiscard]] const void* FindData(Detail::AssetSlot slot, const TypeDescription& type) const;
         [[nodiscard]] std::uint32_t RevisionOf(Detail::AssetKind kind, Detail::AssetSlot slot) const;
         [[nodiscard]] bool SameFileOf(Detail::AssetKind kindA, Detail::AssetSlot a, Detail::AssetKind kindB,
                                       Detail::AssetSlot b) const;
