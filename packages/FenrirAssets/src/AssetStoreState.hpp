@@ -100,6 +100,12 @@ namespace Fenrir::Detail
         std::unique_ptr<AssetSource> source;
         std::array<AssetTable, AssetKindCount> tables;
         OwnerId nextSceneOwner = 1;
+        /**
+         * @brief By data asset file key, the file's tree as the store last read or wrote it, its `data` upgraded: what
+         * a save keeps the file's comments, and the sub-assets it holds no record of, from. Dropped with the last
+         * record of its file.
+         */
+        std::unordered_map<std::string, Serialisation::Value> fileTrees;
         /** @brief By model file key, the units its last import left out, for the files that left any out. */
         std::unordered_map<std::string, std::vector<std::string>> modelFailures;
         /**

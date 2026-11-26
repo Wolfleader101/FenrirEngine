@@ -33,6 +33,9 @@ namespace Fenrir::Generated::DataAssetsTestPackageTypes
     extern const Fenrir::TypeDescription AssetsTest_WeaponStats;
     extern const Fenrir::TypeDescription AssetsTest_WeaponData;
     extern const Fenrir::TypeDescription AssetsTest_Sword;
+    extern const Fenrir::TypeDescription MyGame_ParticleEffect;
+    extern const Fenrir::TypeDescription MyGame_Upgrade;
+    extern const Fenrir::TypeDescription MyGame_Sword;
 } // namespace Fenrir::Generated::DataAssetsTestPackageTypes
 
 /** @brief The description of AssetsTest::ShieldData that RegisterDataAssetsTestPackageTypes adds. */
@@ -62,6 +65,30 @@ struct Fenrir::Describe<AssetsTest::WeaponData>
 /** @brief The description of AssetsTest::Sword that RegisterDataAssetsTestPackageTypes adds. */
 template <>
 struct Fenrir::Describe<AssetsTest::Sword>
+{
+    static constexpr Fenrir::Role role = Fenrir::Role::DataAsset;
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of MyGame::ParticleEffect that RegisterDataAssetsTestPackageTypes adds. */
+template <>
+struct Fenrir::Describe<MyGame::ParticleEffect>
+{
+    static constexpr Fenrir::Role role = Fenrir::Role::DataAsset;
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of MyGame::Upgrade that RegisterDataAssetsTestPackageTypes adds. */
+template <>
+struct Fenrir::Describe<MyGame::Upgrade>
+{
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of MyGame::Sword that RegisterDataAssetsTestPackageTypes adds. */
+template <>
+struct Fenrir::Describe<MyGame::Sword>
 {
     static constexpr Fenrir::Role role = Fenrir::Role::DataAsset;
     static const Fenrir::TypeDescription& Description() noexcept;

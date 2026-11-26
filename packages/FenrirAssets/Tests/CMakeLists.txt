@@ -6,7 +6,7 @@ fenrir_add_catch2()
 add_executable(FenrirAssetsTests PublicHeaders.cpp Owners.cpp Revisions.cpp Loading.cpp Images.cpp ShaderContainers.cpp
                                  Materials.cpp Models.cpp SpawnNodes.cpp Cubemaps.cpp Skeletons.cpp Skins.cpp
                                  Clips.cpp BoneMasks.cpp SkinnedImport.cpp MeshLods.cpp Fonts.cpp ImageUpdates.cpp
-                                 DataAssets.cpp AssetPaths.cpp SubAssets.cpp References.cpp AssetsTest.hpp
+                                 DataAssets.cpp AssetPaths.cpp SubAssets.cpp References.cpp Saving.cpp AssetsTest.hpp
                                  DataAssetsTest.hpp
                                  AssetsProbe.hpp)
 # Models built in code, which FenrirSkeleton's spawning tests also build on.
@@ -15,6 +15,11 @@ target_link_libraries(FenrirAssetsTests PRIVATE FenrirAssets Catch2::Catch2WithM
 # The asset source seam is private (src/AssetSource.hpp): its tests stand a source in memory in for the directory.
 target_include_directories(FenrirAssetsTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 target_compile_definitions(FenrirAssetsTests PRIVATE FENRIR_ASSETS_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
+# The format research's sword, FenrirSerialisation's golden file: the saving tests load it and save it back, read where
+# it is committed rather than copied, so there is one golden.
+target_compile_definitions(
+    FenrirAssetsTests
+    PRIVATE FENRIR_SERIALISATION_GOLDEN_SWORD="${CMAKE_CURRENT_SOURCE_DIR}/../../FenrirSerialisation/Tests/fixtures/sword.asset.json5")
 add_test(NAME FenrirAssets COMMAND FenrirAssetsTests)
 
 # With the renderer on, FenrirShaderCompiler builds a fixture shader from GLSL for the parameter-table test.
