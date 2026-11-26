@@ -147,6 +147,20 @@ namespace Fenrir::Detail
     [[nodiscard]] std::string Utf8Text(const std::filesystem::path& path);
 
     /**
+     * @brief `file`, absolute and normal, relative to `root` with forward slashes: its asset path (ADR-0076). None when
+     * it is not under the root.
+     */
+    [[nodiscard]] std::optional<std::string> RootRelative(const std::filesystem::path& root,
+                                                          const std::filesystem::path& file);
+
+    /**
+     * @brief Writes `text` to `file` atomically (ADR-0079 §4), making its directory: to a file beside it, named as it
+     * with `.saving` added, then renamed over it, so a write that fails before the rename leaves the old file whole.
+     * Why it failed, or none.
+     */
+    [[nodiscard]] std::optional<std::string> WriteAtomically(const std::filesystem::path& file, std::string_view text);
+
+    /**
      * @brief The engine kind a `reference` field's target names, as a description writes `AssetHandle<Image>`'s
      * (`Fenrir::Image`); none for any other name, which is a data asset type's.
      */
