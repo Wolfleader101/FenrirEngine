@@ -45,9 +45,6 @@ namespace Fenrir::Detail
         /** @brief Stops watching the file `key` names: the store holds nothing from it any more. */
         void Forget(const std::string& key);
 
-        /** @brief Whether the file `key` names is watched. */
-        [[nodiscard]] bool Watches(const std::string& key) const;
-
         /**
          * @brief Looks at the files due a look at `now`. A file that has gone is warned about once and keeps its data;
          * the next file there is a change. Each changed, settled file is taken as loaded as it is now (so a reload that

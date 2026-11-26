@@ -18,10 +18,10 @@
 
 **Touches:** `packages/FenrirAssets/` (`include/FenrirAssets/AssetStore.hpp`, `include/FenrirAssets/Assets.hpp`, `src/Assets.cpp`, `src/AssetStore.cpp`, a new `src/AssetWatcher.cpp` and `.hpp`, `api/` and the regenerated description, registration and defaults test for `AssetsConfig`, `Tests/` (a new `HotReload.cpp` over a temporary root))
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] With `reloadInterval` and `reloadDebounce` at zero, rewriting a fixture between `RunFrame` calls makes the same handle read the new value within two frames, and `Reloaded()` names it once.
-- [ ] A broken rewrite keeps the old value and logs its located diagnostics once. A fix after it reloads.
-- [ ] A deleted file keeps its data with one warning, and reloads when it reappears.
-- [ ] With `hotReload` off, no system is added and nothing reloads.
-- [ ] `AssetsConfig`'s description, registration and defaults test regenerate, and CI's dirty-tree check passes.
+- [x] With `reloadInterval` and `reloadDebounce` at zero, rewriting a fixture between `RunFrame` calls makes the same handle read the new value within two frames, and `Reloaded()` names it once.
+- [x] A broken rewrite keeps the old value and logs its located diagnostics once. A fix after it reloads.
+- [x] A deleted file keeps its data with one warning, and reloads when it reappears.
+- [x] With `hotReload` off, no system is added and nothing reloads.
+- [x] `AssetsConfig`'s description, registration and defaults test regenerate, and CI's dirty-tree check passes.

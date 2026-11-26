@@ -76,6 +76,9 @@ namespace Fenrir::Detail
         std::string key;
         // For a data asset, the canonical name of its value's type (its description's, so it outlives the record).
         std::string_view typeName;
+        // For a data asset, the type it first held, when it was loaded or added: a reload must give it a type extending
+        // this one, so every handle that read it still does, and an edit back to it after one to a subtype reloads.
+        std::string_view firstTypeName;
         // For a data asset, what its file's read reported, which every later load of its path reports again, as a
         // model's left-out units are: the located diagnostics, and whether the bridge read its fields in part.
         std::vector<Serialisation::Diagnostic> loadDiagnostics;

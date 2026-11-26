@@ -39,7 +39,7 @@ namespace
                std::string(name) + "\",\n    stats: { damage: 25, weight: 3.5 },\n" + std::string(extra) + "  },\n}\n";
     }
 
-    // The store, over a copy of `fixtures` in `root`, watching with no interval and no debounce, as a test needs.
+    // A config whose asset root is `root`, watching with no interval and no debounce, as a test needs.
     Fenrir::AssetsConfig Watching(const TempRoot& root, bool hotReload = true)
     {
         Fenrir::AssetsConfig config{root.Path()};
@@ -74,6 +74,7 @@ namespace
     Fenrir::AssetHandle<Sword> LoadSword(DataApp& test)
     {
         const Fenrir::LoadResult<Sword> loaded = test.store.Load<Sword>(SwordPath, Fenrir::AssetOwner::App());
+        INFO("the copied sword loads whole");
         REQUIRE(loaded.Status() == Fenrir::LoadStatus::Succeeded);
         RunFrames(test, 1);
         return loaded.handle;
@@ -156,6 +157,41 @@ TEST_CASE("A rewrite with a value that does not read keeps the whole old value",
     REQUIRE(CountContaining(*test.errors, "edge") == 1);
 }
 
+TEST_CASE("A reload may move a data asset to a type extending the one it first held, and back",
+          "[assets][data][reload][types]")
+{
+    TempRoot root;
+    root.Copy(Fixtures() / "data/weapon.asset.json5", "data/weapon.asset.json5");
+    DataApp test(Watching(root));
+    const Fenrir::LoadResult<AssetsTest::WeaponData> loaded =
+        test.store.Load<AssetsTest::WeaponData>("data/weapon.asset.json5", Fenrir::AssetOwner::App());
+    INFO("the weapon loads whole");
+    REQUIRE(loaded.Status() == Fenrir::LoadStatus::Succeeded);
+    RunFrames(test, 1);
+
+    root.Write("data/weapon.asset.json5", SwordText("Weapon made sword"));
+    RunFrames(test, 2);
+    INFO("a sword is a weapon, so the weapon's handle reads it");
+    REQUIRE(test.store.TryGet(loaded.handle)->displayName == "Weapon made sword");
+
+    root.Write("data/weapon.asset.json5",
+               R"({ format: 1, type: "AssetsTest::WeaponData", version: 1, data: { displayName: "A weapon again" } }
+)");
+    RunFrames(test, 2);
+    INFO("back to the type it first held reloads too, with nothing logged");
+    REQUIRE(test.store.TryGet(loaded.handle)->displayName == "A weapon again");
+    REQUIRE(TimesReloaded(test, loaded.handle) == 1);
+    REQUIRE(test.errors->empty());
+
+    root.Write("data/weapon.asset.json5",
+               R"({ format: 1, type: "AssetsTest::ShieldData", version: 1, data: { block: 0.5 } }
+)");
+    RunFrames(test, 2);
+    INFO("a shield is no weapon: the reload is refused and the weapon kept");
+    REQUIRE(test.store.TryGet(loaded.handle)->displayName == "A weapon again");
+    REQUIRE(CountContaining(*test.errors, "Could not reload data asset") == 1);
+}
+
 TEST_CASE("A deleted data asset file keeps its data with one warning, and reloads when it comes back",
           "[assets][data][reload]")
 {
@@ -209,6 +245,7 @@ TEST_CASE("A rewritten file reloads its sub-assets under their own handles", "[a
         test.store.Load<ShieldData>(std::string(SheathedPath) + "#sheath", Fenrir::AssetOwner::App());
     const Fenrir::LoadResult<Sword> spare =
         test.store.Load<Sword>(std::string(SheathedPath) + "#spare", Fenrir::AssetOwner::App());
+    INFO("the sheathed sword and both its sub-assets load");
     REQUIRE(top.Ok());
     REQUIRE(sheath.Ok());
     REQUIRE(spare.Ok());
@@ -247,6 +284,7 @@ TEST_CASE("A reference a reload adds loads with every owner of the reloaded asse
     DataApp test(Watching(root));
     Fenrir::Scene& level = test.app.CreateScene("Level");
     const Fenrir::LoadResult<Sword> loaded = test.store.Load<Sword>(SwordPath, level);
+    INFO("the sword loads for the scene");
     REQUIRE(loaded.Ok());
     RunFrames(test, 1);
 
@@ -254,6 +292,7 @@ TEST_CASE("A reference a reload adds loads with every owner of the reloaded asse
     RunFrames(test, 2);
 
     const Sword* sword = test.store.TryGet(loaded.handle);
+    INFO("the sword reads the new file");
     REQUIRE(sword != nullptr);
     REQUIRE(sword->displayName == "Gilded longsword");
     const Fenrir::AssetHandle<Fenrir::Image> icon = sword->icon;
@@ -279,6 +318,7 @@ TEST_CASE("A failed reload frees what its read loaded", "[assets][data][reload][
     root.Write(SwordPath, SwordText("Gilded longsword", "    icon: \"fourbytwo.png\",\n    edge: \"very\",\n"));
     RunFrames(test, 2);
 
+    INFO("the reload is refused, so the sword keeps the name it loaded");
     REQUIRE(test.store.TryGet(sword)->displayName == "Longsword");
     INFO("the image the failed read loaded is held for no one: loaded now for a scene, it goes with the scene");
     Fenrir::Scene& level = test.app.CreateScene("Level");
@@ -298,6 +338,7 @@ TEST_CASE("Saving a data asset to its own file is no change to reload", "[assets
 
     test.store.Edit(sword, "rename")->displayName = "Saved longsword";
     const std::uint32_t revision = test.store.Revision(sword);
+    INFO("the edited sword saves to its own file");
     REQUIRE(test.store.Save(sword).status == Fenrir::SaveStatus::Succeeded);
     RunFrames(test, 3);
 
@@ -314,6 +355,7 @@ TEST_CASE("An unloaded data asset's file is no longer watched", "[assets][data][
     DataApp test(Watching(root));
     const Fenrir::AssetHandle<Sword> sword = LoadSword(test);
 
+    INFO("the sword unloads");
     REQUIRE(test.store.Unload(sword));
     fs::remove(root.Path() / SwordPath);
     RunFrames(test, 2);

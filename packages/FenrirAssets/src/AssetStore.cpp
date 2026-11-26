@@ -383,6 +383,7 @@ namespace Fenrir
                 record.key.clear();
             }
             record.typeName = {};
+            record.firstTypeName = {};
             record.loadDiagnostics.clear();
             record.loadIncomplete = false;
             record.references.clear();
@@ -692,8 +693,7 @@ namespace Fenrir
                 return fail(LoadFailure::WrongType, std::format("it is loaded already as a `{}`, which is not a `{}`",
                                                                 record.typeName, type.name));
             }
-            const Detail::OwnerId ownerId = owner;
-            ShareData(loaded->second, ownerId);
+            ShareData(loaded->second, owner);
             // Loading a file's top level loads its sub-assets for the same owner, as a model's are (ADR-0076).
             if (!resolved.labelled)
             {
@@ -702,7 +702,7 @@ namespace Fenrir
                 {
                     if (key.starts_with(prefix))
                     {
-                        ShareData(index, ownerId);
+                        ShareData(index, owner);
                     }
                 }
             }
@@ -723,10 +723,9 @@ namespace Fenrir
         }
 
         const std::string fileKey = Utf8Text(resolved.file);
-        const Detail::OwnerId ownerId = owner;
         Detail::EnvelopeRead read = ReadDataFile(
             fileKey, *assetPath, resolved.labelled ? std::optional<std::string_view>(resolved.label) : std::nullopt,
-            type, ownerId, *bytes);
+            type, owner, *bytes);
         diagnostics = std::move(read.diagnostics);
         if (read.failure)
         {
@@ -762,14 +761,15 @@ namespace Fenrir
                 }
                 else
                 {
-                    ShareData(found->second, ownerId);
+                    ShareData(found->second, owner);
                 }
             }
             else
             {
-                slot = Detail::InsertAsset(table, std::move(stored.value), ownerId, std::move(key));
+                slot = Detail::InsertAsset(table, std::move(stored.value), owner, std::move(key));
                 Detail::AssetRecord& record = *m_state->Find(Detail::AssetKind::Data, slot);
                 record.typeName = stored.type->name;
+                record.firstTypeName = stored.type->name;
                 record.loadDiagnostics = diagnostics;
                 record.loadIncomplete = incomplete;
                 record.references = std::move(stored.references);
@@ -879,7 +879,9 @@ namespace Fenrir
             }
             const Detail::AssetSlot slot = Detail::InsertAsset(
                 table, Detail::AssetBox(nullptr, &Detail::DestroyAssetData<Detail::DataValue>), owner, std::move(key));
-            m_state->Find(Detail::AssetKind::Data, slot)->typeName = entryType.name;
+            Detail::AssetRecord& reserved = *m_state->Find(Detail::AssetKind::Data, slot);
+            reserved.typeName = entryType.name;
+            reserved.firstTypeName = entryType.name;
         };
         hooks.readReference = readReference;
         return Detail::ReadDataEnvelope(bytes, fileKey, label, type, registry, hooks, *m_state->logger);
@@ -951,7 +953,9 @@ namespace Fenrir
         slot =
             Detail::InsertAsset(table, Detail::AssetBox(value.release(), &Detail::DestroyAssetData<Detail::DataValue>),
                                 Detail::OwnerIdOf(m_state, owner), std::move(key));
-        m_state->Find(Detail::AssetKind::Data, slot)->typeName = registered->name;
+        Detail::AssetRecord& added = *m_state->Find(Detail::AssetKind::Data, slot);
+        added.typeName = registered->name;
+        added.firstTypeName = registered->name;
         return instance;
     }
 
@@ -1316,10 +1320,10 @@ namespace Fenrir
                                    KindName(Detail::AssetKind::Data), assetPath, problem);
         };
 
-        // The file is read as the type of what it holds now, asked for by the first entry the store has, so each
-        // handle to it reads the new value as the type it was loaded as.
+        // The file is read as the type its first entry the store has first held, so each handle to it reads the new
+        // value as the type it was loaded as.
         const std::string askedLabel = held.front().first;
-        const TypeDescription* asked = registry.Find(table.records[held.front().second].typeName);
+        const TypeDescription* asked = registry.Find(table.records[held.front().second].firstTypeName);
         const std::optional<std::vector<std::byte>> bytes = m_state->source->Read(assetPath);
         if (asked == nullptr || !bytes)
         {
@@ -1361,7 +1365,7 @@ namespace Fenrir
             for (const auto& [label, index] : held)
             {
                 const auto entry = entryOf(label);
-                const std::string_view was = table.records[index].typeName;
+                const std::string_view was = table.records[index].firstTypeName;
                 if (entry == read.entries.end())
                 {
                     if (label.empty() || fileHas(label))

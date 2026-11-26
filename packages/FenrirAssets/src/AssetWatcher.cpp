@@ -55,11 +55,6 @@ namespace Fenrir::Detail
         m_files.erase(key);
     }
 
-    bool AssetWatcher::Watches(const std::string& key) const
-    {
-        return m_files.contains(key);
-    }
-
     void AssetWatcher::Poll(ReloadWatcher::Clock::time_point now, ILogger& logger,
                             const std::function<void(const std::string& key, AssetKind kind)>& reload)
     {

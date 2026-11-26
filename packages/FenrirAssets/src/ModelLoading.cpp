@@ -72,7 +72,6 @@ namespace Fenrir
         {
             logger.Warn("Model '{}': {}", fileKey, warning);
         }
-        const Detail::OwnerId ownerId = owner;
 
         // Each sub-asset is stored under the file's key and its label. One already stored under it (the model was
         // unloaded, but its sub-assets live on) is shared instead of stored again.
@@ -81,10 +80,10 @@ namespace Fenrir
             std::string key = fileKey + '#' + std::string(label);
             if (const auto found = table.byKey.find(key); found != table.byKey.end())
             {
-                Detail::AddOwner(table.records[found->second], ownerId);
+                Detail::AddOwner(table.records[found->second], owner);
                 return Detail::AssetSlot{found->second, table.records[found->second].generation};
             }
-            return Detail::InsertAsset(table, std::move(data), ownerId, std::move(key));
+            return Detail::InsertAsset(table, std::move(data), owner, std::move(key));
         };
 
         // Images: decoded, or white in their place, then given the colour space of their first use.
@@ -263,8 +262,8 @@ namespace Fenrir
         }
 
         Detail::AssetBox data(new Model(std::move(model)), &Detail::DestroyAssetData<Model>);
-        Detail::InsertAsset(m_state->tables[static_cast<std::size_t>(Detail::AssetKind::Model)], std::move(data),
-                            ownerId, fileKey);
+        Detail::InsertAsset(m_state->tables[static_cast<std::size_t>(Detail::AssetKind::Model)], std::move(data), owner,
+                            fileKey);
         return {};
     }
 } // namespace Fenrir
