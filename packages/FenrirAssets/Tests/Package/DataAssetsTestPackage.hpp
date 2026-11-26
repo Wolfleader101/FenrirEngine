@@ -52,5 +52,7 @@ namespace AssetsTest
     struct ShieldData
     {
         float block = 0.5f;
+        /** @brief The sword the shield is made to parry: a sword, not any weapon. */
+        Fenrir::AssetHandle<Sword> parries;
     };
 } // namespace AssetsTest

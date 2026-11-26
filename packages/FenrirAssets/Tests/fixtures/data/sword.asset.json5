@@ -1,4 +1,4 @@
-// A sword, every field it has set but its two handles, which a later ticket resolves.
+// A sword, every field it has set but its two handles, which it leaves empty.
 {
   format: 1,
   type: "AssetsTest::Sword",
