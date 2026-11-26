@@ -13,6 +13,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "AssetSource.hpp"
@@ -69,6 +70,9 @@ namespace Fenrir::Detail
         // model's left-out units are: the located diagnostics, and whether the bridge read its fields in part.
         std::vector<Serialisation::Diagnostic> loadDiagnostics;
         bool loadIncomplete = false;
+        // For a data asset, each asset its references named when it loaded, by kind and slot: a later owner of the
+        // data asset owns them too, as a model's later owner owns its sub-assets.
+        std::vector<std::pair<AssetKind, AssetSlot>> references;
         // The problems already logged for this asset (a material's unknown parameter names, a data asset read as a
         // type it is not), so each is logged once. Cleared when the slot is freed, so the next asset starts afresh.
         std::unordered_set<std::string> logged;
@@ -111,6 +115,7 @@ namespace Fenrir::Detail
 
         /** @brief The live record `slot` names in `kind`'s table, or null. */
         [[nodiscard]] AssetRecord* Find(AssetKind kind, AssetSlot slot);
+        /** @brief The live record `slot` names in `kind`'s table, or null, read-only. */
         [[nodiscard]] const AssetRecord* Find(AssetKind kind, AssetSlot slot) const;
 
         /** @brief Frees the asset in `index` of `kind`'s table: its data, its path, and every handle to it. */

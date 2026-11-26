@@ -6,6 +6,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "FenrirAssets/AssetStore.hpp"
@@ -32,6 +33,8 @@ namespace Fenrir::Detail
         /** @brief The entry's type: the type expected, or one extending it, for the entry asked for; any data asset
          * type for the others. */
         const TypeDescription* type = nullptr;
+        /** @brief Each asset its references named, by kind and slot, in the order read: what its owners own too. */
+        std::vector<std::pair<AssetKind, AssetSlot>> references;
     };
 
     /**
@@ -65,6 +68,8 @@ namespace Fenrir::Detail
     /** @brief What a reference in a file names: the asset, or why it names none. */
     struct ReferenceRead
     {
+        /** @brief The target's kind, which the store's table of its slot is. */
+        AssetKind kind = AssetKind::Data;
         /** @brief The target's slot, or the empty handle when `problem` says why there is none. */
         ReferenceValue value;
         /**

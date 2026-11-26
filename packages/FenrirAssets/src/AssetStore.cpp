@@ -46,14 +46,30 @@ namespace Fenrir
         using Detail::Utf8Path;
         using Detail::Utf8Text;
 
-        // The words log messages use for each kind, in AssetKind's order.
-        constexpr std::array<std::string_view, Detail::AssetKindCount> kindNames = {
-            "mesh", "image",     "material",      "shader", "model",     "skeleton",
-            "clip", "bone mask", "instance list", "font",   "data asset"};
+        // How each kind is named, in AssetKind's order: the word log messages use, and the target a description
+        // names its handle by (`AssetHandle<Image>`'s is `Fenrir::Image`). A data asset's target is its own type's.
+        struct KindNames
+        {
+            std::string_view word;
+            std::string_view target;
+        };
+        constexpr std::array<KindNames, Detail::AssetKindCount> kindNames = {{
+            {"mesh", "Fenrir::Mesh"},
+            {"image", "Fenrir::Image"},
+            {"material", "Fenrir::Material"},
+            {"shader", "Fenrir::Shader"},
+            {"model", "Fenrir::Model"},
+            {"skeleton", "Fenrir::Skeleton"},
+            {"clip", "Fenrir::Clip"},
+            {"bone mask", "Fenrir::BoneMask"},
+            {"instance list", "Fenrir::InstanceList"},
+            {"font", "Fenrir::Font"},
+            {"data asset", {}},
+        }};
 
         std::string_view KindName(Detail::AssetKind kind)
         {
-            return kindNames[static_cast<std::size_t>(kind)];
+            return kindNames[static_cast<std::size_t>(kind)].word;
         }
 
         Detail::AssetTable& TableOf(Detail::AssetStoreState& state, Detail::AssetKind kind)
@@ -295,6 +311,7 @@ namespace Fenrir
             record.typeName = {};
             record.loadDiagnostics.clear();
             record.loadIncomplete = false;
+            record.references.clear();
             record.logged.clear();
             // Generation zero is the empty handle's, so a slot that wraps around skips it.
             if (++record.generation == 0)
@@ -306,16 +323,13 @@ namespace Fenrir
 
         std::optional<AssetKind> KindOfTarget(std::string_view target)
         {
-            // In AssetKind's order, as a description names each kind's handle target.
-            constexpr std::array<std::string_view, AssetKindCount - 1> targets = {
-                "Fenrir::Mesh",     "Fenrir::Image", "Fenrir::Material", "Fenrir::Shader",       "Fenrir::Model",
-                "Fenrir::Skeleton", "Fenrir::Clip",  "Fenrir::BoneMask", "Fenrir::InstanceList", "Fenrir::Font"};
-            const auto found = std::ranges::find(targets, target);
-            if (found == targets.end())
+            const auto found = std::ranges::find_if(
+                kindNames, [&](const KindNames& names) { return !names.target.empty() && names.target == target; });
+            if (found == kindNames.end())
             {
                 return std::nullopt;
             }
-            return static_cast<AssetKind>(std::distance(targets.begin(), found));
+            return static_cast<AssetKind>(std::distance(kindNames.begin(), found));
         }
 
         std::optional<std::string> PathOf(const AssetStoreState& state, AssetKind kind, AssetSlot slot)
@@ -595,7 +609,7 @@ namespace Fenrir
                                                                 record.typeName, type.name));
             }
             const Detail::OwnerId ownerId = Detail::OwnerIdOf(m_state, owner);
-            Detail::AddOwner(record, ownerId);
+            ShareData(loaded->second, ownerId);
             // Loading a file's top level loads its sub-assets for the same owner, as a model's are (ADR-0076).
             if (!resolved.labelled)
             {
@@ -604,7 +618,7 @@ namespace Fenrir
                 {
                     if (key.starts_with(prefix))
                     {
-                        Detail::AddOwner(table.records[index], ownerId);
+                        ShareData(index, ownerId);
                     }
                 }
             }
@@ -628,11 +642,14 @@ namespace Fenrir
             const std::string target =
                 reference.starts_with('#') ? *assetPath + std::string(reference) : std::string(reference);
             const std::string_view targetFile = std::string_view(target).substr(0, target.rfind('#'));
-            const auto refuse = [](std::string problem) { return Detail::ReferenceRead{{}, std::move(problem)}; };
+            const auto refuse = [](std::string problem) {
+                return Detail::ReferenceRead{Detail::AssetKind::Data, {}, std::move(problem)};
+            };
             // The target's load logs nothing of its own: the problem is reported once, at the path in this file.
             std::optional<LoadDiagnostic> failure;
             Detail::AssetSlot slot;
             std::string expected;
+            Detail::AssetKind targetKind = Detail::AssetKind::Data;
 
             if (const std::optional<Detail::AssetKind> kind = Detail::KindOfTarget(field.type.target))
             {
@@ -644,6 +661,7 @@ namespace Fenrir
                     return refuse(std::format("expected {}, found a data asset's `.json5` envelope", expected));
                 }
                 std::vector<std::string> failedUnits;
+                targetKind = *kind;
                 m_state->quietNextLoad = true;
                 slot = LoadSlot(*kind, target, owner, failure, failedUnits);
             }
@@ -685,7 +703,7 @@ namespace Fenrir
 
             if (!failure)
             {
-                return {{slot.index, slot.generation}, {}};
+                return {targetKind, {slot.index, slot.generation}, {}};
             }
             if (failure->reason == LoadFailure::FileNotFound)
             {
@@ -736,13 +754,17 @@ namespace Fenrir
             if (const auto found = table.byKey.find(key); found != table.byKey.end())
             {
                 Detail::AssetRecord& record = table.records[found->second];
-                Detail::AddOwner(record, ownerId);
                 slot = {found->second, record.generation};
                 if (record.data == nullptr)
                 {
                     record.data = std::move(stored.value);
                     record.loadDiagnostics = diagnostics;
                     record.loadIncomplete = incomplete;
+                    record.references = std::move(stored.references);
+                }
+                else
+                {
+                    ShareData(found->second, ownerId);
                 }
             }
             else
@@ -752,6 +774,7 @@ namespace Fenrir
                 record.typeName = stored.type->name;
                 record.loadDiagnostics = diagnostics;
                 record.loadIncomplete = incomplete;
+                record.references = std::move(stored.references);
             }
             if (entry == read.requested)
             {
@@ -759,6 +782,31 @@ namespace Fenrir
             }
         }
         return requested;
+    }
+
+    void AssetStore::ShareData(std::uint32_t index, std::uint32_t owner)
+    {
+        // Each asset is visited once, so references that form a cycle end.
+        std::vector<std::pair<Detail::AssetKind, std::uint32_t>> visited;
+        const auto share = [&](const auto& self, Detail::AssetKind kind, Detail::AssetSlot slot) -> void {
+            Detail::AssetRecord* record = m_state->Find(kind, slot);
+            if (record == nullptr || std::ranges::find(visited, std::pair(kind, slot.index)) != visited.end())
+            {
+                return;
+            }
+            visited.emplace_back(kind, slot.index);
+            Detail::AddOwner(*record, owner);
+            if (kind == Detail::AssetKind::Model && record->data != nullptr)
+            {
+                ShareModel(*static_cast<const Model*>(record->data.get()), owner);
+            }
+            for (const auto& [targetKind, target] : record->references)
+            {
+                self(self, targetKind, target);
+            }
+        };
+        const Detail::AssetRecord& record = TableOf(*m_state, Detail::AssetKind::Data).records[index];
+        share(share, Detail::AssetKind::Data, {index, record.generation});
     }
 
     Detail::AssetSlot AssetStore::AddSlot(Detail::AssetKind kind, Detail::AssetBox data, AssetOwner owner)

@@ -669,6 +669,8 @@ namespace Fenrir
         [[nodiscard]] std::string ImportModelFile(const std::filesystem::path& file, const std::string& fileKey,
                                                   AssetOwner owner);
         void ShareModel(const Model& model, std::uint32_t owner);
+        /** @brief Adds `owner` to the data asset in slot `index`, and to every asset its references loaded, in turn. */
+        void ShareData(std::uint32_t index, std::uint32_t owner);
         bool ReplaceSlot(Detail::AssetKind kind, Detail::AssetSlot slot, Detail::AssetBox data);
         bool UnloadSlot(Detail::AssetKind kind, Detail::AssetSlot slot);
         [[nodiscard]] const void* Find(Detail::AssetKind kind, Detail::AssetSlot slot) const;

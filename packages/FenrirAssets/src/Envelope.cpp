@@ -141,15 +141,19 @@ namespace Fenrir::Detail
             }
         }
 
-        // A reference path the file names that is left empty, refused by the path rules or naming no fitting target:
-        // where its text is, which field held it, and why.
-        struct RefusedPath
+        // A reference the file names that is left empty, refused by the path rules or naming no fitting target: where
+        // its text is, so its error is located at its string, and the error's message.
+        struct EmptiedReference
         {
             const char* text = nullptr;
-            std::string path;
-            std::string field;
-            std::string problem;
+            std::string message;
         };
+
+        // How a diagnostic about the entry `name` starts: the sub-asset's name, or nothing for the file's top level.
+        std::string EntryPrefix(std::string_view name)
+        {
+            return name.empty() ? std::string() : std::format("sub-asset `{}`: ", name);
+        }
 
         // Whether `part`, one name of a path, is a drive (`C:`), as a Windows path's first is.
         bool IsDrive(std::string_view part)
@@ -227,6 +231,7 @@ namespace Fenrir::Detail
         {
             AssetBox value{nullptr, nullptr};
             bool incomplete = false;
+            std::vector<std::pair<AssetKind, AssetSlot>> references;
         };
 
         // Checks one entry, the sub-asset `name` or the top level when it is empty: its `type`, `version` and `data`.
@@ -236,7 +241,7 @@ namespace Fenrir::Detail
         EntryCheck CheckEntry(const EnvelopeReader& reader, Ser::Object& entry, const Ser::Value& at,
                               std::string_view name, const TypeDescription* expected)
         {
-            const std::string where = name.empty() ? std::string() : std::format("sub-asset `{}`: ", name);
+            const std::string where = EntryPrefix(name);
             EntryCheck read{.name = std::string(name)};
             const auto fail = [&](LoadFailure reason, const Ser::Value* node, std::string message) -> EntryCheck {
                 Ser::Diagnostic diagnostic = LocatedAt(Ser::DiagnosticSeverity::Error, reader.path, node, at,
@@ -300,7 +305,7 @@ namespace Fenrir::Detail
         // references named through the store's hook. Every diagnostic goes into the reader's, each logged once.
         EntryRead FillEntry(const EnvelopeReader& reader, const EntryCheck& entry)
         {
-            const std::string where = entry.name.empty() ? std::string() : std::format("sub-asset `{}`: ", entry.name);
+            const std::string where = EntryPrefix(entry.name);
             Ser::Value& data = *entry.data;
             Ser::UpgradeResult upgraded =
                 Ser::Upgrade(reader.registry, entry.type->name, entry.version, data, reader.path, reader.logger);
@@ -311,16 +316,19 @@ namespace Fenrir::Detail
             // bridge counts one. A target the store finds none for, or one of the wrong kind or type, is left empty
             // with one located error saying what was expected and what was found. No entity callbacks are given: a
             // data asset holds no entity (ADR-0075).
-            std::vector<RefusedPath> refused;
-            std::vector<RefusedPath> unnamed;
+            std::vector<EmptiedReference> emptied;
+            std::vector<std::pair<AssetKind, AssetSlot>> named;
             bool unresolved = false;
             Ser::Resolvers checked;
             checked.readReference = [&](std::string_view reference,
                                         const FieldInfo& field) -> std::optional<ReferenceValue> {
                 if (std::optional<std::string> problem = FilePathProblem(reference))
                 {
-                    refused.push_back(
-                        {reference.data(), std::string(reference), std::string(field.name), std::move(*problem)});
+                    emptied.push_back(
+                        {reference.data(),
+                         std::format("{}expected `{}` to name an asset path under the asset root, found \"{}\", which "
+                                     "{}; it is left empty",
+                                     where, field.name, reference, *problem)});
                     return ReferenceValue{};
                 }
                 if (!reader.hooks.readReference)
@@ -328,36 +336,28 @@ namespace Fenrir::Detail
                     unresolved = true;
                     return ReferenceValue{};
                 }
-                ReferenceRead named = reader.hooks.readReference(reference, field);
-                if (!named.problem.empty())
+                ReferenceRead target = reader.hooks.readReference(reference, field);
+                if (!target.problem.empty())
                 {
-                    unnamed.push_back(
-                        {reference.data(), std::string(reference), std::string(field.name), std::move(named.problem)});
+                    emptied.push_back({reference.data(), std::format("{}`{}` names \"{}\": {}; it is left empty", where,
+                                                                     field.name, reference, target.problem)});
                     return ReferenceValue{};
                 }
-                return named.value;
+                named.emplace_back(target.kind, AssetSlot{target.value.index, target.value.generation});
+                return target.value;
             };
 
             auto instance = std::make_unique<DataValue>(*entry.type);
             Ser::BridgeResult bridged =
                 Ser::FromTree(data, *entry.type, reader.registry, checked, instance->value, reader.path, reader.logger);
             Append(reader.diagnostics, std::move(bridged.diagnostics));
-            for (const RefusedPath& refusal : refused)
+            for (EmptiedReference& reference : emptied)
             {
-                reader.Report(LocatedAt(
-                    Ser::DiagnosticSeverity::Error, reader.path, StringAt(data, refusal.text), data,
-                    std::format("{}expected `{}` to name an asset path under the asset root, found \"{}\", which {}; "
-                                "it is left empty",
-                                where, refusal.field, refusal.path, refusal.problem)));
-            }
-            for (const RefusedPath& target : unnamed)
-            {
-                reader.Report(LocatedAt(Ser::DiagnosticSeverity::Error, reader.path, StringAt(data, target.text), data,
-                                        std::format("{}`{}` names \"{}\": {}; it is left empty", where, target.field,
-                                                    target.path, target.problem)));
+                reader.Report(LocatedAt(Ser::DiagnosticSeverity::Error, reader.path, StringAt(data, reference.text),
+                                        data, std::move(reference.message)));
             }
             return {AssetBox(instance.release(), &DestroyAssetData<DataValue>),
-                    bridged.status == Ser::BridgeStatus::Partial || unresolved};
+                    bridged.status == Ser::BridgeStatus::Partial || unresolved, std::move(named)};
         }
 
         // Why `name` cannot name a sub-asset, or none: Load splits a path at its last `#`, so no path names a
@@ -513,7 +513,7 @@ namespace Fenrir::Detail
         {
             EntryRead filled = FillEntry(reader, check);
             read.incomplete = read.incomplete || filled.incomplete;
-            read.entries.push_back({check.name, std::move(filled.value), check.type});
+            read.entries.push_back({check.name, std::move(filled.value), check.type, std::move(filled.references)});
         }
         return read;
     }

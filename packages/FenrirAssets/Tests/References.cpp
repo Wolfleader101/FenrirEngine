@@ -102,8 +102,49 @@ TEST_CASE("Two files referencing each other both load, each handle resolving to 
             dawn->upgradesTo);
 }
 
-TEST_CASE("A missing target leaves its handle empty, with one located diagnostic, and the load Partial",
-          "[assets][data][references]")
+TEST_CASE("A later owner of a data asset owns the image it names too", "[assets][data][references][owners]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+    Fenrir::Scene& first = test.app.CreateScene("First");
+    Fenrir::Scene& second = test.app.CreateScene("Second");
+    const Fenrir::LoadResult<Sword> loaded = test.store.Load<Sword>(IconedSword, first);
+    const Sword* sword = test.store.TryGet(loaded.handle);
+    INFO("the sword and its icon load for the first scene");
+    REQUIRE(sword != nullptr);
+    const Fenrir::AssetHandle<Fenrir::Image> icon = sword->icon;
+    REQUIRE(test.store.Load<Sword>(IconedSword, second).handle == loaded.handle);
+
+    test.app.DestroyScene("First");
+
+    INFO("the second scene owns the sword and its icon, so both live on");
+    REQUIRE(test.store.IsValid(loaded.handle));
+    REQUIRE(test.store.IsValid(icon));
+}
+
+TEST_CASE("A later owner of one of two files naming each other owns both", "[assets][data][references][owners]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+    Fenrir::Scene& first = test.app.CreateScene("First");
+    Fenrir::Scene& second = test.app.CreateScene("Second");
+    const Fenrir::LoadResult<WeaponData> dawn = test.store.Load<WeaponData>("data/pair-first.asset.json5", first);
+    const WeaponData* weapon = test.store.TryGet(dawn.handle);
+    INFO("the pair loads for the first scene");
+    REQUIRE(weapon != nullptr);
+    const Fenrir::AssetHandle<WeaponData> dusk = weapon->upgradesTo;
+    REQUIRE(test.store.Load<WeaponData>("data/pair-first.asset.json5", second).handle == dawn.handle);
+
+    test.app.DestroyScene("First");
+
+    INFO("the second scene owns both, through the cycle, so both live on");
+    REQUIRE(test.store.IsValid(dawn.handle));
+    REQUIRE(test.store.IsValid(dusk));
+}
+
+TEST_CASE("A missing target leaves its handle empty, and the load Partial", "[assets][data][references]")
 {
     DataApp test;
     INFO("the test package's data asset types register");
@@ -117,6 +158,18 @@ TEST_CASE("A missing target leaves its handle empty, with one located diagnostic
     const WeaponData* weapon = test.store.TryGet(loaded.handle);
     REQUIRE(weapon != nullptr);
     REQUIRE(weapon->upgradesTo.IsEmpty());
+}
+
+TEST_CASE("A missing target has one located diagnostic naming the file, field, path, expected and found",
+          "[assets][data][references]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+
+    const Fenrir::LoadResult<WeaponData> loaded =
+        test.store.Load<WeaponData>("data/missing-upgrade.asset.json5", Fenrir::AssetOwner::App());
+
     INFO("one diagnostic, at the path's string, names the file, field, path, expected and found");
     REQUIRE(loaded.diagnostics.size() == 1);
     const Fenrir::Serialisation::Diagnostic& missing = loaded.diagnostics.front();
@@ -147,8 +200,7 @@ TEST_CASE("A missing target is logged once, by the file that names it", "[assets
     REQUIRE(CountContaining(*test.errors, "data/no-such-weapon.asset.json5") == 1);
 }
 
-TEST_CASE("An image in a weapon field leaves its handle empty, with one located diagnostic, and the load Partial",
-          "[assets][data][references]")
+TEST_CASE("An image in a weapon field leaves its handle empty, and the load Partial", "[assets][data][references]")
 {
     DataApp test;
     INFO("the test package's data asset types register");
@@ -162,6 +214,18 @@ TEST_CASE("An image in a weapon field leaves its handle empty, with one located 
     const WeaponData* weapon = test.store.TryGet(loaded.handle);
     REQUIRE(weapon != nullptr);
     REQUIRE(weapon->upgradesTo.IsEmpty());
+}
+
+TEST_CASE("An image in a weapon field has one located diagnostic naming the file, field, path, expected and found",
+          "[assets][data][references]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+
+    const Fenrir::LoadResult<WeaponData> loaded =
+        test.store.Load<WeaponData>("data/image-upgrade.asset.json5", Fenrir::AssetOwner::App());
+
     INFO("one diagnostic, at the path's string, names the file, field, path, expected and found");
     REQUIRE(loaded.diagnostics.size() == 1);
     const Fenrir::Serialisation::Diagnostic& wrong = loaded.diagnostics.front();
@@ -173,8 +237,23 @@ TEST_CASE("An image in a weapon field leaves its handle empty, with one located 
     REQUIRE(wrong.message.find("\"fourbytwo.png\"") != std::string::npos);
     REQUIRE(wrong.message.find("`AssetsTest::WeaponData`") != std::string::npos);
     REQUIRE(wrong.message.find("found a `.png` file") != std::string::npos);
-    INFO("the image is not loaded for it");
+}
+
+TEST_CASE("An image in a weapon field is not loaded for it, and its problem is logged once",
+          "[assets][data][references]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+
+    const Fenrir::LoadResult<WeaponData> loaded =
+        test.store.Load<WeaponData>("data/image-upgrade.asset.json5", Fenrir::AssetOwner::App());
+    INFO("the weapon loads in part");
+    REQUIRE(loaded.Ok());
+
+    INFO("the one error is the located diagnostic, and the image is not loaded");
     REQUIRE(test.errors->size() == 1);
+    REQUIRE(CountContaining(*test.errors, "fourbytwo.png") == 1);
 }
 
 TEST_CASE("A weapon field resolves a sword file, a sword being a weapon", "[assets][data][references]")
