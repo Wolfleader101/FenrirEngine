@@ -1,0 +1,10 @@
+// An axe that upgrades to the sword.
+{
+  format: 1,
+  type: "AssetsTest::WeaponData",
+  version: 1,
+  data: {
+    displayName: "Axe",
+    upgradesTo: "weapons/sword.asset.json5",
+  },
+}

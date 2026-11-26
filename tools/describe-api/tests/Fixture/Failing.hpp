@@ -353,4 +353,33 @@ namespace Failing
     {
         Base base;
     };
+
+    /** @brief A data asset holding an entity, which no data asset may: a data asset is not in a scene. */
+    struct TargetingAsset
+    {
+        Fenrir::Entity target;
+    };
+
+    struct Slot
+    {
+        Fenrir::Entity target;
+    };
+
+    /** @brief A data asset reaching an entity through a list of nested structs. */
+    struct Spawner
+    {
+        std::vector<Slot> slots;
+    };
+
+    /** @brief A component holding an entity, which a component may. */
+    struct Anchored
+    {
+        Fenrir::Entity anchor;
+    };
+
+    /** @brief A data asset holding that component by value, and with it the entity. */
+    struct HoldsAnchored
+    {
+        Anchored anchored;
+    };
 } // namespace Failing

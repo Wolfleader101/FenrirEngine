@@ -15,9 +15,9 @@
 
 **Touches:** `packages/FenrirAssets/` (`src/AssetStore.cpp`, `src/Envelope.cpp`, `src/AssetStoreState.hpp`, `Tests/` (a new `References.cpp`, and fixtures: a pair referencing each other, a reference to a missing file, a `.png` referenced from an `AssetHandle<WeaponData>` field, an `AssetHandle<Image>` to a real image))
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A sword's `AssetHandle<Image>` loads its image with the sword's owner, and the image frees with that owner.
-- [ ] Two files referencing each other both load, each handle resolving to the other.
-- [ ] A missing target and a `.png` in an `AssetHandle<WeaponData>` field each leave the handle empty, with one located diagnostic naming the file, field, path, expected and found, and the load `Partial`.
-- [ ] An `AssetHandle<WeaponData>` pointing at a `Sword` file resolves, while an `AssetHandle<Sword>` pointing at a plain `WeaponData` file does not.
+- [x] A sword's `AssetHandle<Image>` loads its image with the sword's owner, and the image frees with that owner.
+- [x] Two files referencing each other both load, each handle resolving to the other.
+- [x] A missing target and a `.png` in an `AssetHandle<WeaponData>` field each leave the handle empty, with one located diagnostic naming the file, field, path, expected and found, and the load `Partial`.
+- [x] An `AssetHandle<WeaponData>` pointing at a `Sword` file resolves, while an `AssetHandle<Sword>` pointing at a plain `WeaponData` file does not.

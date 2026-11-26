@@ -17,11 +17,13 @@ namespace Fenrir::Generated::DataAssetsTestPackageTypes
     // AssetsTest::ShieldData
     constexpr Fenrir::FieldInfo AssetsTest_ShieldData_Fields[] = {
         {.name = "block", .type = {.kind = Fenrir::Kind::F32}},
+        {.name = "parries", .type = {.kind = Fenrir::Kind::Reference, .target = "AssetsTest::Sword"}, .doc = "The sword the shield is made to parry: a sword, not any weapon."},
     };
     void AssetsTest_ShieldData_Visit(void* instance, Fenrir::FieldVisitor& visitor)
     {
         auto& value = *static_cast<AssetsTest::ShieldData*>(instance);
         visitor.Field(AssetsTest_ShieldData_Fields[0], Fenrir::ValueRef(&value.block, AssetsTest_ShieldData_Fields[0].type));
+        visitor.Field(AssetsTest_ShieldData_Fields[1], Fenrir::ValueRef(&value.parries, AssetsTest_ShieldData_Fields[1].type));
     }
     constexpr Fenrir::TypeDescription AssetsTest_ShieldData{
         .name = "AssetsTest::ShieldData",
@@ -111,6 +113,91 @@ namespace Fenrir::Generated::DataAssetsTestPackageTypes
         .fields = AssetsTest_Sword_Fields,
         .visit = &AssetsTest_Sword_Visit,
     };
+
+    // MyGame::ParticleEffect
+    constexpr Fenrir::FieldInfo MyGame_ParticleEffect_Fields[] = {
+        {.name = "texture", .type = {.kind = Fenrir::Kind::Path}},
+        {.name = "count", .type = {.kind = Fenrir::Kind::I32}},
+        {.name = "lifetime", .type = {.kind = Fenrir::Kind::F32}},
+    };
+    void MyGame_ParticleEffect_Visit(void* instance, Fenrir::FieldVisitor& visitor)
+    {
+        auto& value = *static_cast<MyGame::ParticleEffect*>(instance);
+        visitor.Field(MyGame_ParticleEffect_Fields[0], Fenrir::ValueRef(&value.texture, MyGame_ParticleEffect_Fields[0].type));
+        visitor.Field(MyGame_ParticleEffect_Fields[1], Fenrir::ValueRef(&value.count, MyGame_ParticleEffect_Fields[1].type));
+        visitor.Field(MyGame_ParticleEffect_Fields[2], Fenrir::ValueRef(&value.lifetime, MyGame_ParticleEffect_Fields[2].type));
+    }
+    constexpr Fenrir::TypeDescription MyGame_ParticleEffect{
+        .name = "MyGame::ParticleEffect",
+        .package = "DataAssetsTestPackage",
+        .role = Fenrir::Role::DataAsset,
+        .size = sizeof(MyGame::ParticleEffect),
+        .alignment = alignof(MyGame::ParticleEffect),
+        .construct = &Fenrir::ConstructValue<MyGame::ParticleEffect>,
+        .destroy = &Fenrir::DestroyValue<MyGame::ParticleEffect>,
+        .doc = "The golden sword's sub-asset.",
+        .fields = MyGame_ParticleEffect_Fields,
+        .visit = &MyGame_ParticleEffect_Visit,
+    };
+
+    // MyGame::Upgrade
+    static_assert(sizeof(MyGame::Upgrade) == 12 && alignof(MyGame::Upgrade) == 4,
+                  "MyGame::Upgrade is not the layout DataAssetsTestPackage.api.json describes: regenerate the description, then this registration");
+    constexpr Fenrir::FieldInfo MyGame_Upgrade_Fields[] = {
+        {.name = "level", .type = {.kind = Fenrir::Kind::I32}, .offset = 0},
+        {.name = "cost", .type = {.kind = Fenrir::Kind::I32}, .offset = 4},
+        {.name = "damageBonus", .type = {.kind = Fenrir::Kind::F32}, .offset = 8},
+    };
+    constexpr Fenrir::TypeDescription MyGame_Upgrade{
+        .name = "MyGame::Upgrade",
+        .package = "DataAssetsTestPackage",
+        .role = Fenrir::Role::Nested,
+        .size = sizeof(MyGame::Upgrade),
+        .alignment = alignof(MyGame::Upgrade),
+        .construct = &Fenrir::ConstructValue<MyGame::Upgrade>,
+        .destroy = &Fenrir::DestroyValue<MyGame::Upgrade>,
+        .doc = "One row of a sword's upgrade table.",
+        .fields = MyGame_Upgrade_Fields,
+    };
+
+    // MyGame::Sword
+    constexpr Fenrir::ValueType MyGame_Sword_tags_Element{.kind = Fenrir::Kind::String};
+    constexpr Fenrir::ValueType MyGame_Sword_upgrades_Element{.kind = Fenrir::Kind::Struct, .type = &MyGame_Upgrade};
+    constexpr Fenrir::FieldInfo MyGame_Sword_Fields[] = {
+        {.name = "displayName", .type = {.kind = Fenrir::Kind::String}},
+        {.name = "description", .type = {.kind = Fenrir::Kind::String}},
+        {.name = "damage", .type = {.kind = Fenrir::Kind::F32}},
+        {.name = "durability", .type = {.kind = Fenrir::Kind::F32}},
+        {.name = "mesh", .type = {.kind = Fenrir::Kind::String}},
+        {.name = "tags", .type = {.kind = Fenrir::Kind::List, .element = &MyGame_Sword_tags_Element, .list = &Fenrir::ListOperationsOf<decltype(MyGame::Sword::tags)::value_type>}},
+        {.name = "upgrades", .type = {.kind = Fenrir::Kind::List, .element = &MyGame_Sword_upgrades_Element, .list = &Fenrir::ListOperationsOf<decltype(MyGame::Sword::upgrades)::value_type>}},
+        {.name = "onHit", .type = {.kind = Fenrir::Kind::String}},
+    };
+    void MyGame_Sword_Visit(void* instance, Fenrir::FieldVisitor& visitor)
+    {
+        auto& value = *static_cast<MyGame::Sword*>(instance);
+        visitor.Field(MyGame_Sword_Fields[0], Fenrir::ValueRef(&value.displayName, MyGame_Sword_Fields[0].type));
+        visitor.Field(MyGame_Sword_Fields[1], Fenrir::ValueRef(&value.description, MyGame_Sword_Fields[1].type));
+        visitor.Field(MyGame_Sword_Fields[2], Fenrir::ValueRef(&value.damage, MyGame_Sword_Fields[2].type));
+        visitor.Field(MyGame_Sword_Fields[3], Fenrir::ValueRef(&value.durability, MyGame_Sword_Fields[3].type));
+        visitor.Field(MyGame_Sword_Fields[4], Fenrir::ValueRef(&value.mesh, MyGame_Sword_Fields[4].type));
+        visitor.Field(MyGame_Sword_Fields[5], Fenrir::ValueRef(&value.tags, MyGame_Sword_Fields[5].type));
+        visitor.Field(MyGame_Sword_Fields[6], Fenrir::ValueRef(&value.upgrades, MyGame_Sword_Fields[6].type));
+        visitor.Field(MyGame_Sword_Fields[7], Fenrir::ValueRef(&value.onHit, MyGame_Sword_Fields[7].type));
+    }
+    constexpr Fenrir::TypeDescription MyGame_Sword{
+        .name = "MyGame::Sword",
+        .package = "DataAssetsTestPackage",
+        .role = Fenrir::Role::DataAsset,
+        .version = 2,
+        .size = sizeof(MyGame::Sword),
+        .alignment = alignof(MyGame::Sword),
+        .construct = &Fenrir::ConstructValue<MyGame::Sword>,
+        .destroy = &Fenrir::DestroyValue<MyGame::Sword>,
+        .doc = "The golden sword: `description` is declared but the golden leaves it at its default, and `mesh` and `onHit` are plain strings, as the golden's types have them.",
+        .fields = MyGame_Sword_Fields,
+        .visit = &MyGame_Sword_Visit,
+    };
 } // namespace Fenrir::Generated::DataAssetsTestPackageTypes
 
 const Fenrir::TypeDescription& Fenrir::Describe<AssetsTest::ShieldData>::Description() noexcept
@@ -133,6 +220,21 @@ const Fenrir::TypeDescription& Fenrir::Describe<AssetsTest::Sword>::Description(
     return Fenrir::Generated::DataAssetsTestPackageTypes::AssetsTest_Sword;
 }
 
+const Fenrir::TypeDescription& Fenrir::Describe<MyGame::ParticleEffect>::Description() noexcept
+{
+    return Fenrir::Generated::DataAssetsTestPackageTypes::MyGame_ParticleEffect;
+}
+
+const Fenrir::TypeDescription& Fenrir::Describe<MyGame::Upgrade>::Description() noexcept
+{
+    return Fenrir::Generated::DataAssetsTestPackageTypes::MyGame_Upgrade;
+}
+
+const Fenrir::TypeDescription& Fenrir::Describe<MyGame::Sword>::Description() noexcept
+{
+    return Fenrir::Generated::DataAssetsTestPackageTypes::MyGame_Sword;
+}
+
 bool Fenrir::Generated::RegisterDataAssetsTestPackageTypes(Fenrir::TypeRegistry& registry)
 {
     bool registered = true;
@@ -147,6 +249,12 @@ bool Fenrir::Generated::RegisterDataAssetsTestPackageTypes(Fenrir::TypeRegistry&
         registered = registry.Register(DataAssetsTestPackageTypes::AssetsTest_WeaponData) && registered;
     if (registry.Find(DataAssetsTestPackageTypes::AssetsTest_Sword.name) != &DataAssetsTestPackageTypes::AssetsTest_Sword)
         registered = registry.Register(DataAssetsTestPackageTypes::AssetsTest_Sword) && registered;
+    if (registry.Find(DataAssetsTestPackageTypes::MyGame_ParticleEffect.name) != &DataAssetsTestPackageTypes::MyGame_ParticleEffect)
+        registered = registry.Register(DataAssetsTestPackageTypes::MyGame_ParticleEffect) && registered;
+    if (registry.Find(DataAssetsTestPackageTypes::MyGame_Upgrade.name) != &DataAssetsTestPackageTypes::MyGame_Upgrade)
+        registered = registry.Register(DataAssetsTestPackageTypes::MyGame_Upgrade) && registered;
+    if (registry.Find(DataAssetsTestPackageTypes::MyGame_Sword.name) != &DataAssetsTestPackageTypes::MyGame_Sword)
+        registered = registry.Register(DataAssetsTestPackageTypes::MyGame_Sword) && registered;
     return registered;
 }
 

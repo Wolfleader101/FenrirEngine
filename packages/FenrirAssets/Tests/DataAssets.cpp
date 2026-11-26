@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -317,25 +318,6 @@ TEST_CASE("A data asset file of another format version fails", "[assets][data]")
     REQUIRE(format->line == 3);
 }
 
-TEST_CASE("A data asset file's sub-assets are not read yet, with a warning", "[assets][data]")
-{
-    DataApp test;
-    INFO("the test package's data asset types register");
-    REQUIRE(test.registered);
-
-    const Fenrir::LoadResult<Sword> loaded =
-        test.store.Load<Sword>("data/with-sub.asset.json5", Fenrir::AssetOwner::App());
-
-    INFO("the sword's data loads, and the load is partial with one warning about `sub`");
-    REQUIRE(loaded.Status() == Fenrir::LoadStatus::Partial);
-    const Sword* sword = test.store.TryGet(loaded.handle);
-    REQUIRE(sword != nullptr);
-    REQUIRE(sword->displayName == "Sheathed sword");
-    REQUIRE(loaded.diagnostics.size() == 1);
-    REQUIRE(loaded.diagnostics.front().severity == Fenrir::Serialisation::DiagnosticSeverity::Warning);
-    REQUIRE(CountContaining(*test.warnings, "sub") == 1);
-}
-
 TEST_CASE("A data asset owned by a scene is freed with the scene", "[assets][data][owners]")
 {
     DataApp test;
@@ -408,5 +390,176 @@ TEST_CASE("TryGet of a data asset as a type it is not is logged once per handle"
     (void)test.store.TryGet(asSword);
 
     INFO("the mismatch is logged the first time only");
+    REQUIRE(CountContaining(*test.errors, "AssetsTest::Sword") == 1);
+}
+
+namespace
+{
+    // A sword made in code, not read from a file.
+    Sword Rapier()
+    {
+        Sword rapier;
+        rapier.displayName = "Rapier";
+        rapier.tags = {"blade", "thin"};
+        rapier.stats.damage = 18.0f;
+        rapier.edge = 0.8f;
+        return rapier;
+    }
+} // namespace
+
+TEST_CASE("A data asset added with no name reads its value and has no path", "[assets][data][add]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+
+    const Fenrir::AssetHandle<Sword> handle = test.store.Add<Sword>(Rapier(), Fenrir::AssetOwner::App());
+
+    const Sword* sword = test.store.TryGet(handle);
+    INFO("the added sword reads back what it was given, at revision 1");
+    REQUIRE(sword != nullptr);
+    REQUIRE(sword->displayName == "Rapier");
+    REQUIRE(sword->tags == std::vector<std::string>{"blade", "thin"});
+    REQUIRE_THAT(sword->edge, WithinAbs(0.8f, 0.0f));
+    REQUIRE(test.store.Revision(handle) == 1);
+    INFO("with no name it has no asset path");
+    REQUIRE_FALSE(test.store.PathOf(handle).has_value());
+}
+
+TEST_CASE("A data asset added with a name has that name as its path", "[assets][data][add]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+
+    const Fenrir::AssetHandle<Sword> handle =
+        test.store.Add<Sword>(Rapier(), Fenrir::AssetOwner::App(), "data/rapier.asset.json5");
+
+    INFO("the named sword resolves, and PathOf gives its name");
+    REQUIRE(test.store.TryGet(handle) != nullptr);
+    REQUIRE(test.store.PathOf(handle) == std::optional<std::string>("data/rapier.asset.json5"));
+}
+
+TEST_CASE("Loading the name of a data asset added with it gives the added asset", "[assets][data][add]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+    const Fenrir::AssetHandle<Sword> added =
+        test.store.Add<Sword>(Rapier(), Fenrir::AssetOwner::App(), "data/rapier.asset.json5");
+
+    const Fenrir::LoadResult<WeaponData> loaded =
+        test.store.Load<WeaponData>("data/rapier.asset.json5", Fenrir::AssetOwner::App());
+
+    INFO("the name is deduplicated like a loaded file's path, so no file is read: " << loaded.diagnostics.size());
+    REQUIRE(loaded.Status() == Fenrir::LoadStatus::Succeeded);
+    REQUIRE(loaded.handle.index == added.index);
+    REQUIRE(loaded.handle.generation == added.generation);
+}
+
+TEST_CASE("A data asset added under a name an added asset has is refused and logged", "[assets][data][add]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+    const Fenrir::AssetHandle<Sword> first =
+        test.store.Add<Sword>(Rapier(), Fenrir::AssetOwner::App(), "data/rapier.asset.json5");
+    INFO("the first named add succeeds");
+    REQUIRE_FALSE(first.IsEmpty());
+
+    Sword other = Rapier();
+    other.displayName = "Other";
+    const Fenrir::AssetHandle<Sword> second =
+        test.store.Add<Sword>(other, Fenrir::AssetOwner::App(), "data/rapier.asset.json5");
+
+    INFO("the second add under the name is refused with one error naming it, and the first is untouched");
+    REQUIRE(second.IsEmpty());
+    REQUIRE(CountContaining(*test.errors, "data/rapier.asset.json5") == 1);
+    REQUIRE(test.store.TryGet(first)->displayName == "Rapier");
+}
+
+TEST_CASE("A data asset added under a name a loaded asset has is refused and logged", "[assets][data][add]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+    const Fenrir::LoadResult<Sword> loaded =
+        test.store.Load<Sword>("data/sword.asset.json5", Fenrir::AssetOwner::App());
+    INFO("the sword loads");
+    REQUIRE(loaded.Ok());
+
+    const Fenrir::AssetHandle<Sword> added =
+        test.store.Add<Sword>(Rapier(), Fenrir::AssetOwner::App(), "data/sword.asset.json5");
+
+    INFO("an add under the loaded file's path is refused with one error naming it, and the loaded sword is untouched");
+    REQUIRE(added.IsEmpty());
+    REQUIRE(CountContaining(*test.errors, "data/sword.asset.json5") == 1);
+    REQUIRE(test.store.TryGet(loaded.handle)->displayName == "Longsword");
+}
+
+TEST_CASE("A data asset added under a name climbing out of the root is refused and logged", "[assets][data][add]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+
+    const Fenrir::AssetHandle<Sword> handle =
+        test.store.Add<Sword>(Rapier(), Fenrir::AssetOwner::App(), "../rapier.asset.json5");
+
+    INFO("a name climbing out through .. is refused with one error");
+    REQUIRE(handle.IsEmpty());
+    REQUIRE(CountContaining(*test.errors, "outside the asset root") == 1);
+}
+
+TEST_CASE("A data asset added under an absolute name outside the root is refused and logged", "[assets][data][add]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+    const std::string elsewhere = (test.store.Root().parent_path() / "rapier.asset.json5").generic_string();
+
+    const Fenrir::AssetHandle<Sword> handle = test.store.Add<Sword>(Rapier(), Fenrir::AssetOwner::App(), elsewhere);
+
+    INFO("an absolute name elsewhere is refused with one error");
+    REQUIRE(handle.IsEmpty());
+    REQUIRE(CountContaining(*test.errors, "outside the asset root") == 1);
+}
+
+TEST_CASE("A data asset added under an absolute name under the root has its root-relative path", "[assets][data][add]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+    const std::string absolute = (test.store.Root() / "data" / "rapier.asset.json5").generic_string();
+
+    const Fenrir::AssetHandle<Sword> handle = test.store.Add<Sword>(Rapier(), Fenrir::AssetOwner::App(), absolute);
+
+    INFO("the name is keyed by its root-relative form, as a load's is");
+    REQUIRE(test.store.PathOf(handle) == std::optional<std::string>("data/rapier.asset.json5"));
+}
+
+TEST_CASE("A data asset added for a scene is freed with the scene, name and all", "[assets][data][add][owners]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+    Fenrir::Scene& level = test.app.CreateScene("Level");
+    const Fenrir::AssetHandle<Sword> handle = test.store.Add<Sword>(Rapier(), level, "data/rapier.asset.json5");
+
+    test.app.DestroyScene("Level");
+
+    INFO("the sword's handle is stale once its only owner ends, and its name is free again");
+    REQUIRE_FALSE(test.store.IsValid(handle));
+    REQUIRE_FALSE(test.store.Add<Sword>(Rapier(), Fenrir::AssetOwner::App(), "data/rapier.asset.json5").IsEmpty());
+}
+
+TEST_CASE("A data asset of a type the registry lacks is refused when added", "[assets][data][add]")
+{
+    AssetsApp test;
+
+    const Fenrir::AssetHandle<Sword> handle = test.store.Add<Sword>(Rapier(), Fenrir::AssetOwner::App());
+
+    INFO("with no types registered, the add is refused with one error naming the type");
+    REQUIRE(handle.IsEmpty());
     REQUIRE(CountContaining(*test.errors, "AssetsTest::Sword") == 1);
 }

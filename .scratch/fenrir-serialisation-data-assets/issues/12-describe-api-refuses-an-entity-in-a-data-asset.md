@@ -16,9 +16,9 @@
 
 **Touches:** `tools/describe-api/src/` (`Describer.cs`), `tools/describe-api/SCHEMA.md`, `tools/describe-api/tests/` (`Failing.hpp`, `DescribeTests.cs`), `packages/Iris/docs/api-description.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A data asset with an `entity` field fails, naming the type, the field and the path.
-- [ ] A data asset reaching an `entity` through a nested struct, a list element or a component held by value fails the same way.
-- [ ] Components, scene resources and shared structs with `entity` fields describe as before, and every package's description regenerates byte-identical.
-- [ ] `SCHEMA.md` and Iris's copy state the rule.
+- [x] A data asset with an `entity` field fails, naming the type, the field and the path.
+- [x] A data asset reaching an `entity` through a nested struct, a list element or a component held by value fails the same way.
+- [x] Components, scene resources and shared structs with `entity` fields describe as before, and every package's description regenerates byte-identical.
+- [x] `SCHEMA.md` and Iris's copy state the rule.

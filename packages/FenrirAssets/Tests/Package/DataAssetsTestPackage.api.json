@@ -13,6 +13,13 @@
           "name": "block",
           "kind": "f32",
           "default": 0.5
+        },
+        {
+          "name": "parries",
+          "kind": "reference",
+          "target": "AssetsTest::Sword",
+          "default": null,
+          "doc": "The sword the shield is made to parry: a sword, not any weapon."
         }
       ]
     },
@@ -92,6 +99,109 @@
           "kind": "f32",
           "default": 0.5,
           "doc": "How sharp the blade is, from 0 to 1."
+        }
+      ]
+    },
+    {
+      "name": "MyGame::ParticleEffect",
+      "category": "struct",
+      "role": "data-asset",
+      "doc": "The golden sword's sub-asset.",
+      "fields": [
+        {
+          "name": "texture",
+          "kind": "path",
+          "default": ""
+        },
+        {
+          "name": "count",
+          "kind": "i32",
+          "default": 0
+        },
+        {
+          "name": "lifetime",
+          "kind": "f32",
+          "default": 1
+        }
+      ]
+    },
+    {
+      "name": "MyGame::Upgrade",
+      "category": "struct",
+      "role": "nested",
+      "size": 12,
+      "alignment": 4,
+      "doc": "One row of a sword's upgrade table.",
+      "fields": [
+        {
+          "name": "level",
+          "offset": 0,
+          "kind": "i32",
+          "default": 0
+        },
+        {
+          "name": "cost",
+          "offset": 4,
+          "kind": "i32",
+          "default": 0
+        },
+        {
+          "name": "damageBonus",
+          "offset": 8,
+          "kind": "f32",
+          "default": 0
+        }
+      ]
+    },
+    {
+      "name": "MyGame::Sword",
+      "category": "struct",
+      "role": "data-asset",
+      "doc": "The golden sword: `description` is declared but the golden leaves it at its default, and `mesh` and `onHit` are plain strings, as the golden's types have them.",
+      "version": 2,
+      "fields": [
+        {
+          "name": "displayName",
+          "kind": "string",
+          "default": ""
+        },
+        {
+          "name": "description",
+          "kind": "string",
+          "default": ""
+        },
+        {
+          "name": "damage",
+          "kind": "f32",
+          "default": 10
+        },
+        {
+          "name": "durability",
+          "kind": "f32",
+          "default": 100
+        },
+        {
+          "name": "mesh",
+          "kind": "string",
+          "default": ""
+        },
+        {
+          "name": "tags",
+          "kind": "list",
+          "elementKind": "string",
+          "default": []
+        },
+        {
+          "name": "upgrades",
+          "kind": "list",
+          "elementKind": "struct",
+          "elementType": "MyGame::Upgrade",
+          "default": []
+        },
+        {
+          "name": "onHit",
+          "kind": "string",
+          "default": ""
         }
       ]
     }

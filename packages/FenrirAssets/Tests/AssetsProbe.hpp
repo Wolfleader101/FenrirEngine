@@ -20,5 +20,11 @@ namespace Fenrir
         {
             store.m_state->source = std::move(source);
         }
+
+        /** @brief The resolvers `store` writes a data asset's references through, as its envelope writer will. */
+        [[nodiscard]] static Serialisation::Resolvers WritingResolvers(const AssetStore& store)
+        {
+            return Detail::WritingResolvers(*store.m_state);
+        }
     };
 } // namespace Fenrir

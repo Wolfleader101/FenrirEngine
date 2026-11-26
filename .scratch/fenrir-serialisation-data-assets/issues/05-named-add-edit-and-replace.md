@@ -14,9 +14,9 @@
 
 **Touches:** `packages/FenrirAssets/` (`include/FenrirAssets/AssetStore.hpp`, `src/AssetStore.cpp`, `src/Materials.cpp`, `src/AnimationEdits.cpp`, `Tests/` (`DataAssets.cpp`, `Revisions.cpp`, `Materials.cpp`, `Clips.cpp`, `BoneMasks.cpp` where the edit core moves))
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A named `Add` gives a handle whose `PathOf` is the name, and a second named `Add` under that name is refused.
-- [ ] `Edit` changes a field in place and bumps the revision, as `Revisions.cpp` checks for materials. `Replace` does the same.
-- [ ] `Replace<WeaponData>` on a `Sword` record is refused and logged.
-- [ ] Every existing material, clip and bone-mask edit test passes unchanged.
+- [x] A named `Add` gives a handle whose `PathOf` is the name, and a second named `Add` under that name is refused.
+- [x] `Edit` changes a field in place and bumps the revision, as `Revisions.cpp` checks for materials. `Replace` does the same.
+- [x] `Replace<WeaponData>` on a `Sword` record is refused and logged.
+- [x] Every existing material, clip and bone-mask edit test passes unchanged.

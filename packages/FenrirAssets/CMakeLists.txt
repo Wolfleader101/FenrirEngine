@@ -22,6 +22,7 @@ add_library(FenrirAssets STATIC
     include/FenrirAssets/MaterialData.hpp
     include/FenrirAssets/MeshData.hpp
     include/FenrirAssets/Model.hpp
+    include/FenrirAssets/Move.hpp
     include/FenrirAssets/ShaderData.hpp
     include/FenrirAssets/SkeletonData.hpp
     include/FenrirAssets/SkinningSource.hpp
@@ -32,6 +33,7 @@ add_library(FenrirAssets STATIC
     src/AssetStoreState.hpp
     src/AssetSource.hpp
     src/DirectorySource.cpp
+    src/Move.cpp
     src/Envelope.hpp
     src/Envelope.cpp
     src/AssetData.cpp

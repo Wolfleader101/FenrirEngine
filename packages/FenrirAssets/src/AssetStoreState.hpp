@@ -8,14 +8,17 @@
 #include <memory>
 #include <mutex>
 #include <new>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "AssetSource.hpp"
 #include "FenrirAssets/AssetStore.hpp"
+#include "FenrirSerialisation/Bridge.hpp"
 #include "FenrirTypes/TypeDescription.hpp"
 
 namespace Fenrir::Detail
@@ -67,6 +70,9 @@ namespace Fenrir::Detail
         // model's left-out units are: the located diagnostics, and whether the bridge read its fields in part.
         std::vector<Serialisation::Diagnostic> loadDiagnostics;
         bool loadIncomplete = false;
+        // For a data asset, each asset its references named when it loaded, by kind and slot: a later owner of the
+        // data asset owns them too, as a model's later owner owns its sub-assets.
+        std::vector<std::pair<AssetKind, AssetSlot>> references;
         // The problems already logged for this asset (a material's unknown parameter names, a data asset read as a
         // type it is not), so each is logged once. Cleared when the slot is freed, so the next asset starts afresh.
         std::unordered_set<std::string> logged;
@@ -94,6 +100,12 @@ namespace Fenrir::Detail
         std::unique_ptr<AssetSource> source;
         std::array<AssetTable, AssetKindCount> tables;
         OwnerId nextSceneOwner = 1;
+        /**
+         * @brief By data asset file key, the file's tree as the store last read or wrote it, its `data` upgraded: what
+         * a save keeps the file's comments, and the sub-assets it holds no record of, from. Dropped with the last
+         * record of its file.
+         */
+        std::unordered_map<std::string, Serialisation::Value> fileTrees;
         /** @brief By model file key, the units its last import left out, for the files that left any out. */
         std::unordered_map<std::string, std::vector<std::string>> modelFailures;
         /**
@@ -101,9 +113,16 @@ namespace Fenrir::Detail
          * a read, which may run alongside others.
          */
         std::mutex readLogMutex;
+        /**
+         * @brief Set by a data asset's reference resolver for the one load it makes, which then logs no failure of its
+         * own: the referencing file's located diagnostic says why the reference resolved to nothing, once.
+         */
+        bool quietNextLoad = false;
 
         /** @brief The live record `slot` names in `kind`'s table, or null. */
         [[nodiscard]] AssetRecord* Find(AssetKind kind, AssetSlot slot);
+        /** @brief The live record `slot` names in `kind`'s table, or null, read-only. */
+        [[nodiscard]] const AssetRecord* Find(AssetKind kind, AssetSlot slot) const;
 
         /** @brief Frees the asset in `index` of `kind`'s table: its data, its path, and every handle to it. */
         void Free(AssetKind kind, std::uint32_t index);
@@ -126,6 +145,40 @@ namespace Fenrir::Detail
 
     /** @brief `path` as UTF-8 text, with forward slashes. */
     [[nodiscard]] std::string Utf8Text(const std::filesystem::path& path);
+
+    /**
+     * @brief `file`, absolute and normal, relative to `root` with forward slashes: its asset path (ADR-0076). None when
+     * it is not under the root.
+     */
+    [[nodiscard]] std::optional<std::string> RootRelative(const std::filesystem::path& root,
+                                                          const std::filesystem::path& file);
+
+    /**
+     * @brief Writes `text` to `file` atomically (ADR-0079 §4), making its directory: to a file beside it, named as it
+     * with `.saving` added, then renamed over it, so a write that fails before the rename leaves the old file whole.
+     * Why it failed, or none.
+     */
+    [[nodiscard]] std::optional<std::string> WriteAtomically(const std::filesystem::path& file, std::string_view text);
+
+    /**
+     * @brief The engine kind a `reference` field's target names, as a description writes `AssetHandle<Image>`'s
+     * (`Fenrir::Image`); none for any other name, which is a data asset type's.
+     */
+    [[nodiscard]] std::optional<AssetKind> KindOfTarget(std::string_view target);
+
+    /**
+     * @brief The asset path of the asset `slot` names in `kind`'s table (ADR-0076): root-relative for a loaded asset
+     * under the root, absolute outside it, then `#` and its label for a sub-asset, or a built-in's name. None for an
+     * added, stale or empty one, or one still loading.
+     */
+    [[nodiscard]] std::optional<std::string> PathOf(const AssetStoreState& state, AssetKind kind, AssetSlot slot);
+
+    /**
+     * @brief The resolvers a data asset's references are written through (ADR-0076): `writeReference` names the asset
+     * a handle holds by its asset path, a sub-asset in full as `path#name`, and an empty, stale or unnamed handle as
+     * no path, which the bridge writes as `null`. It reads `state` when called, so `state` must outlive it.
+     */
+    [[nodiscard]] Serialisation::Resolvers WritingResolvers(const AssetStoreState& state);
 
     /** @brief Reads the whole file into `bytes`; false if it could not be read. */
     bool ReadAssetFile(const std::filesystem::path& file, std::vector<std::byte>& bytes);

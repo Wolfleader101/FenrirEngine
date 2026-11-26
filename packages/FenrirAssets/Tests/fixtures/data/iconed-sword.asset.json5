@@ -1,0 +1,10 @@
+// A sword whose icon is a real image, which loads with the sword.
+{
+  format: 1,
+  type: "AssetsTest::Sword",
+  version: 2,
+  data: {
+    displayName: "Gilded sword",
+    icon: "fourbytwo.png",
+  },
+}

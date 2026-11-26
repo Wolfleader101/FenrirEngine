@@ -1,0 +1,20 @@
+// A sword that upgrades to its own spare blade, named bare as `#spare`, and whose spare upgrades back to it in full.
+{
+  format: 1,
+  type: "AssetsTest::Sword",
+  version: 2,
+  data: {
+    displayName: "Worn sword",
+    upgradesTo: "#spare",
+  },
+  sub: {
+    spare: {
+      type: "AssetsTest::Sword",
+      version: 2,
+      data: {
+        displayName: "Spare blade",
+        upgradesTo: "data/self-upgrading-sword.asset.json5",
+      },
+    },
+  },
+}
