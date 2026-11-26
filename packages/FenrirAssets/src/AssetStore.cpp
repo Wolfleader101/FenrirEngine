@@ -46,8 +46,10 @@ namespace Fenrir
     namespace
     {
         using Detail::BuiltinPrefix;
+        using Detail::RootRelative;
         using Detail::Utf8Path;
         using Detail::Utf8Text;
+        using Detail::WriteAtomically;
 
         // How each kind is named, in AssetKind's order: the word log messages use, and the target a description
         // names its handle by (`AssetHandle<Image>`'s is `Fenrir::Image`). A data asset's target is its own type's.
@@ -154,18 +156,6 @@ namespace Fenrir
             return resolved;
         }
 
-        // `file`, absolute and normal, relative to `root` with forward slashes: its asset path (ADR-0076). None when it
-        // is not under the root.
-        std::optional<std::string> RootRelative(const std::filesystem::path& root, const std::filesystem::path& file)
-        {
-            const std::filesystem::path relative = file.lexically_relative(root);
-            if (relative.empty() || relative.is_absolute() || relative.has_root_name() || *relative.begin() == "..")
-            {
-                return std::nullopt;
-            }
-            return Utf8Text(relative);
-        }
-
         // Why a data asset of `type` is refused when the store's type registry lacks it.
         std::string UnregisteredType(const TypeDescription& type)
         {
@@ -213,8 +203,32 @@ namespace Fenrir
                    std::ranges::any_of(table.byKey, [&](const auto& keyed) { return keyed.first.starts_with(prefix); });
         }
 
-        // Writes `text` to `file` atomically (ADR-0079 §4): to a file beside it, named as it with `.saving` added, then
-        // renamed over it, so a write that fails before the rename leaves the old file whole. Why it failed, or none.
+    } // namespace
+
+    namespace Detail
+    {
+        std::filesystem::path Utf8Path(std::string_view text)
+        {
+            return std::filesystem::path(
+                std::u8string_view(reinterpret_cast<const char8_t*>(text.data()), text.size()));
+        }
+
+        std::string Utf8Text(const std::filesystem::path& path)
+        {
+            const std::u8string text = path.generic_u8string();
+            return {reinterpret_cast<const char*>(text.data()), text.size()};
+        }
+
+        std::optional<std::string> RootRelative(const std::filesystem::path& root, const std::filesystem::path& file)
+        {
+            const std::filesystem::path relative = file.lexically_relative(root);
+            if (relative.empty() || relative.is_absolute() || relative.has_root_name() || *relative.begin() == "..")
+            {
+                return std::nullopt;
+            }
+            return Utf8Text(relative);
+        }
+
         std::optional<std::string> WriteAtomically(const std::filesystem::path& file, std::string_view text)
         {
             std::error_code error;
@@ -247,21 +261,6 @@ namespace Fenrir
                 return std::format("'{}' could not be renamed over the file ({})", Utf8Text(beside), message);
             }
             return std::nullopt;
-        }
-    } // namespace
-
-    namespace Detail
-    {
-        std::filesystem::path Utf8Path(std::string_view text)
-        {
-            return std::filesystem::path(
-                std::u8string_view(reinterpret_cast<const char8_t*>(text.data()), text.size()));
-        }
-
-        std::string Utf8Text(const std::filesystem::path& path)
-        {
-            const std::u8string text = path.generic_u8string();
-            return {reinterpret_cast<const char*>(text.data()), text.size()};
         }
 
         bool ReadAssetFile(const std::filesystem::path& file, std::vector<std::byte>& bytes)

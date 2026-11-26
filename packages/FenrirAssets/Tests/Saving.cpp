@@ -20,18 +20,14 @@
 
 using AssetsTest::DataApp;
 using AssetsTest::Fixtures;
+using AssetsTest::ReadFile;
 using AssetsTest::ShieldData;
 using AssetsTest::Sword;
+using AssetsTest::TempRoot;
 
 namespace
 {
     namespace fs = std::filesystem;
-
-    std::string ReadFile(const fs::path& file)
-    {
-        std::ifstream stream(file, std::ios::binary);
-        return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
-    }
 
     // `text` with its one `from` changed to `to`, as an edit of one field changes a file's text.
     std::string Replaced(std::string text, std::string_view from, std::string_view to)
@@ -43,44 +39,6 @@ namespace
         }
         return text;
     }
-
-    // An asset root of the test's own in the system's temporary directory, removed with everything in it when the
-    // test ends, so a save never writes into the fixtures.
-    class TempRoot
-    {
-      public:
-        TempRoot()
-        {
-            static std::atomic<int> made = 0;
-            m_root = fs::temp_directory_path() /
-                     std::format("FenrirAssetsSaving-{}-{}",
-                                 std::chrono::steady_clock::now().time_since_epoch().count(), made++);
-            fs::create_directories(m_root);
-        }
-        TempRoot(const TempRoot&) = delete;
-        TempRoot& operator=(const TempRoot&) = delete;
-        ~TempRoot()
-        {
-            std::error_code error;
-            fs::remove_all(m_root, error);
-        }
-
-        [[nodiscard]] const fs::path& Path() const noexcept
-        {
-            return m_root;
-        }
-
-        // Copies `from` to the asset path `to` under the root.
-        void Copy(const fs::path& from, std::string_view to) const
-        {
-            const fs::path target = m_root / to;
-            fs::create_directories(target.parent_path());
-            fs::copy_file(from, target, fs::copy_options::overwrite_existing);
-        }
-
-      private:
-        fs::path m_root;
-    };
 
     // The format research's sword, FenrirSerialisation's golden file, as it is committed there.
     fs::path Golden()
