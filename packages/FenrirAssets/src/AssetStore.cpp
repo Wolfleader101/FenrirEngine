@@ -531,16 +531,25 @@ namespace Fenrir
                 return fail(LoadFailure::WrongType, std::format("it is loaded already as a `{}`, which is not a `{}`",
                                                                 record.typeName, type.name));
             }
-            Detail::AddOwner(record, Detail::OwnerIdOf(m_state, owner));
+            const Detail::OwnerId ownerId = Detail::OwnerIdOf(m_state, owner);
+            Detail::AddOwner(record, ownerId);
+            // Loading a file's top level loads its sub-assets for the same owner, as a model's are (ADR-0076).
+            if (!resolved.labelled)
+            {
+                const std::string prefix = resolved.key + '#';
+                for (const auto& [key, index] : table.byKey)
+                {
+                    if (key.starts_with(prefix))
+                    {
+                        Detail::AddOwner(table.records[index], ownerId);
+                    }
+                }
+            }
             diagnostics = record.loadDiagnostics;
             incomplete = record.loadIncomplete;
             return {loaded->second, record.generation};
         }
 
-        if (resolved.labelled)
-        {
-            return fail(LoadFailure::LabelNotFound, "a data asset's sub-assets are not read yet");
-        }
         Detail::AssetSource& source = *m_state->source;
         const std::optional<std::vector<std::byte>> bytes = source.Read(*assetPath);
         if (!bytes)
@@ -550,21 +559,47 @@ namespace Fenrir
         }
 
         // No references resolve yet: a later ticket gives the store's resolvers.
-        Detail::EnvelopeRead read = Detail::ReadDataEnvelope(*bytes, resolved.key, type, registry,
-                                                             Serialisation::Resolvers{}, *m_state->logger);
+        const std::string fileKey = Utf8Text(resolved.file);
+        Detail::EnvelopeRead read = Detail::ReadDataEnvelope(
+            *bytes, fileKey, resolved.labelled ? std::optional<std::string_view>(resolved.label) : std::nullopt, type,
+            registry, Serialisation::Resolvers{}, *m_state->logger);
         diagnostics = std::move(read.diagnostics);
         if (read.failure)
         {
             return fail(*read.failure, std::move(read.failureMessage));
         }
         incomplete = read.incomplete;
-        const Detail::AssetSlot slot =
-            Detail::InsertAsset(table, std::move(read.value), Detail::OwnerIdOf(m_state, owner), resolved.key);
-        Detail::AssetRecord& record = *m_state->Find(Detail::AssetKind::Data, slot);
-        record.typeName = read.type->name;
-        record.loadDiagnostics = diagnostics;
-        record.loadIncomplete = incomplete;
-        return slot;
+
+        // One read gives the file's top level and every sub-asset, each stored under the file's key and its label for
+        // the one owner, as a model's sub-assets are; one stored already (its file's top level was freed, but it lives
+        // on) is shared instead. Each repeats the whole file's diagnostics to a later load, as a model's left-out
+        // units are.
+        const Detail::OwnerId ownerId = Detail::OwnerIdOf(m_state, owner);
+        Detail::AssetSlot requested;
+        for (std::size_t entry = 0; entry < read.entries.size(); ++entry)
+        {
+            Detail::EnvelopeEntry& stored = read.entries[entry];
+            std::string key = stored.label.empty() ? fileKey : fileKey + '#' + stored.label;
+            Detail::AssetSlot slot;
+            if (const auto found = table.byKey.find(key); found != table.byKey.end())
+            {
+                Detail::AddOwner(table.records[found->second], ownerId);
+                slot = {found->second, table.records[found->second].generation};
+            }
+            else
+            {
+                slot = Detail::InsertAsset(table, std::move(stored.value), ownerId, std::move(key));
+                Detail::AssetRecord& record = *m_state->Find(Detail::AssetKind::Data, slot);
+                record.typeName = stored.type->name;
+                record.loadDiagnostics = diagnostics;
+                record.loadIncomplete = incomplete;
+            }
+            if (entry == read.requested)
+            {
+                requested = slot;
+            }
+        }
+        return requested;
     }
 
     Detail::AssetSlot AssetStore::AddSlot(Detail::AssetKind kind, Detail::AssetBox data, AssetOwner owner)

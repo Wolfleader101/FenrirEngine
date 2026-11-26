@@ -15,9 +15,9 @@
 
 **Touches:** `packages/FenrirAssets/` (`src/AssetStore.cpp`, `src/Envelope.cpp`, `Tests/` (`DataAssets.cpp` or a new `SubAssets.cpp`, `Tests/fixtures/data/` with a sword carrying two sub-assets))
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `Load` of `sword.asset.json5#sparks` and of the top-level sword share one parse: the file is read once.
-- [ ] Loading the top level loads every sub-asset for that owner, and each frees with that owner.
-- [ ] An unknown label fails with `LabelNotFound`. A sub-asset holding its own `sub` is refused with a located diagnostic.
-- [ ] A broken sub-asset leaves its siblings loaded and the load `Partial`.
+- [x] `Load` of `sword.asset.json5#sparks` and of the top-level sword share one parse: the file is read once.
+- [x] Loading the top level loads every sub-asset for that owner, and each frees with that owner.
+- [x] An unknown label fails with `LabelNotFound`. A sub-asset holding its own `sub` is refused with a located diagnostic.
+- [x] A broken sub-asset leaves its siblings loaded and the load `Partial`.

@@ -20,24 +20,42 @@ namespace Fenrir
 
 namespace Fenrir::Detail
 {
-    /** @brief What reading a data asset's envelope gave: the instance, or why there is none, and the diagnostics. */
+    /** @brief One asset an envelope holds: its top level, or one of the sub-assets in its `sub`. */
+    struct EnvelopeEntry
+    {
+        /** @brief The sub-asset's name, its label in an asset path; empty for the file's top level. */
+        std::string label;
+        /** @brief The instance, of `type`. */
+        AssetBox value{nullptr, nullptr};
+        /** @brief The entry's type: the type expected, or one extending it, for the entry asked for; any data asset
+         * type for the others. */
+        const TypeDescription* type = nullptr;
+    };
+
+    /**
+     * @brief What reading a data asset's envelope gave: each asset in it that read, or why the one asked for did not,
+     * and the diagnostics of the whole file.
+     */
     struct EnvelopeRead
     {
-        /** @brief The instance, of the file's type; empty when the read failed. */
-        AssetBox value{nullptr, nullptr};
-        /** @brief The file's type, which is the type expected or one extending it; null when the read failed. */
-        const TypeDescription* type = nullptr;
-        /** @brief Why the read failed; empty when it gave an instance. */
+        /**
+         * @brief Every entry that read, the top level first and then `sub`'s in the file's order; empty when the read
+         * failed. An entry that did not read is left out, with its diagnostic.
+         */
+        std::vector<EnvelopeEntry> entries;
+        /** @brief Which of `entries` is the one asked for, when the read did not fail. */
+        std::size_t requested = 0;
+        /** @brief Why the read failed; empty when it gave the entry asked for. */
         std::optional<LoadFailure> failure;
         /** @brief What failed it, for the store's own error: the located diagnostic, when one did. */
         std::string failureMessage;
         /**
-         * @brief Every located diagnostic, in the order found: ReadTree's, Upgrade's and FromTree's, each already
-         * logged, and the reader's own. Of those, a warning is logged here, and the one that failed the read is not:
-         * the store logs it with the failure.
+         * @brief Every located diagnostic of the file, in the order found: ReadTree's, Upgrade's and FromTree's, each
+         * already logged, and the reader's own. Of those, each is logged here but the one that failed the read: the
+         * store logs that with the failure.
          */
         std::vector<Serialisation::Diagnostic> diagnostics;
-        /** @brief Whether FromTree read the fields in part, as a reference with no resolver makes it with no
+        /** @brief Whether FromTree read any entry's fields in part, as a reference with no resolver makes it with no
          * diagnostic. */
         bool incomplete = false;
     };
@@ -50,15 +68,21 @@ namespace Fenrir::Detail
     [[nodiscard]] std::optional<std::string> FilePathProblem(std::string_view path);
 
     /**
-     * @brief Reads the `.asset.json5` envelope in `bytes` (ADR-0077) as a value of `expected` or a type extending it,
-     * in these steps: ReadTree the bytes; check `format` is 1; find `type` in `registry`, by its canonical or a former
-     * name, and check it is `expected` or extends it; Upgrade `data` from `version`; FromTree it into an instance the
-     * type's description constructs, through `resolvers`. Its `sub` is not read yet, with a warning. Private to
-     * FenrirAssets: the store's door to it is Load.
+     * @brief Reads the `.asset.json5` envelope in `bytes` (ADR-0077), in these steps: ReadTree the bytes; check
+     * `format` is 1; find the top level's `type` in `registry`, by its canonical or a former name, and check its type
+     * (below); Upgrade `data` from `version`; FromTree it into an instance the
+     * type's description constructs, through `resolvers`. Then each entry of `sub` the same way, from its own `type`,
+     * `version` and `data` (ADR-0076, ADR-0079): a sub-asset holding a `sub` of its own is refused.
+     *
+     * The entry asked for, the top level or the sub-asset `label`, must be of `expected`; the others may be of any data
+     * asset type. When it does not read, or `sub` has no `label`, the read fails. Any other entry that does not read is
+     * left out with a located error, and the rest still read. Private to FenrirAssets: the store's door to it is Load.
      *
      * @param path The path its diagnostics name the file by.
+     * @param label The sub-asset asked for, by its name in `sub`; none for the file's top level.
      */
     [[nodiscard]] EnvelopeRead ReadDataEnvelope(std::span<const std::byte> bytes, std::string_view path,
-                                                const TypeDescription& expected, const TypeRegistry& registry,
-                                                const Serialisation::Resolvers& resolvers, ILogger& logger);
+                                                std::optional<std::string_view> label, const TypeDescription& expected,
+                                                const TypeRegistry& registry, const Serialisation::Resolvers& resolvers,
+                                                ILogger& logger);
 } // namespace Fenrir::Detail
