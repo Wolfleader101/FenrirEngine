@@ -734,7 +734,8 @@ namespace Fenrir
         const std::string_view file = std::string_view(record->key).substr(0, hash);
         const std::string_view label =
             hash == std::string::npos ? std::string_view() : std::string_view(record->key).substr(hash);
-        // Every loaded asset is under the root (LoadFailure::OutsideRoot), so its file has an asset path.
+        // A load refuses a file outside the root (LoadFailure::OutsideRoot), so a loaded asset's file has an asset
+        // path; nothing is given if one ever has none.
         const std::optional<std::string> relative = RootRelative(m_state->root, Utf8Path(file));
         if (!relative)
         {

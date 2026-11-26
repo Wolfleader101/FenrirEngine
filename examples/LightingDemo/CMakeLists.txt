@@ -42,9 +42,10 @@ fenrir_add_shaders(LightingDemo PROGRAM LightingDemoSign VERTEX shaders/sign.ver
 # them into the asset root's fetched/ folder, since the store loads nothing outside its root: hard links, so the build
 # holds no second copy of them.
 if(FENRIR_FETCH_DEMO_ASSETS)
+    set(fetched_folder fetched)
     fenrir_fetch_demo_assets(MANIFEST fetched-assets.json CACHE_DIR "${FENRIR_DEMO_ASSET_CACHE}")
     fenrir_link_demo_assets(TARGET LightingDemo MANIFEST fetched-assets.json CACHE_DIR "${FENRIR_DEMO_ASSET_CACHE}"
-                            DESTINATION fetched)
+                            DESTINATION "${fetched_folder}")
     target_compile_definitions(LightingDemo PRIVATE LIGHTING_DEMO_FETCHED_ASSETS="${FENRIR_DEMO_ASSET_CACHE}"
-                                                    LIGHTING_DEMO_FETCHED_FOLDER="fetched")
+                                                    LIGHTING_DEMO_FETCHED_FOLDER="${fetched_folder}")
 endif()

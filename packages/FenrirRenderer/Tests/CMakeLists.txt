@@ -53,7 +53,7 @@ target_compile_definitions(FenrirRendererTests PRIVATE
     FENRIR_TEST_USER_SHADER="${CMAKE_CURRENT_BINARY_DIR}/shaders/UserTint.fshader"
     FENRIR_TEST_EXAMPLE_ASSETS="${CMAKE_CURRENT_SOURCE_DIR}/../../../examples/assets"
     FENRIR_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
-    FENRIR_TEST_MODEL_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/../../FenrirAssets/Tests/Fixtures/models")
+    FENRIR_TEST_MODEL_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/../../FenrirAssets/Tests/fixtures/models")
 add_test(NAME FenrirRenderer COMMAND FenrirRendererTests)
 
 # The GL pixel probes (the spec's seam 2): the OpenGL backend on a hidden window's OpenGL 4.6 core context, made through
