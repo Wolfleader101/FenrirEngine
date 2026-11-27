@@ -13,12 +13,12 @@
 
 **Touches:** `packages/FenrirAssets/` (`src/AssetWatcher.cpp`, `src/AssetStore.cpp`, `src/ModelLoading.cpp`, `src/CubemapLoading.cpp`, `Tests/HotReload.cpp`, fixtures copied into a temporary root)
 
-**Status:** needs-info
+**Status:** resolved
 
-Shader containers wait on a question: the store has no load of a `.fshader` file yet, so there is none to watch. Either this ticket adds `Load<Shader>` from a shader container file, or that load and its reload become a follow-up.
+The store had no load of a `.fshader` file, so there was none to watch; the user chose to add `Load<Shader>` from a shader container file here.
 
 - [x] A rewritten image reloads under its handle within two frames with both intervals at zero, and `Reloaded()` names it.
 - [x] A rewritten glTF replaces its model and its meshes under their labels, and existing handles read the new data.
 - [x] A `.cubemap` reloads the same way (fonts too).
-- [ ] A shader container reloads the same way.
+- [x] A shader container reloads the same way, and loads from its `.fshader` file.
 - [x] A broken rewrite of each kind (image, cubemap, font, model, a model that imports only in part) keeps the old data and logs once.

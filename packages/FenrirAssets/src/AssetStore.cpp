@@ -141,6 +141,16 @@ namespace Fenrir
             return extension == ".ttf" || extension == ".otf" || extension == ".ttc";
         }
 
+        // Whether `file` is named as a shader container FenrirShaderCompiler writes is, `.fshader` in any case.
+        bool IsShaderContainerFile(const std::filesystem::path& file)
+        {
+            std::string extension = file.extension().string();
+            std::ranges::transform(extension, extension.begin(), [](char c) {
+                return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            });
+            return extension == ".fshader";
+        }
+
         AssetPath Resolve(const std::filesystem::path& root, std::string_view path)
         {
             AssetPath resolved;
@@ -209,11 +219,25 @@ namespace Fenrir
                    std::ranges::any_of(table.byKey, [&](const auto& keyed) { return keyed.first.starts_with(prefix); });
         }
 
-        // The one asset an image, cubemap or font file imports to, into `data`, as a load and a reload both import
-        // it; or why it imports to none.
+        // The one asset an image, cubemap, font or shader container file imports to, into `data`, as a load and a
+        // reload both import it; or why it imports to none.
         std::string ImportFileAsset(Detail::AssetKind kind, const std::filesystem::path& file, Detail::AssetBox& data)
         {
             Detail::AssetWarnings warnings;
+            if (kind == Detail::AssetKind::Shader)
+            {
+                ShaderData shader;
+                if (!Detail::ReadAssetFile(file, shader.bytes))
+                {
+                    return "the file could not be read";
+                }
+                if (std::string problem = Detail::PrepareAsset(shader, warnings); !problem.empty())
+                {
+                    return problem;
+                }
+                data = Detail::AssetBox(new ShaderData(std::move(shader)), &Detail::DestroyAssetData<ShaderData>);
+                return {};
+            }
             if (kind == Detail::AssetKind::Font)
             {
                 FontData font;
@@ -666,6 +690,19 @@ namespace Fenrir
             {
                 return fail(LoadFailure::LabelNotFound,
                             "a font file has no sub-asset called '" + resolved.label + "', or any other");
+            }
+        }
+        else if (kind == Detail::AssetKind::Shader)
+        {
+            if (!IsShaderContainerFile(resolved.file))
+            {
+                return fail(LoadFailure::NoImporter,
+                            "shaders load from .fshader files, the shader containers FenrirShaderCompiler writes");
+            }
+            if (resolved.labelled)
+            {
+                return fail(LoadFailure::LabelNotFound,
+                            "a shader container file has no sub-asset called '" + resolved.label + "', or any other");
             }
         }
         else if (kind != Detail::AssetKind::Image)

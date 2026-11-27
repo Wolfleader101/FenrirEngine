@@ -1,15 +1,17 @@
 #include <cstddef>
 #include <cstring>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
 
-#include "AssetsTest.hpp"
+#include "DataAssetsTest.hpp"
 #include "FenrirAssets/ShaderContainer.hpp"
 
 using AssetsTest::AssetsApp;
+using AssetsTest::TempRoot;
 
 namespace
 {
@@ -43,6 +45,30 @@ namespace
             container.variants.push_back(std::move(variant));
         }
         return container;
+    }
+
+    // A one-variant shader container whose `strength` parameter defaults to `strength`, as FenrirShaderCompiler would
+    // write it.
+    std::vector<std::byte> StrengthShader(float strength)
+    {
+        Fenrir::ShaderContainer container;
+        container.name = "Strength";
+        Fenrir::ShaderVariant variant;
+        variant.stages.push_back({Fenrir::ShaderStage::Vertex, {0x07230203u, 1u, 2u}, {0x07230203u, 3u}});
+        variant.stages.push_back({Fenrir::ShaderStage::Fragment, {0x07230203u, 4u}, {0x07230203u, 5u, 6u}});
+        variant.bindings = {{2, 0, Fenrir::ShaderBindingKind::UniformBuffer, "MaterialParams", 16}};
+        variant.materialBlockBinding = 0;
+        variant.materialMembers = {{"strength", Fenrir::ShaderValueType::Float, 0, 4}};
+        variant.parameters = {{"strength", Fenrir::ShaderParameterType::Float, {strength}}};
+        variant.defaultBlock.assign(16, std::byte{0});
+        container.variants.push_back(std::move(variant));
+        return Fenrir::WriteShaderContainer(container);
+    }
+
+    // The text `bytes` hold, to write them to a file.
+    std::string_view TextOf(const std::vector<std::byte>& bytes)
+    {
+        return {reinterpret_cast<const char*>(bytes.data()), bytes.size()};
     }
 
     void PutU32(std::vector<std::byte>& bytes, std::size_t at, std::uint32_t value)
@@ -196,4 +222,49 @@ TEST_CASE("A stale shader handle has no parameters", "[assets][shaders]")
 
     INFO("an unloaded shader's parameters are empty");
     REQUIRE(test.store.GetShaderParameters(handle).empty());
+}
+
+TEST_CASE("A .fshader file loads as a shader, its parameter table read from it", "[assets][shaders][loading]")
+{
+    TempRoot root;
+    root.Write("shaders/strength.fshader", TextOf(StrengthShader(2.0f)));
+    AssetsApp test(Fenrir::AssetsConfig{root.Path()});
+    const Fenrir::LoadResult<Fenrir::Shader> loaded =
+        test.store.Load<Fenrir::Shader>("shaders/strength.fshader", Fenrir::AssetOwner::App());
+
+    INFO("the container loads whole");
+    REQUIRE(loaded.Status() == Fenrir::LoadStatus::Succeeded);
+    const std::span<const Fenrir::ShaderParameter> parameters = test.store.GetShaderParameters(loaded.handle);
+    INFO("its one parameter is the container's, with the default it gives");
+    REQUIRE(parameters.size() == 1);
+    REQUIRE(parameters[0].name == "strength");
+    REQUIRE(parameters[0].value[0] == 2.0f);
+    INFO("a second load of the path gives the same handle");
+    REQUIRE(test.store.Load<Fenrir::Shader>("shaders/strength.fshader", Fenrir::AssetOwner::App()).handle ==
+            loaded.handle);
+}
+
+TEST_CASE("A .fshader file that is not a shader container fails to import", "[assets][shaders][loading]")
+{
+    TempRoot root;
+    root.Write("shaders/broken.fshader", "not a container");
+    AssetsApp test(Fenrir::AssetsConfig{root.Path()});
+    const Fenrir::LoadResult<Fenrir::Shader> loaded =
+        test.store.Load<Fenrir::Shader>("shaders/broken.fshader", Fenrir::AssetOwner::App());
+
+    INFO("the load fails as an import failure, logged once");
+    REQUIRE_FALSE(loaded.Ok());
+    REQUIRE(loaded.diagnostic->reason == Fenrir::LoadFailure::ImportFailed);
+    REQUIRE(test.errors->size() == 1);
+}
+
+TEST_CASE("Only .fshader files load as shaders", "[assets][shaders][loading]")
+{
+    AssetsApp test;
+    const Fenrir::LoadResult<Fenrir::Shader> loaded =
+        test.store.Load<Fenrir::Shader>("fourbytwo.png", Fenrir::AssetOwner::App());
+
+    INFO("an image file has no shader importer");
+    REQUIRE_FALSE(loaded.Ok());
+    REQUIRE(loaded.diagnostic->reason == Fenrir::LoadFailure::NoImporter);
 }

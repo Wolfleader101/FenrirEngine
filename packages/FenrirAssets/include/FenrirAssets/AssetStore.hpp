@@ -362,6 +362,10 @@ namespace Fenrir
          * A font loads from a TrueType or OpenType file (`.ttf`, `.otf` or `.ttc`) as its bytes (FontData), which
          * must start as a font file does.
          *
+         * A shader loads from a `.fshader` file, the shader container FenrirShaderCompiler writes (ADR-0018), as its
+         * bytes (ShaderData), its parameter table read from them; one that is not a container of this build's format
+         * version fails to import.
+         *
          * A `builtin:` name loads what AssetStore::AddBuiltin registered under it, and fails until something has.
          *
          * A data asset (`T` a data asset type, ADR-0075) loads from a `.asset.json5` file: one object of `format` (1),
@@ -803,8 +807,8 @@ namespace Fenrir
          * @brief The assets the store replaced at this frame's reload poll because their files changed on disk
          * (ADR-0081), in the order it replaced them, each once: a game or an editor reacts to a reload here. A data
          * asset file's top level and each of its sub-assets that the store holds are listed apiece, as are a model
-         * file's model and each of its sub-assets, and an image, cubemap or font file's one asset. Cleared at the next
-         * poll; empty with AssetsConfig::hotReload off.
+         * file's model and each of its sub-assets, and an image, cubemap, font or shader container file's one asset.
+         * Cleared at the next poll; empty with AssetsConfig::hotReload off.
          *
          * Each is replaced under the handle it had, its revision bumped, and a reference the new file adds is loaded
          * for every owner of the asset, as is a sub-asset a model file adds. A file that fails to read or import keeps
@@ -888,8 +892,8 @@ namespace Fenrir
         /** @brief Reloads the data asset file `fileKey` in place under its handles, or keeps it whole and says why. */
         void ReloadDataFile(const std::string& fileKey);
         /**
-         * @brief Re-imports the image, cubemap or font file `fileKey` and replaces its one asset under its handle, or
-         * keeps it and says why.
+         * @brief Re-imports the image, cubemap, font or shader container file `fileKey` and replaces its one asset
+         * under its handle, or keeps it and says why.
          */
         void ReloadImportedFile(const std::string& fileKey, Detail::AssetKind kind);
         /**

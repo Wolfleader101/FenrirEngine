@@ -12,10 +12,12 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include "DataAssetsTest.hpp"
+#include "FenrirAssets/ShaderContainer.hpp"
 
 using AssetsTest::CountContaining;
 using AssetsTest::DataApp;
@@ -377,6 +379,31 @@ namespace
     constexpr std::string_view CubemapPath = "cubemap/sky.cubemap";
     constexpr std::string_view FontPath = "fonts/tagged.ttf";
     constexpr std::string_view ModelPath = "models/prop.gltf";
+    constexpr std::string_view ShaderPath = "shaders/strength.fshader";
+
+    // A one-variant shader container whose `strength` parameter defaults to `strength`, as FenrirShaderCompiler would
+    // write it.
+    std::vector<std::byte> StrengthShader(float strength)
+    {
+        Fenrir::ShaderContainer container;
+        container.name = "Strength";
+        Fenrir::ShaderVariant variant;
+        variant.stages.push_back({Fenrir::ShaderStage::Vertex, {0x07230203u, 1u, 2u}, {0x07230203u, 3u}});
+        variant.stages.push_back({Fenrir::ShaderStage::Fragment, {0x07230203u, 4u}, {0x07230203u, 5u, 6u}});
+        variant.bindings = {{2, 0, Fenrir::ShaderBindingKind::UniformBuffer, "MaterialParams", 16}};
+        variant.materialBlockBinding = 0;
+        variant.materialMembers = {{"strength", Fenrir::ShaderValueType::Float, 0, 4}};
+        variant.parameters = {{"strength", Fenrir::ShaderParameterType::Float, {strength}}};
+        variant.defaultBlock.assign(16, std::byte{0});
+        container.variants.push_back(std::move(variant));
+        return Fenrir::WriteShaderContainer(container);
+    }
+
+    // Writes the shader container `bytes` to the asset path `to` under `root`.
+    void WriteShader(const TempRoot& root, std::string_view to, const std::vector<std::byte>& bytes)
+    {
+        root.Write(to, std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+    }
 
     // A cubemap file naming the fixture faces, `first` as its +X face and `second` as its -X face.
     std::string CubemapText(std::string_view first, std::string_view second)
@@ -702,5 +729,52 @@ TEST_CASE("A rewritten model file that imports only in part replaces nothing and
     REQUIRE(test.store.Reloaded().empty());
     INFO("one error over five frames names the file and the texture it left out");
     REQUIRE(CountContaining(*test.errors, "Could not reload model 'models/prop.gltf': it imported only in part") == 1);
+    REQUIRE(test.errors->size() == 1);
+}
+
+TEST_CASE("A rewritten shader container reloads under its handle with its new parameter table",
+          "[assets][shaders][reload]")
+{
+    TempRoot root;
+    WriteShader(root, ShaderPath, StrengthShader(1.0f));
+    DataApp test(Watching(root));
+    const Fenrir::LoadResult<Fenrir::Shader> loaded =
+        test.store.Load<Fenrir::Shader>(ShaderPath, Fenrir::AssetOwner::App());
+    INFO("the copied shader loads, its strength defaulting to 1");
+    REQUIRE(loaded.Ok());
+    REQUIRE(test.store.GetShaderParameters(loaded.handle)[0].value[0] == 1.0f);
+    RunFrames(test, 1);
+    const std::uint32_t revision = test.store.Revision(loaded.handle);
+
+    WriteShader(root, ShaderPath, StrengthShader(4.0f));
+    RunFrames(test, 2);
+
+    INFO("the same handle reads the new container's default, a revision on, and Reloaded() names it once");
+    REQUIRE(test.store.GetShaderParameters(loaded.handle)[0].value[0] == 4.0f);
+    REQUIRE(test.store.Revision(loaded.handle) == revision + 1);
+    REQUIRE(TimesReloaded(test, loaded.handle) == 1);
+    REQUIRE(test.store.Reloaded().front().path == ShaderPath);
+    REQUIRE(test.errors->empty());
+}
+
+TEST_CASE("A broken rewrite of a shader container keeps its data and says why once", "[assets][shaders][reload]")
+{
+    TempRoot root;
+    WriteShader(root, ShaderPath, StrengthShader(1.0f));
+    DataApp test(Watching(root));
+    const Fenrir::LoadResult<Fenrir::Shader> loaded =
+        test.store.Load<Fenrir::Shader>(ShaderPath, Fenrir::AssetOwner::App());
+    INFO("the copied shader loads");
+    REQUIRE(loaded.Ok());
+    RunFrames(test, 1);
+
+    root.Write(ShaderPath, "half a container");
+    RunFrames(test, 5);
+
+    INFO("the shader keeps its parameter table, and nothing is listed as reloaded");
+    REQUIRE(test.store.GetShaderParameters(loaded.handle)[0].value[0] == 1.0f);
+    REQUIRE(test.store.Reloaded().empty());
+    INFO("one error over five frames names the file and keeps what it loaded");
+    REQUIRE(CountContaining(*test.errors, "Could not reload shader 'shaders/strength.fshader'") == 1);
     REQUIRE(test.errors->size() == 1);
 }
