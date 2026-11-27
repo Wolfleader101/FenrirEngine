@@ -56,10 +56,10 @@ namespace
 TEST_CASE("SpawnModel on BoxTextured puts its mesh on its node's entity, below the turned node above it, and draws it",
           "[renderer][spawn-model]")
 {
-    RendererTestApp test;
+    RendererTestApp test(RendererTest::NullBackend(), {FENRIR_TEST_EXAMPLE_ASSETS});
     test.AddCamera({0.0f, 0.0f, 3.0f});
     const Fenrir::LoadResult<Fenrir::Model> model =
-        test.Store().Load<Fenrir::Model>(FENRIR_TEST_BOX_TEXTURED, Fenrir::AssetOwner::App());
+        test.Store().Load<Fenrir::Model>("BoxTextured/BoxTextured.gltf", Fenrir::AssetOwner::App());
     INFO("BoxTextured loads");
     REQUIRE(model.Ok());
     // Khronos's file: an unnamed node turned -90 degrees about X (COLLADA's Z up to glTF's Y up), and below it an
@@ -103,11 +103,11 @@ TEST_CASE("SpawnModel on BoxTextured puts its mesh on its node's entity, below t
 TEST_CASE("SpawnModel puts a node's first mesh on its entity and each further mesh on a child entity",
           "[renderer][spawn-model]")
 {
-    RendererTestApp test;
+    RendererTestApp test(RendererTest::NullBackend(), {FENRIR_TEST_FIXTURES});
     test.AddCamera();
     // One node, Body, whose glTF mesh has two primitives with two materials: two model meshes on one node.
     const Fenrir::LoadResult<Fenrir::Model> model =
-        test.Store().Load<Fenrir::Model>(FENRIR_TEST_TWO_PARTS, Fenrir::AssetOwner::App());
+        test.Store().Load<Fenrir::Model>("two_parts.gltf", Fenrir::AssetOwner::App());
     REQUIRE(model.Ok());
     const Fenrir::ModelNode& body = test.Store().TryGet(model.handle)->nodes.at(0);
     INFO("the importer gives Body two meshes");
@@ -171,11 +171,11 @@ namespace
 TEST_CASE("SpawnModel gives each skinned mesh an entity under its skeleton's owner, skinned by it, and draws them",
           "[renderer][spawn-model]")
 {
-    RendererTest::SkinningTestApp test;
+    RendererTest::SkinningTestApp test(true, RendererTest::NullBackend(), {FENRIR_TEST_MODEL_FIXTURES});
     test.AddCamera({0.0f, 0.0f, 10.0f});
     // FenrirAssets's armatures fixture: four skinned meshes on three skeletons, and HatMesh, a rigid mesh on Hat.
     const Fenrir::LoadResult<Fenrir::Model> model =
-        test.Store().Load<Fenrir::Model>(FENRIR_TEST_ARMATURES, Fenrir::AssetOwner::App());
+        test.Store().Load<Fenrir::Model>("armatures.gltf", Fenrir::AssetOwner::App());
     REQUIRE(model.Ok());
     REQUIRE(SkinnedCount(*test.Store().TryGet(model.handle)) == 4);
 
@@ -210,9 +210,9 @@ TEST_CASE("SpawnModel without a skinning source spawns skinned meshes with their
           "logged once",
           "[renderer][spawn-model]")
 {
-    RendererTest::SkinningTestApp test(false);
+    RendererTest::SkinningTestApp test(false, RendererTest::NullBackend(), {FENRIR_TEST_MODEL_FIXTURES});
     const Fenrir::LoadResult<Fenrir::Model> model =
-        test.Store().Load<Fenrir::Model>(FENRIR_TEST_ARMATURES, Fenrir::AssetOwner::App());
+        test.Store().Load<Fenrir::Model>("armatures.gltf", Fenrir::AssetOwner::App());
     REQUIRE(model.Ok());
 
     const Entity root = Fenrir::SpawnModel(test.app, test.ActiveScene(), model.handle);
@@ -234,9 +234,9 @@ TEST_CASE("SpawnModel without a skinning source spawns skinned meshes with their
 
 TEST_CASE("SpawnModel with a stale model spawns nothing and returns a null entity", "[renderer][spawn-model]")
 {
-    RendererTestApp test;
+    RendererTestApp test(RendererTest::NullBackend(), {FENRIR_TEST_FIXTURES});
     const Fenrir::LoadResult<Fenrir::Model> model =
-        test.Store().Load<Fenrir::Model>(FENRIR_TEST_TWO_PARTS, Fenrir::AssetOwner::App());
+        test.Store().Load<Fenrir::Model>("two_parts.gltf", Fenrir::AssetOwner::App());
     REQUIRE(model.Ok());
     test.Store().Unload(model.handle);
 

@@ -15,11 +15,14 @@
 
 namespace Fenrir::Testing
 {
-    /** @brief Assets, skeletons and animation, installed in that order and ending in reverse. */
+    /**
+     * @brief Assets over the animation tests' fixtures, skeletons and animation, installed in that order and ending in
+     * reverse.
+     */
     struct AnimationPackages
     {
         explicit AnimationPackages(App& app)
-            : assets(Assets::Install(app)), skeletons(Skeletons::Install(app)),
+            : assets(Assets::Install(app, {FENRIR_ANIMATION_FIXTURES})), skeletons(Skeletons::Install(app)),
               animation(Animation::Install(app, skeletons))
         {
         }

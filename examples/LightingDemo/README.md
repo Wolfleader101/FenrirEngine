@@ -58,8 +58,10 @@ Committed ones are in `assets/` (`assets/ATTRIBUTION.md`); the large ones are fe
 the forest's Fir Tree 01, 53 MB Sponza), into `FENRIR_DEMO_ASSET_CACHE` (by default `%LOCALAPPDATA%/FenrirEngine/demo-assets` on
 Windows, else `$XDG_CACHE_HOME/FenrirEngine/demo-assets` or `~/.cache/FenrirEngine/demo-assets`), outside the build
 directory, and checks each one's SHA-256: a file whose hash is not the manifest's fails configure, naming it. A file
-already cached with the right hash is not downloaded again, so a clean build reuses the cache. The app loads the fetched
-files from the cache by absolute path; nothing is copied into the build.
+already cached with the right hash is not downloaded again, so a clean build reuses the cache. Each build links the
+fetched files into the asset root's `fetched/` folder, since the asset store loads nothing outside its root, and the app
+loads them from there by asset path (`fetched/DamagedHelmet/...`). The links are hard links, so the build directory
+holds no second copy and deleting it leaves the cache alone; with the cache on another volume they are copies.
 
 `fetched-assets.json` holds `{"assets": [{"path", "url", "sha256", "licence"}]}`: the file's place in the cache, its
 pinned upstream URL (Khronos glTF-Sample-Assets at a commit, Poly Haven, or Solar System Scope), its SHA-256 and its

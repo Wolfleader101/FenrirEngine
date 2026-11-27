@@ -1,6 +1,5 @@
 #pragma once
 
-#include <filesystem>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -52,20 +51,20 @@ namespace TextTest
         std::shared_ptr<std::vector<std::string>> m_errors;
     };
 
-    // HarfBuzz's test fonts, read where the submodule keeps them: full fonts (subset/data/fonts) and small subsets
-    // (api/fonts).
-    inline std::filesystem::path FullFont(std::string_view name)
+    // HarfBuzz's test fonts, by their asset paths under TextApp's asset root, the submodule's test directory: full
+    // fonts (subset/data/fonts) and small subsets (api/fonts).
+    inline std::string FullFont(std::string_view name)
     {
-        return std::filesystem::path(FENRIR_TEXT_HARFBUZZ_TEST) / "subset" / "data" / "fonts" / name;
+        return "subset/data/fonts/" + std::string(name);
     }
 
-    inline std::filesystem::path SubsetFont(std::string_view name)
+    inline std::string SubsetFont(std::string_view name)
     {
-        return std::filesystem::path(FENRIR_TEXT_HARFBUZZ_TEST) / "api" / "fonts" / name;
+        return "api/fonts/" + std::string(name);
     }
 
-    // An App with assets installed and a font library over its store. Members end in reverse order, so the library
-    // ends before the store it uses.
+    // An App with assets installed over HarfBuzz's test directory and a font library over its store. Members end in
+    // reverse order, so the library ends before the store it uses.
     struct TextApp
     {
         std::shared_ptr<std::vector<std::string>> errors = std::make_shared<std::vector<std::string>>();
@@ -75,15 +74,16 @@ namespace TextTest
         Fenrir::FontLibrary fonts;
 
         explicit TextApp(Fenrir::FontLibraryConfig config = {})
-            : assets(Fenrir::Assets::Install(app, {})), store(assets.Store()), fonts(store, config)
+            : assets(Fenrir::Assets::Install(app, {FENRIR_TEXT_HARFBUZZ_TEST})), store(assets.Store()),
+              fonts(store, config)
         {
         }
 
-        // Loads `file` as a font and registers it as `family`'s regular face.
-        Fenrir::AssetHandle<Fenrir::Font> Register(std::string_view family, const std::filesystem::path& file)
+        // Loads the font at asset path `path` and registers it as `family`'s regular face.
+        Fenrir::AssetHandle<Fenrir::Font> Register(std::string_view family, std::string_view path)
         {
             const Fenrir::AssetHandle<Fenrir::Font> font =
-                store.Load<Fenrir::Font>(file.string(), Fenrir::AssetOwner::App()).handle;
+                store.Load<Fenrir::Font>(path, Fenrir::AssetOwner::App()).handle;
             fonts.AddFace(family, font);
             return font;
         }

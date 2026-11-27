@@ -4,7 +4,6 @@
 // target at content scale 2 lays text out at twice its UI size.
 #include <cmath>
 #include <cstring>
-#include <filesystem>
 #include <memory>
 #include <span>
 #include <string>
@@ -26,11 +25,14 @@ namespace
 
     constexpr const char* LongText = "the quick brown fox jumps over the lazy dog and runs far away";
 
+    // Roboto in HarfBuzz's test fonts, by its asset path under TextScene's asset root, the submodule's test directory.
+    constexpr const char* RobotoPath = "subset/data/fonts/Roboto-Regular.ttf";
+
     // A root at `contentScale` over a capture target of 800 by 600 logical units, without pixel snapping when `snap` is
     // false, so rectangles keep the paragraph's fractional sizes.
     struct TextScene
     {
-        UITest::UITestApp test;
+        UITest::UITestApp test{Fenrir::AssetsConfig{FENRIR_TEXT_HARFBUZZ_TEST}};
         std::shared_ptr<UITest::CaptureTarget> target;
         Fenrir::UIRoot& root;
 
@@ -365,10 +367,8 @@ TEST_CASE("font-family resolves through the app's font library, with families re
     INFO("the roots share the app's font library");
     REQUIRE(fonts != nullptr);
     REQUIRE(fonts == scene.test.app.TryGetResource<Fenrir::FontLibrary>());
-    const std::filesystem::path file =
-        std::filesystem::path(FENRIR_TEXT_HARFBUZZ_TEST) / "subset" / "data" / "fonts" / "Roboto-Regular.ttf";
     const Fenrir::AssetHandle<Fenrir::Font> roboto =
-        scene.test.assets.Store().Load<Fenrir::Font>(file.string(), Fenrir::AssetOwner::App()).handle;
+        scene.test.assets.Store().Load<Fenrir::Font>(RobotoPath, Fenrir::AssetOwner::App()).handle;
     REQUIRE_FALSE(roboto.IsEmpty());
     fonts->AddFace("Body", roboto);
     INFO("Body is Roboto; a label with no family is in the embedded default face");
@@ -387,10 +387,8 @@ TEST_CASE("A quoted font-family keeps the commas inside its quotes as part of th
     Fenrir::FontLibrary* fonts = scene.test.Roots().GetFonts();
     INFO("the UI app has a font library");
     REQUIRE(fonts != nullptr);
-    const std::filesystem::path file =
-        std::filesystem::path(FENRIR_TEXT_HARFBUZZ_TEST) / "subset" / "data" / "fonts" / "Roboto-Regular.ttf";
     const Fenrir::AssetHandle<Fenrir::Font> roboto =
-        scene.test.assets.Store().Load<Fenrir::Font>(file.string(), Fenrir::AssetOwner::App()).handle;
+        scene.test.assets.Store().Load<Fenrir::Font>(RobotoPath, Fenrir::AssetOwner::App()).handle;
     INFO("the test font loads");
     REQUIRE_FALSE(roboto.IsEmpty());
     fonts->AddFace("Body, Display", roboto);
@@ -469,10 +467,8 @@ TEST_CASE("A label's text-shadow draws before its text, offset and in its colour
 TEST_CASE("A label in an SDF family emits SDF glyph quads over the SDF atlas, beside a bitmap label", "[ui][text][sdf]")
 {
     TextScene scene;
-    const std::filesystem::path file =
-        std::filesystem::path(FENRIR_TEXT_HARFBUZZ_TEST) / "subset" / "data" / "fonts" / "Roboto-Regular.ttf";
     const Fenrir::AssetHandle<Fenrir::Font> roboto =
-        scene.test.assets.Store().Load<Fenrir::Font>(file.string(), Fenrir::AssetOwner::App()).handle;
+        scene.test.assets.Store().Load<Fenrir::Font>(RobotoPath, Fenrir::AssetOwner::App()).handle;
     INFO("Roboto loads from HarfBuzz's test fonts");
     REQUIRE_FALSE(roboto.IsEmpty());
     Fenrir::UIFontFace face;

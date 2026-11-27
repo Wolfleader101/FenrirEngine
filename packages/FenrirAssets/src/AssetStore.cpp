@@ -508,8 +508,14 @@ namespace Fenrir
             const std::string_view file = std::string_view(record->key).substr(0, hash);
             const std::string_view label =
                 hash == std::string::npos ? std::string_view() : std::string_view(record->key).substr(hash);
+            // A load refuses a file outside the root (LoadFailure::OutsideRoot), so a loaded asset's file has an asset
+            // path; nothing is given if one ever has none.
             const std::optional<std::string> relative = RootRelative(state.root, Utf8Path(file));
-            return (relative ? *relative : std::string(file)) + std::string(label);
+            if (!relative)
+            {
+                return std::nullopt;
+            }
+            return *relative + std::string(label);
         }
 
         Serialisation::Resolvers WritingResolvers(const AssetStoreState& state)
@@ -623,6 +629,12 @@ namespace Fenrir
             return fail(LoadFailure::NotRegistered,
                         "nothing is registered under this built-in name yet (FenrirRenderer registers its built-in "
                         "shaders when it is installed)");
+        }
+        // Every asset's identity is its path under the root (ADR-0076), so one outside it has none.
+        if (!RootRelative(m_state->root, resolved.file))
+        {
+            return fail(LoadFailure::OutsideRoot,
+                        std::format("an asset loads from under the asset root '{}'", Utf8Text(m_state->root)));
         }
         std::error_code error;
         if (!std::filesystem::is_regular_file(resolved.file, error))

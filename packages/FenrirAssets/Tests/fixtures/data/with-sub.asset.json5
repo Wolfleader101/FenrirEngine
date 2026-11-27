@@ -1,0 +1,16 @@
+// A sword with an embedded sub-asset, which this store does not read yet.
+{
+  format: 1,
+  type: "AssetsTest::Sword",
+  version: 2,
+  data: {
+    displayName: "Sheathed sword",
+  },
+  sub: {
+    sheath: {
+      type: "AssetsTest::ShieldData",
+      version: 1,
+      data: {},
+    },
+  },
+}

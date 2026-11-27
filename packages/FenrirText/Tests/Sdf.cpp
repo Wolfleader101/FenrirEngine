@@ -21,8 +21,7 @@ namespace
                                                      Fenrir::FontRendering rendering)
     {
         const Fenrir::AssetHandle<Fenrir::Font> font =
-            test.store.Load<Fenrir::Font>(TextTest::FullFont("Roboto-Regular.ttf").string(), Fenrir::AssetOwner::App())
-                .handle;
+            test.store.Load<Fenrir::Font>(TextTest::FullFont("Roboto-Regular.ttf"), Fenrir::AssetOwner::App()).handle;
         REQUIRE_FALSE(font.IsEmpty());
         test.fonts.AddFace(family, font, Fenrir::FontWeightNormal, Fenrir::FontStyle::Normal, rendering);
         return font;

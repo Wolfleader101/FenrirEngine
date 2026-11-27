@@ -83,3 +83,58 @@ function(fenrir_fetch_demo_assets)
     endif()
     message(STATUS "FENRIR_FETCH_DEMO_ASSETS: ${count} files in ${fetch_CACHE_DIR}, ${downloaded} downloaded")
 endfunction()
+
+# fenrir_link_demo_assets(TARGET <demo app> MANIFEST <file> CACHE_DIR <dir> DESTINATION <dir under the asset root>)
+#
+# Puts the demo app's fetched assets under its asset root after each build, since the asset store loads nothing outside
+# its root (ADR-0021, ADR-0076): each file MANIFEST lists, from CACHE_DIR/<path>, at assets/<DESTINATION>/<path> beside
+# the executable, so the app loads it by the asset path <DESTINATION>/<path>. Each is a hard link to the cached file, so
+# the build directory holds no second copy and deleting it leaves the cache alone; it is a copy when the cache is on
+# another volume. A file already linked, or copied since the cached file last changed, is left as it is. A file the
+# cache lacks is skipped: the app says on screen which scenes miss their assets.
+function(fenrir_link_demo_assets)
+    cmake_parse_arguments(PARSE_ARGV 0 link "" "TARGET;MANIFEST;CACHE_DIR;DESTINATION" "")
+    if(NOT link_TARGET OR NOT link_MANIFEST OR NOT link_CACHE_DIR OR NOT link_DESTINATION)
+        message(FATAL_ERROR "fenrir_link_demo_assets: TARGET, MANIFEST, CACHE_DIR and DESTINATION are required")
+    endif()
+    cmake_path(ABSOLUTE_PATH link_MANIFEST BASE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" NORMALIZE)
+    add_custom_command(TARGET ${link_TARGET} POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" "-DFENRIR_LINK_MANIFEST=${link_MANIFEST}" "-DFENRIR_LINK_CACHE_DIR=${link_CACHE_DIR}"
+                "-DFENRIR_LINK_DESTINATION=$<TARGET_FILE_DIR:${link_TARGET}>/assets/${link_DESTINATION}" -P
+                "${CMAKE_CURRENT_FUNCTION_LIST_FILE}"
+        COMMENT "Linking ${link_TARGET}'s fetched assets into its asset root"
+        VERBATIM
+    )
+endfunction()
+
+# fenrir_link_fetched_files(<manifest> <cache dir> <destination dir>): the step fenrir_link_demo_assets runs after a
+# build, linking each file the manifest lists from the cache into the destination.
+function(fenrir_link_fetched_files manifest_file cache_dir destination)
+    file(READ "${manifest_file}" manifest)
+    string(JSON count LENGTH "${manifest}" assets)
+    if(count EQUAL 0)
+        return()
+    endif()
+    math(EXPR last "${count} - 1")
+    foreach(index RANGE ${last})
+        string(JSON path GET "${manifest}" assets ${index} path)
+        set(cached "${cache_dir}/${path}")
+        set(linked "${destination}/${path}")
+        if(NOT EXISTS "${cached}")
+            continue()
+        endif()
+        # A hard link has the cached file's time and a copy at least its time (IS_NEWER_THAN holds for equal times), until
+        # configure puts a new file in the cache.
+        if(EXISTS "${linked}" AND "${linked}" IS_NEWER_THAN "${cached}")
+            continue()
+        endif()
+        cmake_path(GET linked PARENT_PATH folder)
+        file(MAKE_DIRECTORY "${folder}")
+        file(REMOVE "${linked}")
+        file(CREATE_LINK "${cached}" "${linked}" COPY_ON_ERROR)
+    endforeach()
+endfunction()
+
+if(CMAKE_SCRIPT_MODE_FILE STREQUAL CMAKE_CURRENT_LIST_FILE AND DEFINED FENRIR_LINK_MANIFEST)
+    fenrir_link_fetched_files("${FENRIR_LINK_MANIFEST}" "${FENRIR_LINK_CACHE_DIR}" "${FENRIR_LINK_DESTINATION}")
+endif()
