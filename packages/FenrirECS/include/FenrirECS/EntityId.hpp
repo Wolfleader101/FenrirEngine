@@ -29,7 +29,8 @@ namespace Fenrir
 
     /**
      * @brief The id's spelling in lower-case Crockford base32 without padding: the text ParseEntityId read it from, or
-     * five characters for a minted one. Empty for no id.
+     * five characters for a minted one. Empty for no id. Only an id ParseEntityId or MintEntityId gave has a
+     * spelling: any other value spells as nothing useful.
      */
     [[nodiscard]] std::string SpellEntityId(EntityId id);
 

@@ -458,7 +458,6 @@ namespace BridgeTest
         .visit = VisitRoster,
     };
 
-    // Adds the types above to `registry`, as a package's generated registration would; whether every one was added.
     // Read-back state a step writes: `state` is transient, kept in the layout but never written or read.
     struct Sensed
     {
@@ -507,6 +506,7 @@ namespace BridgeTest
         .fields = SensorFields,
     };
 
+    // Adds the types above to `registry`, as a package's generated registration would; whether every one was added.
     inline bool RegisterBridgeTypes(Fenrir::TypeRegistry& registry)
     {
         bool registered = true;

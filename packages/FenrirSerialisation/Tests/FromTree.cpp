@@ -585,6 +585,7 @@ TEST_CASE("A transient field is never read and a key naming it is dropped with a
     REQUIRE(sensed.speed == 4);
     INFO("state is transient, so it keeps its default");
     REQUIRE(sensed.state.min == 0.0f);
+    INFO("state's other field keeps its default too");
     REQUIRE(sensed.state.max == 1.0f);
     INFO("the key naming it is counted as a field the file should not hold, with one warning saying why");
     REQUIRE(result.unknownFields == 1);

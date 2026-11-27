@@ -25,6 +25,15 @@ using Fenrir::TypeRegistry;
 
 namespace
 {
+    // A registry holding FenrirECS's described types (and FenrirMath's, which its registration runs first).
+    TypeRegistry EcsRegistry()
+    {
+        TypeRegistry registry;
+        INFO("setup: FenrirECS's generated registration adds its types with no diagnostic");
+        REQUIRE(Fenrir::Generated::RegisterFenrirECSTypes(registry));
+        return registry;
+    }
+
     constexpr std::string_view k_crockford = "0123456789abcdefghjkmnpqrstvwxyz";
 
     bool IsLowerCrockford(std::string_view text)
@@ -83,13 +92,14 @@ TEST_CASE("an id of another length parses and spells back unchanged", "[entity-i
 
 TEST_CASE("ids that differ only in leading zeros are different ids", "[entity-id]")
 {
-    const std::optional<EntityId> short_ = Fenrir::ParseEntityId("a7k2q");
-    const std::optional<EntityId> long_ = Fenrir::ParseEntityId("00a7k2q");
-    REQUIRE(short_.has_value());
-    REQUIRE(long_.has_value());
+    const std::optional<EntityId> fiveCharacters = Fenrir::ParseEntityId("a7k2q");
+    const std::optional<EntityId> leadingZeros = Fenrir::ParseEntityId("00a7k2q");
+    INFO("both spellings are valid ids");
+    REQUIRE(fiveCharacters.has_value());
+    REQUIRE(leadingZeros.has_value());
 
     INFO("a file's '00a7k2q' is not its 'a7k2q'");
-    REQUIRE(short_->value != long_->value);
+    REQUIRE(fiveCharacters->value != leadingZeros->value);
 }
 
 TEST_CASE("text that is not a lower-case Crockford id does not parse", "[entity-id]")
@@ -131,8 +141,7 @@ TEST_CASE("Transient is added, tested and removed through the typed API", "[tran
 
 TEST_CASE("Transient is in no registration", "[transient][types]")
 {
-    TypeRegistry registry;
-    REQUIRE(Fenrir::Generated::RegisterFenrirECSTypes(registry));
+    const TypeRegistry registry = EcsRegistry();
 
     INFO("Fenrir::Transient is undescribed, so no name finds it");
     REQUIRE_FALSE(ComponentType::ForName(registry, "Fenrir::Transient").has_value());
@@ -163,35 +172,48 @@ TEST_CASE("UnknownComponents gives an opaque component's bytes back unchanged", 
 
 TEST_CASE("UnknownComponents is in no registration", "[unknown-components][types]")
 {
-    TypeRegistry registry;
-    REQUIRE(Fenrir::Generated::RegisterFenrirECSTypes(registry));
+    const TypeRegistry registry = EcsRegistry();
 
     INFO("Fenrir::UnknownComponents is undescribed, so a file never names it");
     REQUIRE(registry.Find("Fenrir::UnknownComponents") == nullptr);
 }
 
-TEST_CASE("EntityId and Instance are found by name", "[entity-id][instance][types]")
+TEST_CASE("ForName finds EntityId as a ComponentType an entity accepts", "[entity-id][types]")
 {
-    TypeRegistry registry;
-    REQUIRE(Fenrir::Generated::RegisterFenrirECSTypes(registry));
+    const TypeRegistry registry = EcsRegistry();
     EntityList entities;
     const auto entity = entities.CreateEntity().GetId();
 
     const std::optional<ComponentType> id = ComponentType::ForName(registry, "Fenrir::EntityId");
     INFO("FenrirECS's registration should hang a ComponentType on Fenrir::EntityId");
     REQUIRE(id.has_value());
-    INFO("an entity takes an EntityId through it, and the C++ type sees it");
+    INFO("the entity takes an EntityId through it");
     REQUIRE(entities.Add(*id, entity));
+    INFO("and the C++ type sees the component it added");
     REQUIRE(entities.Get(ComponentType::Native<EntityId>(), entity) != nullptr);
+}
+
+TEST_CASE("ForName finds Instance as a ComponentType an entity accepts", "[instance][types]")
+{
+    const TypeRegistry registry = EcsRegistry();
+    EntityList entities;
+    const auto entity = entities.CreateEntity().GetId();
 
     const std::optional<ComponentType> instance = ComponentType::ForName(registry, "Fenrir::Instance");
     INFO("FenrirECS's registration should hang a ComponentType on Fenrir::Instance");
     REQUIRE(instance.has_value());
-    INFO("an entity takes an Instance through it, and the C++ type sees it");
+    INFO("the entity takes an Instance through it");
     REQUIRE(entities.Add(*instance, entity));
+    INFO("and the C++ type sees the component it added");
     REQUIRE(entities.Get(ComponentType::Native<Fenrir::Instance>(), entity) != nullptr);
+}
 
-    INFO("NameOf spells them back");
-    REQUIRE(ComponentType::NameOf(registry, *id) == "Fenrir::EntityId");
-    REQUIRE(ComponentType::NameOf(registry, *instance) == "Fenrir::Instance");
+TEST_CASE("NameOf spells EntityId and Instance by their canonical names", "[entity-id][instance][types]")
+{
+    const TypeRegistry registry = EcsRegistry();
+
+    INFO("EntityId's ComponentType is registered as Fenrir::EntityId");
+    REQUIRE(ComponentType::NameOf(registry, ComponentType::Native<EntityId>()) == "Fenrir::EntityId");
+    INFO("Instance's ComponentType is registered as Fenrir::Instance");
+    REQUIRE(ComponentType::NameOf(registry, ComponentType::Native<Fenrir::Instance>()) == "Fenrir::Instance");
 }
