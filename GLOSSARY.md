@@ -244,7 +244,7 @@ The readable random string a scene file gives an entity, held in its `EntityId` 
 *Avoid:* entity handle, fileID, GUID, name (the display string).
 
 **Transient**
-Not written to a scene file: a component whose description says so, or an entity tagged `Transient` with its children (a free-fly camera, a debug entity). Everything else described is written (ADR-0078). A field of a data asset or settings type marked `@transient` is code wiring no file holds (`ScriptingConfig::extensions`): it is left out of its type's description altogether (ADR-0084).
+Not written to a scene file: a component whose description says so, a field marked `@transient` (read-back state a step writes, such as `CharacterBody::state`, kept in its type's layout), or an entity tagged `Transient` with its children (a free-fly camera, a debug entity). Everything else described is written (ADR-0078). A field of a data asset or settings type marked `@transient` is code wiring no file holds (`ScriptingConfig::extensions`): it is left out of its type's description altogether (ADR-0084).
 *Avoid:* runtime-only, editor-only (which is written but stripped when cooked), hidden, don't-save.
 
 **Editor-only**

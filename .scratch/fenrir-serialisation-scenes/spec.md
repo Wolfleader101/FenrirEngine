@@ -120,7 +120,9 @@ A scene file is authoring data. It is read when a scene is made and never writte
 
   It is filled at load for a type the registry lacks, with one diagnostic per type per load. It is written back unchanged, and never attached retroactively (ADR-0078).
 - **`Instance { source }`:** a described component on a scene instance's root, where `source` is a `fixed-string` asset path (ADR-0080). It is written as the block's `instance`, never inside `components`.
-- **Read-back state is `@transient`:** `CharacterBody.state` and `VehicleWheel.state` are recomputed every step. They are marked `@transient`, so their `Entity` fields are never written, and every generated output is regenerated.
+- **Read-back state is `@transient`:** `CharacterBody.state`, `VehicleWheel.state` and `Vehicle.state` are recomputed every step. Each field is marked `@transient`, so their `Entity` fields are never written, and every generated output is regenerated.
+  - A component's field marked `@transient` stays in its layout, which bindings mirror, and its description records `transient`: `FieldInfo::transient` at run time. The bridge never writes or reads such a field, and a struct differing from its default only there is left out.
+  - A data asset's or settings type's transient field is still left out of its description, as before.
 - **Names come from the types work:** the reader and writer reach a component by the name a file spells, through `ComponentType::ForName`, and a scene resource through `Scene::FindResource`, `AddResource` and `RemoveResource`. Scripting attaches C# components at admission (the csharp spec). This spec adds no table.
 
 ### The file (FenrirAssets)
@@ -143,7 +145,7 @@ A scene file is authoring data. It is read when a scene is made and never writte
   - undescribed components;
   - `Relationship`, which becomes `parent` and the order;
   - `EntityId` and `Instance`, which become `id` and `instance`;
-  - `@transient` types;
+  - `@transient` types, and `@transient` fields (the bridge leaves them out);
   - `UnknownComponents` as a component (its contents are written back as entries);
   - `Transient` entities, with their children.
 
@@ -332,7 +334,7 @@ How the tickets stack:
   - `EntityId` and `Instance` are described components that are written as a block's `id` and `instance`, never in `components`.
 - **`Transient`** is an undescribed, unregistered empty tag, reached only through the typed API. `ComponentType::Native` refuses empty types, and the user chose this over a one-byte tag or empty-type support on 2026-11-27.
 - **`UnknownComponents`** holds each opaque value as `EncodeTree` bytes, so FenrirECS, which links only FenrirMath and FenrirTypes, depends on nothing new.
-- **Read-back state:** `CharacterBody.state` and `VehicleWheel.state` become `@transient`, so no scene file writes their `Entity` fields (the user, 2026-11-27).
+- **Read-back state:** `CharacterBody.state` and `VehicleWheel.state` become `@transient`, so no scene file writes their `Entity` fields (the user, 2026-11-27). `Vehicle.state`, read-back too, is marked with them. describe-api refused `@transient` on a component's field, so ticket 01 makes such a field stay in the layout and be recorded as `transient`, rather than marking the state types `@transient` (the user chose the long-term option, 2026-11-27).
 - **The scene envelope** has its own reader and writer, sharing the data-asset envelope's `format` check, with `type: "Fenrir::Scene"` and a layout version kept as a FenrirAssets constant. `Fenrir::Scene` is not registered (the user, 2026-11-27).
 - **The scene doors** are `AssetStore` members. `LoadScene` and `CopyScene` take `App&`, to call `CreateScene`, and the save result is `SceneSaveResult`, named apart from data assets' `SaveResult` (the user, 2026-11-27).
 - **Names:** components and scene resources are found by canonical name, through `ComponentType::ForName` and FenrirScene's named resource doors. This spec builds no table of its own.

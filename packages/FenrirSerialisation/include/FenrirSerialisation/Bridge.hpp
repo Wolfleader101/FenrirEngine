@@ -64,7 +64,9 @@ namespace Fenrir::Serialisation
      * - a `reference` or an `entity` is the string `writeReference` or `writeEntity` gives it, or `null` when that is
      *   empty, the callback is missing or the value is the empty handle or the null entity;
      * - a `pointer` field is never written, since its target is never described and its bytes mean nothing in a
-     *   file; a pointer element of an array, list or optional is `null`.
+     *   file; a pointer element of an array, list or optional is `null`;
+     * - a transient field (`FieldInfo::transient`, read-back state such as `CharacterBody::state`) is never written,
+     *   and a struct differing from its default only there is left out as equal to it.
      *
      * An enum value no enumerator has is written as its number.
      *
@@ -127,7 +129,8 @@ namespace Fenrir::Serialisation
      *   beyond an `f32`'s range, an unknown enumerator, `null` in a field that does not admit it, and a fixed array
      *   or bound type of the wrong length;
      * - a list's elements are each read so, a bad element taking the element type's default;
-     * - a key matching no field and no `@formerly` name is warned, dropped and counted in `unknownFields`;
+     * - a key matching no field and no `@formerly` name is warned, dropped and counted in `unknownFields`, and so is
+     *   a key naming a transient field, which is never read and keeps its default;
      * - a key matching a field's `@formerly` name reads into that field; when the current name is there too, the
      *   current one is read and the former is dropped with a warning, which no count counts. Of several former names
      *   the first the field lists is read, the others dropped so. Every field's current name is claimed before any

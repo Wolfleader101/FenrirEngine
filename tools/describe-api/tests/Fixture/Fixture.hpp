@@ -442,6 +442,11 @@ namespace Fixture
         bool enabled = EnabledByDefault;
         /** @brief A float default computed from a named constant. */
         float scaled = DefaultTicks * 0.5f;
+        /**
+         * @brief Read-back state a step writes: kept in the layout, recorded as transient, never written to a file.
+         * @transient
+         */
+        float reading = 0.0f;
     };
 
     /**

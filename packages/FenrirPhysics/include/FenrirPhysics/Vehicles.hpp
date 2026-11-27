@@ -457,7 +457,10 @@ namespace Fenrir
         /** @brief Disabled, the entity is a plain rigid body resting on its chassis, its `state` and its wheels' reset
          * and its wheel entities left where they were. Enabled again, it is built fresh with nothing carried over. */
         bool enabled = true;
-        /** @brief Read-back: overwritten by physics after every step. */
+        /**
+         * @brief Read-back: overwritten by physics after every step, so no scene file holds it.
+         * @transient
+         */
         VehicleState state = {};
     };
 
@@ -561,7 +564,10 @@ namespace Fenrir
         float maxHandbrakeTorque = 4000.0f;
         VehicleTyre longitudinal = {.peakSlip = 0.06f, .peakFriction = 1.2f, .slideSlip = 0.2f, .slideFriction = 1.0f};
         VehicleTyre lateral = {.peakSlip = 0.052f, .peakFriction = 1.2f, .slideSlip = 0.35f, .slideFriction = 1.0f};
-        /** @brief Read-back: overwritten by physics after every step. */
+        /**
+         * @brief Read-back: overwritten by physics after every step, so no scene file holds it.
+         * @transient
+         */
         VehicleWheelState state = {};
     };
 

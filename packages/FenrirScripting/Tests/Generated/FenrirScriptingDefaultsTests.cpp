@@ -62,6 +62,18 @@ TEST_CASE("C#'s new Entity() has C++'s Fenrir::Entity{} defaults, field by field
     CheckDefaults<Fenrir::Entity>(Fenrir::ScriptingProbe::Component(app.scripting), "Entity");
 }
 
+TEST_CASE("C#'s new EntityId() has C++'s Fenrir::EntityId{} defaults, field by field", "[scripting][bindings]")
+{
+    Fenrir::Testing::ScriptingApp app;
+    CheckDefaults<Fenrir::EntityId>(Fenrir::ScriptingProbe::Component(app.scripting), "EntityId");
+}
+
+TEST_CASE("C#'s new Instance() has C++'s Fenrir::Instance{} defaults, field by field", "[scripting][bindings]")
+{
+    Fenrir::Testing::ScriptingApp app;
+    CheckDefaults<Fenrir::Instance>(Fenrir::ScriptingProbe::Component(app.scripting), "Instance");
+}
+
 TEST_CASE("C#'s new Name() has C++'s Fenrir::Name{} defaults, field by field", "[scripting][bindings]")
 {
     Fenrir::Testing::ScriptingApp app;

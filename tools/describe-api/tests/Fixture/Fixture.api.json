@@ -743,7 +743,7 @@
       "name": "Fixture::Dial",
       "category": "struct",
       "role": "component",
-      "size": 20,
+      "size": 24,
       "alignment": 4,
       "doc": "A component a file reads under its former names, at version 2.\n\nThe doc commands below are recorded as keys, not as text.",
       "version": 2,
@@ -809,6 +809,14 @@
           "kind": "f32",
           "default": 6,
           "doc": "A float default computed from a named constant."
+        },
+        {
+          "name": "reading",
+          "offset": 20,
+          "kind": "f32",
+          "default": 0,
+          "doc": "Read-back state a step writes: kept in the layout, recorded as transient, never written to a file.",
+          "transient": true
         }
       ]
     },

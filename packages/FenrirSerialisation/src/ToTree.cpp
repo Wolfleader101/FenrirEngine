@@ -160,13 +160,14 @@ namespace Fenrir::Serialisation
                 return true;
             case Kind::Struct: {
                 // A tagged union pushes its tag first, so two unions of different alternatives differ there before
-                // their alternatives are compared.
+                // their alternatives are compared. A transient field is never written, so it never makes two differ.
                 const std::vector<VisitedField> fieldsA = FieldsOf(a);
                 const std::vector<VisitedField> fieldsB = FieldsOf(b);
                 if (fieldsA.size() != fieldsB.size())
                     return false;
                 for (std::size_t i = 0; i < fieldsA.size(); ++i)
-                    if (fieldsA[i].info != fieldsB[i].info || !Equal(fieldsA[i].value, fieldsB[i].value))
+                    if (fieldsA[i].info != fieldsB[i].info ||
+                        (!fieldsA[i].info->transient && !Equal(fieldsA[i].value, fieldsB[i].value)))
                         return false;
                 return true;
             }
@@ -190,15 +191,15 @@ namespace Fenrir::Serialisation
         Value ToValue(const Resolvers& resolvers, const FieldInfo* field, ConstValueRef value,
                       const ConstValueRef* defaults);
 
-        // Adds to `object` each of `fields` that differs from the same field of `defaults`, leaving out pointers; a
-        // field with no partner in `defaults` is compared with nothing and written whole.
+        // Adds to `object` each of `fields` that differs from the same field of `defaults`, leaving out pointers and
+        // transient fields; a field with no partner in `defaults` is compared with nothing and written whole.
         void AddFields(const Resolvers& resolvers, Object& object, const std::vector<VisitedField>& fields,
                        const std::vector<VisitedField>& defaults)
         {
             for (std::size_t i = 0; i < fields.size(); ++i)
             {
                 const VisitedField& field = fields[i];
-                if (field.info->type.kind == Kind::Pointer)
+                if (field.info->type.kind == Kind::Pointer || field.info->transient)
                     continue;
                 const VisitedField* partner =
                     i < defaults.size() && defaults[i].info == field.info ? &defaults[i] : nullptr;

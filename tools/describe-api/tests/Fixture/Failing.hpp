@@ -199,12 +199,6 @@ namespace Failing
         std::string name;
     };
 
-    struct TransientField
-    {
-        /** @transient */
-        float value = 0.0f;
-    };
-
     enum class TransientTagKind : std::uint8_t
     {
         Number,

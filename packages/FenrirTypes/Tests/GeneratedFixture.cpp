@@ -206,7 +206,7 @@ TEST_CASE("Visiting a fixed-layout component reads the values an instance holds"
 
     const std::vector<Seen> expected = {
         {"fill", Kind::F32, 0},      {"ticks", Kind::I32, 4},   {"span", Kind::I32, 8},
-        {"enabled", Kind::Bool, 12}, {"scaled", Kind::F32, 16},
+        {"enabled", Kind::Bool, 12}, {"scaled", Kind::F32, 16}, {"reading", Kind::F32, 20},
     };
     INFO("Dial's fields, with Fixture.api.json's kinds and offsets");
     REQUIRE(visitor.seen == expected);
@@ -245,6 +245,20 @@ TEST_CASE("A field's doc, former names and metadata are the ones its doc command
     REQUIRE(ticks.metadata.range->max == 10.5);
     REQUIRE_FALSE(ticks.metadata.step.has_value());
     REQUIRE_FALSE(ticks.metadata.hidden);
+}
+
+TEST_CASE("A component's transient field is in its layout and says it is transient")
+{
+    Registered fixture;
+    const TypeDescription& dial = fixture.Get("Fixture::Dial");
+
+    INFO("Dial::reading, marked @transient, is still one of Dial's fields, at its offset");
+    REQUIRE(dial.fields.size() == 6);
+    REQUIRE(dial.fields[5].name == "reading");
+    REQUIRE(dial.fields[5].offset == 20);
+    INFO("and its FieldInfo says it is transient, where Dial::fill's does not");
+    REQUIRE(dial.fields[5].transient);
+    REQUIRE_FALSE(dial.fields[0].transient);
 }
 
 TEST_CASE("A nested struct, an enum and an array of structs point at their own registered descriptions")

@@ -3,6 +3,8 @@
 headers = [
     "../include/FenrirECS/DefaultComponents.hpp",
     "../include/FenrirECS/Entity.hpp",
+    "../include/FenrirECS/EntityId.hpp",
+    "../include/FenrirECS/SceneComponents.hpp",
 ]
 
 # Name keeps its buffer private, and Entity its value and entity list, but their layouts are shared all the same: a
@@ -14,6 +16,11 @@ private-members = ["Fenrir::Name", "Fenrir::Entity"]
 "Fenrir::Transform" = "component"
 "Fenrir::Name" = "component"
 "Fenrir::Relationship" = "component"
+
+# The components a scene file names an entity and a scene instance by, written as a block's id and instance (ADR-0078,
+# ADR-0080). Transient and UnknownComponents, beside them, are undescribed.
+"Fenrir::EntityId" = "component"
+"Fenrir::Instance" = "component"
 
 # An entity named inside a component or event: its value, then its entity list.
 "Fenrir::Entity" = "shared-struct"
@@ -31,5 +38,11 @@ header = "../include/FenrirECS/Generated/FenrirECSTypes.hpp"
 source = "../src/Generated/FenrirECSTypes.cpp"
 test = "../Tests/Generated/FenrirECSTypesDefaultsTests.cpp"
 function = "Fenrir::Generated::RegisterFenrirECSTypes"
-includes = ["FenrirECS/DefaultComponents.hpp", "FenrirECS/Entity.hpp", "FenrirECS/TypeAttachments.hpp"]
+includes = [
+    "FenrirECS/DefaultComponents.hpp",
+    "FenrirECS/Entity.hpp",
+    "FenrirECS/EntityId.hpp",
+    "FenrirECS/SceneComponents.hpp",
+    "FenrirECS/TypeAttachments.hpp",
+]
 uses = ["../../FenrirMath/api/FenrirMath.api.toml"]

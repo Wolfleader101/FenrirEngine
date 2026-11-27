@@ -574,3 +574,22 @@ TEST_CASE("A root that is not an object leaves the whole value at its default", 
     REQUIRE(result.diagnostics[0].line == 1);
     REQUIRE(result.diagnostics[0].column == 1);
 }
+
+TEST_CASE("A transient field is never read and a key naming it is dropped with a warning", "[serialisation][fromtree]")
+{
+    Sensed sensed;
+    RecordingLogger logger;
+    const BridgeResult result = Read("{\n  speed: 4,\n  state: {min: 2},\n}", SensedDescription, &sensed, logger);
+
+    INFO("speed is read");
+    REQUIRE(sensed.speed == 4);
+    INFO("state is transient, so it keeps its default");
+    REQUIRE(sensed.state.min == 0.0f);
+    REQUIRE(sensed.state.max == 1.0f);
+    INFO("the key naming it is counted as a field the file should not hold, with one warning saying why");
+    REQUIRE(result.unknownFields == 1);
+    REQUIRE(result.diagnostics.size() == 1);
+    INFO(Where(result.diagnostics[0]) << ": " << result.diagnostics[0].message);
+    REQUIRE(result.diagnostics[0].severity == DiagnosticSeverity::Warning);
+    REQUIRE(result.diagnostics[0].message.find("transient") != std::string::npos);
+}

@@ -158,10 +158,6 @@ public sealed class DescribeTests
     [InlineData("\"Failing::ComputedName\" = \"data-asset\"",
                 "Failing::ComputedName::name: the default 'std::string(3, 'a')' is not one a string records: a string " +
                 "literal, or {} or no initialiser for the empty string")]
-    [InlineData("\"Failing::TransientField\" = \"component\"",
-                "Failing::TransientField::value: @transient on a field, which a component cannot leave out: a field " +
-                "marked @transient is code wiring a data asset or settings type holds, and a component's fields are its " +
-                "layout")]
     [InlineData("\"Failing::ArrayOfStrings\" = \"data-asset\"",
                 "Failing::ArrayOfStrings::names: an array of strings, which the kinds cannot express: hold a list")]
     [InlineData("\"Failing::TargetingAsset\" = \"data-asset\"",
@@ -479,6 +475,19 @@ public sealed class DescribeTests
         Assert.Equal("Every metadata command on one field, and two former names.", fill.Doc);
         Assert.Equal(FieldMetadata.None with { Range = (-10, 10.5) }, ticks.Metadata);
         Assert.Empty(ticks.Formerly);
+    }
+
+    [Fact]
+    public void ATransientFieldOfAComponentIsKeptInItsLayoutAndRecordedAsTransient()
+    {
+        var types = Describer.Describe(Selection.Read(FixtureSelection), []).Types;
+        var dial = (StructDescription)types.Single(type => type.Name == "Fixture::Dial");
+        var reading = dial.Fields.Single(field => field.Name == "reading");
+
+        Assert.True(reading.Transient, "Dial::reading is marked @transient, so its description should say so.");
+        Assert.Equal(20, reading.Offset);
+        Assert.False(dial.Fields.Single(field => field.Name == "fill").Transient,
+                     "Dial::fill is not marked @transient.");
     }
 
     [Fact]

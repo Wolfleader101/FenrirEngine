@@ -170,6 +170,12 @@ internal sealed record FieldDescription(string Name, long? Offset, FieldType Typ
     public IReadOnlyList<string> Formerly { get; init; } = [];
 
     public FieldMetadata Metadata { get; init; } = FieldMetadata.None;
+
+    /// <summary>
+    /// Whether <c>@transient</c> marks the field: kept in its type's layout, never written to a file. A data asset's or
+    /// settings type's transient field is left out of the description instead.
+    /// </summary>
+    public bool Transient { get; init; }
 }
 
 internal sealed record EnumValue(string Name, string Value, string? Doc);

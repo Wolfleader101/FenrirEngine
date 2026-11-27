@@ -15,17 +15,19 @@
 
   FenrirECS holds the bytes and never decodes them, so it links nothing new.
 - **`Instance { source }`:** a described `component`, where `source` is a `fixed-string` asset path.
-- **Read-back state:** mark `CharacterBody.state` and `VehicleWheel.state` `@transient`.
+- **Read-back state:** mark `CharacterBody.state` and `VehicleWheel.state` `@transient`, and `Vehicle.state` with them.
+  - describe-api refused `@transient` on a component's field. Such a field now stays in the layout and is recorded as `transient`, in the description and in `FieldInfo`.
+  - The bridge never writes or reads it.
 - **Regenerate:** commit the regenerated descriptions, bindings and registrations of FenrirECS and FenrirPhysics.
 
 **Blocked by:** none.
 
-**Touches:** `packages/FenrirECS/` (`include/FenrirECS/` new headers, `src/`, its `.api.toml`, `src/Generated/`, `Tests/`), `packages/FenrirPhysics/include/FenrirPhysics/` (`Characters.hpp`, the vehicle header), `packages/FenrirPhysics/src/Generated/`, the generated C# bindings for both
+**Touches:** `tools/describe-api/` (the field command, its fixture and `SCHEMA.md`), `tools/generate-type-registry/src/`, `packages/FenrirTypes/` (`FieldInfo.hpp`, the fixture test), `packages/FenrirSerialisation/` (the bridge and its tests), `packages/FenrirApp/Tests/InstalledTypes.cpp`, `packages/FenrirECS/` (`include/FenrirECS/` new headers, `src/`, its `.api.toml`, `src/Generated/`, `Tests/`), `packages/FenrirPhysics/include/FenrirPhysics/` (`Characters.hpp`, the vehicle header), `packages/FenrirPhysics/src/Generated/`, the generated C# bindings for both and `FenrirScripting.binding.toml`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A minted `EntityId` is five lower-case Crockford characters, and a parsed longer id spells back unchanged.
-- [ ] `Transient` is added, tested and removed through the typed API, and is in no registration.
-- [ ] `UnknownComponents` holds an opaque value's bytes and gives them back unchanged.
-- [ ] `EntityId` and `Instance` are found through `ComponentType::ForName`.
-- [ ] `CharacterBody.state` and `VehicleWheel.state` are `@transient`, and every generated output regenerates clean.
+- [x] A minted `EntityId` is five lower-case Crockford characters, and a parsed longer id spells back unchanged.
+- [x] `Transient` is added, tested and removed through the typed API, and is in no registration.
+- [x] `UnknownComponents` holds an opaque value's bytes and gives them back unchanged.
+- [x] `EntityId` and `Instance` are found through `ComponentType::ForName`.
+- [x] `CharacterBody.state`, `VehicleWheel.state` and `Vehicle.state` are `@transient`, and every generated output regenerates clean.

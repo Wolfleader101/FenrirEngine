@@ -3,7 +3,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/../../../cmake/FenrirCatch2.cmake")
 fenrir_add_catch2()
 
 add_executable(FenrirECSTests PublicHeaders.cpp ComponentTypes.cpp ComponentTypeNames.cpp ComponentWatchHeader.cpp
-                              ComponentWatches.cpp DynamicComponents.cpp Entities.cpp Queries.cpp TrackedComponentSets.cpp
+                              ComponentWatches.cpp DynamicComponents.cpp Entities.cpp Queries.cpp SceneComponents.cpp TrackedComponentSets.cpp
                               WorldTransforms.cpp)
 target_link_libraries(FenrirECSTests PRIVATE FenrirECS Catch2::Catch2WithMain)
 add_test(NAME FenrirECS COMMAND FenrirECSTests --order decl)

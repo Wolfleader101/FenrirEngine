@@ -6,6 +6,7 @@
 #include "FenrirTypes/FieldVisitor.hpp"
 #include "FenrirTypes/Kind.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -537,13 +538,17 @@ namespace Fenrir::Serialisation
                 if (!tagKey.empty())
                     claim(tagKey);
 
+                // A transient field claims no key, so it keeps its default and a key naming it is dropped.
                 std::vector<std::size_t> sources(fields.size(), none);
                 for (std::size_t f = 0; f < fields.size(); ++f)
-                    sources[f] = claim(fields[f].info->name);
+                    if (!fields[f].info->transient)
+                        sources[f] = claim(fields[f].info->name);
 
                 for (std::size_t f = 0; f < fields.size(); ++f)
                 {
                     const FieldInfo& info = *fields[f].info;
+                    if (info.transient)
+                        continue;
                     for (std::string_view formerName : info.formerly)
                         for (std::size_t m = claim(formerName); m != none; m = claim(formerName))
                         {
@@ -570,8 +575,15 @@ namespace Fenrir::Serialisation
                     if (used[m])
                         continue;
                     ++m_result.unknownFields;
+                    const std::string_view key = object.members[m].key;
+                    const bool namesTransient =
+                        std::any_of(fields.begin(), fields.end(), [&](const VisitedField& field) {
+                            return field.info->transient && field.info->name == key;
+                        });
                     Report(DiagnosticSeverity::Warning, object.members[m].value,
-                           std::format("`{}` names no field, so it is dropped", Below(where, object.members[m].key)));
+                           namesTransient ? std::format("`{}` is transient, which no file holds, so it is dropped",
+                                                        Below(where, key))
+                                          : std::format("`{}` names no field, so it is dropped", Below(where, key)));
                 }
             }
 

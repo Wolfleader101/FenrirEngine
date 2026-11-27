@@ -49,6 +49,7 @@ Plain data. `fields` lists every non-static data member in declaration order (wh
 | `doc` | The member's doc comment, when there is one. |
 | `formerly` | The member's former names from `@formerly`, in the order written, when it has any. |
 | `metadata` | What its metadata commands give, when it has any: an object with only the keys of the commands present (see "Type and field doc commands"). |
+| `transient` | `true` when the member is marked `@transient`: read-back state kept in the layout that a file never holds (absent otherwise). |
 
 ### `tagged-union`
 
@@ -154,7 +155,7 @@ A field's comment (a struct's member, or a tagged union's tag) takes:
 | `@hidden` | `metadata.hidden`: `true`; an inspector does not show it. |
 | `@multiline` | `metadata.multiline`: `true`; an inspector edits its text over several lines. |
 | `@units text` | `metadata.units`: the units an inspector shows beside the value (`m/s`, `percent`). |
-| `@transient` | Nothing: the field is left out of `fields` and its type is never read. It is code wiring (a list of callbacks, say) that a `data-asset` or `settings` type holds and no file does. Those two are reached by member, so a field left out costs nothing; in any other role, or on a tagged union's tag, it fails the tool, since there the fields are the layout a binding mirrors. |
+| `@transient` | On a `data-asset` or `settings` type, nothing: the field is left out of `fields` and its type is never read. It is code wiring (a list of callbacks, say) that no file holds; those two are reached by member, so a field left out costs nothing. In any other role the fields are the layout a binding mirrors, so the field is kept and records `transient`: read-back state a step writes (a character's last move), which no file holds. On a tagged union's tag it fails the tool. |
 
 A number is written as JSON's, the shortest that reads back as the same value. A text command's text is the rest of its line; a flag takes nothing after it. Every command but `@formerly` is given at most once. A type's command on a field, a field's on a type, any command on an enumerator or a tagged union's kind, a malformed one (`@version 0`, `@range 10`, `@formerly` with no name) or a second of one fails the tool, naming the type, member and command. Nothing checks a command against the member's kind: `@multiline` on a number is recorded as written.
 
