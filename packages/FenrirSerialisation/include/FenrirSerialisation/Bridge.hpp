@@ -86,9 +86,15 @@ namespace Fenrir::Serialisation
      *        every nested type itself.
      * @param resolvers Asked once for each `reference` or `entity` value written, an element apiece in an array.
      * @param prior The tree the value was read from, whose comments the new tree takes by key path; null for none.
+     * @param defaults Another value of `type` whose fields are the defaults left out, in place of an instance
+     *        `Construct` makes: a scene instance's override is the live value written against its source's (ADR-0080
+     *        §4). A field equal to the same field there is left out, a nested struct field by field; one that differs
+     *        is written, even when it is at the type's own default. A `reference` or `entity` compares by
+     *        value, so one naming an entity of another scene always differs. Null for the constructed defaults.
      */
     [[nodiscard]] Value ToTree(const void* value, const TypeDescription& type, const TypeRegistry& registry,
-                               const Resolvers& resolvers, const Value* prior = nullptr);
+                               const Resolvers& resolvers, const Value* prior = nullptr,
+                               const void* defaults = nullptr);
 
     /** @brief How a `FromTree` read went. */
     enum class BridgeStatus

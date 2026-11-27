@@ -379,10 +379,12 @@ namespace Fenrir::Serialisation
     } // namespace
 
     Value ToTree(const void* value, const TypeDescription& type, [[maybe_unused]] const TypeRegistry& registry,
-                 const Resolvers& resolvers, const Value* prior)
+                 const Resolvers& resolvers, const Value* prior, const void* defaults)
     {
         const ValueType valueType{.kind = Kind::Struct, .type = &type};
-        Value tree = ToValue(resolvers, nullptr, ConstValueRef(value, valueType), nullptr);
+        const ConstValueRef baseline(defaults, valueType);
+        Value tree =
+            ToValue(resolvers, nullptr, ConstValueRef(value, valueType), defaults != nullptr ? &baseline : nullptr);
         if (prior != nullptr)
         {
             tree.leadingComments = prior->leadingComments;

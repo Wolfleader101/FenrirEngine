@@ -1,0 +1,70 @@
+{
+  format: 1,
+  type: "Fenrir::Scene",
+  version: 1,
+  data: {
+    resources: {},
+    entities: [
+      {
+        id: "k33p0",
+        components: {
+          "Fenrir::Name": {name: "Keep"},
+          "Fenrir::Transform": {},
+        },
+      },
+      {
+        id: "t1nst",
+        parent: "k33p0",
+        components: {
+          "Fenrir::Name": {name: "Tower"},
+          "Fenrir::Transform": {
+            pos: [10, 0, 0],
+          },
+        },
+      },
+      {
+        id: "g8t30",
+        parent: "t1nst",
+        components: {
+          "Fenrir::Name": {name: "Gate"},
+          "Fenrir::Transform": {},
+          "AssetsTest::Follower": {
+            target: "k33p0",
+            speed: 4,
+          },
+        },
+      },
+      {
+        id: "f8a90",
+        parent: "t1nst",
+        components: {
+          "Fenrir::Name": {name: "Flag"},
+          "Fenrir::Transform": {
+            pos: [0, 5, 0],
+          },
+        },
+      },
+      {
+        id: "b8nn0",
+        parent: "f8a90",
+        components: {
+          "Fenrir::Name": {name: "Banner"},
+          "Fenrir::Transform": {},
+          "AssetsTest::Follower": {target: "g8t30"},
+        },
+      },
+      {
+        id: "p8tr0",
+        parent: "t1nst",
+        instance: "prefabs/player.scene.json5",
+        overrides: {
+          m9x1p: {
+            components: {
+              "AssetsTest::Follower": {speed: 6},
+            },
+          },
+        },
+      },
+    ],
+  },
+}

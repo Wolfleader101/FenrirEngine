@@ -379,26 +379,6 @@ TEST_CASE("A slash path chains through a nested instance, and reads back", "[ass
     REQUIRE(ReadFile(root.Path() / HostPath) == bytes);
 }
 
-TEST_CASE("A field naming an entity inside an instance with no id in its source is written null",
-          "[assets][scenes][instances][references]")
-{
-    TempRoot root;
-    CopySources(root);
-    DataApp test({root.Path()});
-    Fenrir::Scene& scene = test.app.CreateScene("Host");
-    const InstanceResult player = test.store.Instantiate(scene, PlayerPath);
-    // Added at run time: it is no entity of the source, and has no id there.
-    const Entity added = Spawn(scene, "Added", player.root);
-    Spawn(scene, "Watcher").AddComponent<AssetsTest::Follower>().target = added;
-
-    const SceneSaveResult saved = test.store.SaveScene(scene, HostPath);
-
-    INFO("the field is written null, warned of and counted");
-    REQUIRE(saved.status == SaveStatus::Partial);
-    REQUIRE(saved.nullReferences == 1);
-    REQUIRE(FindDiagnostic(saved.diagnostics, "inside an instance") != nullptr);
-}
-
 TEST_CASE("A file instancing itself is refused at the block, with an error, and counted as a skipped entity",
           "[assets][scenes][instances][self]")
 {

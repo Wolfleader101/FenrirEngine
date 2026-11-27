@@ -181,6 +181,26 @@ TEST_CASE("A nested struct writes as an object of the fields off their defaults"
     REQUIRE(Tree(fixed) == ObjectOf({{"limits", ObjectOf({{"max", 5.0f}})}}));
 }
 
+TEST_CASE("Written against another value, a field equal to that value's is left out and one off it is written, though "
+          "at the type's default",
+          "[serialisation][totree]")
+{
+    Fixed source;
+    source.lives = 5;
+    source.limits.max = 5.0f;
+    source.speed = 2.0f;
+    Fixed live = source;
+    live.lives = 3;
+    live.limits.min = -1.0f;
+
+    Fenrir::TypeRegistry registry;
+    RegisterBridgeTypes(registry);
+    const Value tree = ToTree(&live, FixedDescription, registry, Resolvers{}, nullptr, &source);
+
+    INFO("lives is back at the type's default 3, still written; limits.min alone differs; speed and limits.max match");
+    REQUIRE(tree == ObjectOf({{"lives", Number(std::int64_t{3})}, {"limits", ObjectOf({{"min", -1.0f}})}}));
+}
+
 TEST_CASE("A fixed array writes as an array of its elements, the one at its default left out",
           "[serialisation][totree]")
 {

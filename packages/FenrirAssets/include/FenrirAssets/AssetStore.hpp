@@ -788,8 +788,20 @@ namespace Fenrir
          *   entity's children directly after it in their sibling order. A block is `id`, then `parent` (absent on a
          *   root), then `components`.
          * - An instance root (an entity with `Instance`, which Instantiate and SpawnNodes mark) is one block of `id`,
-         *   `parent` and `instance: "<source>"` (ADR-0080 §4): the entities below it are its source's, and none is
-         *   written, nor are its own components, counted in `componentsSkipped`.
+         *   `parent`, `instance: "<source>"`, and a diff against a fresh expansion of the source (ADR-0080 §4),
+         *   compared as trees by each entity's key, its slash path of source ids from the root, so a value equal to the
+         *   source's is never written: `components`, the root's entries that differ, an entry the source's root has
+         *   holding only its differing fields; `removed`, the types the source's root has and the root lacks;
+         *   `overrides`, the same two for each source entity that differs, by key; and `removedEntities`, the keys of
+         *   the source's entities the instance lacks (one below a removed entity goes with it). Each member is left out
+         *   when empty. The source is expanded once a save, a scene file read as Instantiate reads one and a model
+         *   spawned through the ModelSpawner, into a scene of the save's own. The root's components not written are
+         *   counted in `componentsSkipped`. A source that no longer expands is named alone, with a warning, so the
+         *   instance's changes are not written.
+         * - An entity a host added below an instance's root, one the source has no entity of its key for, is a block of
+         *   its own after the instance's, whose `parent` is the slash path of the entity holding it
+         *   (`"<instance id>/<source id>"`), or the instance's id when the root holds it; what is below it follows
+         *   as usual.
          * - `components` holds each described component the entity has, keyed by canonical name: `Fenrir::Name` and
          *   `Fenrir::Transform` first, then the rest in name order. One holding its type's defaults is written as
          *   `{}`, so the file still says the entity has it. Each component a load kept in the entity's
@@ -806,8 +818,8 @@ namespace Fenrir
          *
          * An `entity` field names its target by its id, or one inside an instance by its slash path,
          * `"<instance id>/<source id>"`, chained through nested instances (`"<id>/<id>/<id>"`; ADR-0080 §5). One
-         * naming an entity the file does not hold (a left-out entity, one inside an instance with no id in its source,
-         * or one of another scene) is written `null`, with a warning, and counted; a null entity is its default, left
+         * naming an entity the file does not hold (a left-out entity, one destroyed, or one of another scene) is
+         * written `null`, with a warning, and counted; a null entity is its default, left
          * out. An asset handle field is written as its asset's path (PathOf), or `null`, with a warning, and counted,
          * as Save writes it.
          *
@@ -859,6 +871,16 @@ namespace Fenrir
          * file instancing it through a chain, is refused at the block with an error, counted in `entitiesSkipped`. The
          * source's read's diagnostics and counts are the load's too, but for its `resourcesSkipped`.
          *
+         * In the second pass the block's diff is applied to the expansion (ADR-0080 §4): the entities `removedEntities`
+         * names are destroyed with what is below them; the root's `components` are merged on top of the source root's,
+         * an entry it has filled field by field over the source's value and one it lacks added, and the types `removed`
+         * names are taken off; then each entry of `overrides` does the same to the source entity its key, a slash path
+         * from the root, names. An `entity` field in the diff names the host's entities as any block's does, so an
+         * override may point out of the instance. A key or name naming nothing is warned of and ignored. A block whose
+         * `parent` is a slash path (`"<instance id>/<source id>"`) is an entity the host added inside that instance.
+         * A variant, a file whose single root block is an instance of another scene file, loads so, its own
+         * `resources` applied.
+         *
          * Tolerant past the envelope: a block that is not an object is left out; one with a bad id, or an id an
          * earlier block has, loads with no `EntityId` and no place in the id map, so a save mints it one; one whose
          * `parent` names no earlier block loads as a root. A component type the registry lacks is kept opaque in the
@@ -903,6 +925,21 @@ namespace Fenrir
          * thread.
          */
         InstanceResult Instantiate(Scene& scene, std::string_view path, Entity parent = {});
+
+        /**
+         * @brief Unlinks the instance `root` tops in `scene` from its source (ADR-0080 §8), one level: its `Instance`
+         * is removed, so SaveScene writes its subtree verbatim, a block per entity, rather than as one block and a
+         * diff.
+         *
+         * Each entity of the instance's own scope (every entity below the root down to, and including, each nested
+         * instance's root) is given a newly minted id no entity of the scene has, since its id was its source's and the
+         * host's file must not repeat one. The entities inside a nested instance keep theirs: that instance stays
+         * linked, and its root is now the host's to save as an instance block. The root keeps its own id.
+         *
+         * False, with a logged error and nothing changed, for `root` not a live entity of `scene`, or not an instance's
+         * root.
+         */
+        bool Unpack(Scene& scene, Entity root);
 
         /**
          * @brief Makes `spawner` the store's ModelSpawner, which Instantiate expands a model source through, until
