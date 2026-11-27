@@ -1,0 +1,18 @@
+{
+  format: 1,
+  type: "Fenrir::Scene",
+  version: 1,
+  data: {
+    resources: {},
+    entities: [
+      {
+        id: "m1rr0",
+        components: {
+          "Fenrir::Name": {name: "Mirror"},
+          "Fenrir::Transform": {},
+        },
+      },
+      {id: "k1d00", parent: "m1rr0", instance: "prefabs/self.scene.json5"},
+    ],
+  },
+}

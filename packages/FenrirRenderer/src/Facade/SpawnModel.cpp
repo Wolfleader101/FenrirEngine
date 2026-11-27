@@ -1,19 +1,25 @@
 // SpawnModel (ADR-0023, ADR-0031, ADR-0041): a model as drawn entities, SpawnNodes, then SpawnSkeletons through the
-// skinning source, then a MeshRenderer per mesh and a PointLight or SpotLight per light (ADR-0048).
+// skinning source, then a MeshRenderer per mesh and a PointLight or SpotLight per light (ADR-0048); and SpawnModel as
+// the asset store's ModelSpawner, which Instantiate spawns a model source through (ADR-0080).
 #include "FenrirRenderer/SpawnModel.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <format>
+#include <memory>
 #include <optional>
 
+#include "Facade/RendererState.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirAssets/Model.hpp"
+#include "FenrirAssets/ModelSpawner.hpp"
 #include "FenrirAssets/SkinningSource.hpp"
 #include "FenrirAssets/SpawnNodes.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
+#include "FenrirECS/EntityId.hpp"
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirRenderer/Components.hpp"
@@ -26,11 +32,13 @@ namespace Fenrir
         /**
          * @brief SpawnModel's last step: a MeshRenderer per mesh of each spawned node. A rigid mesh's first goes on the
          * node's entity and each further one on a child entity of it; a skinned mesh's on an entity of its own under
-         * its skeleton's owner, with a SkinnedMesh naming the owner (ADR-0035).
+         * its skeleton's owner, with a SkinnedMesh naming the owner (ADR-0035). Each entity it makes is numbered after
+         * every node, in the order made, so every spawn of the model gives it the same id (ADR-0080).
          */
         void AddMeshRenderers(Scene& scene, const Model& model, const SpawnedNodes& spawned)
         {
             EntityList& entities = scene.GetEntityList();
+            std::uint64_t number = model.nodes.size();
             for (std::size_t i = 0; i < model.nodes.size() && i < spawned.nodes.size(); ++i)
             {
                 const ModelNode& node = model.nodes[i];
@@ -59,6 +67,7 @@ namespace Fenrir
                         }
                         Entity skinned = entities.CreateEntity();
                         skinned.GetComponent<Name>().Set(node.name.c_str());
+                        skinned.AddComponent<EntityId>(ModelEntityId(++number));
                         owner.AddChild(skinned);
                         skinned.AddComponent<MeshRenderer>(renderer);
                         skinned.AddComponent<SkinnedMesh>(SkinnedMesh{owner});
@@ -71,6 +80,7 @@ namespace Fenrir
                     }
                     Entity extra = entities.CreateEntity();
                     extra.GetComponent<Name>().Set(std::format("{} mesh {}", node.name, placed).c_str());
+                    extra.AddComponent<EntityId>(ModelEntityId(++number));
                     entity.AddChild(extra);
                     extra.AddComponent<MeshRenderer>(renderer);
                 }
@@ -110,7 +120,28 @@ namespace Fenrir
                 }
             }
         }
+        /** @brief SpawnModel as a ModelSpawner, for the app it spawns in. */
+        class SpawnModelSpawner final : public ModelSpawner
+        {
+          public:
+            explicit SpawnModelSpawner(App& app) : m_app(&app)
+            {
+            }
+
+            SpawnedNodes Spawn(Scene& scene, AssetHandle<Model> model, Entity parent) override
+            {
+                return SpawnModelNodes(*m_app, scene, model, parent);
+            }
+
+          private:
+            App* m_app;
+        };
     } // namespace
+
+    std::unique_ptr<ModelSpawner> Detail::MakeModelSpawner(App& app)
+    {
+        return std::make_unique<SpawnModelSpawner>(app);
+    }
 
     Entity SpawnModel(App& app, Scene& scene, AssetHandle<Model> model, Entity parent)
     {

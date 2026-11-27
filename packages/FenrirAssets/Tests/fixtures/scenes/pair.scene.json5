@@ -1,0 +1,24 @@
+{
+  format: 1,
+  type: "Fenrir::Scene",
+  version: 1,
+  data: {
+    resources: {},
+    entities: [
+      {
+        id: "aaaa1",
+        components: {
+          "Fenrir::Name": {name: "Left"},
+          "Fenrir::Transform": {},
+        },
+      },
+      {
+        id: "bbbb2",
+        components: {
+          "Fenrir::Name": {name: "Right"},
+          "Fenrir::Transform": {},
+        },
+      },
+    ],
+  },
+}

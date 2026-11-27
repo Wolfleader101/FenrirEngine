@@ -1,19 +1,26 @@
 // SpawnModel on the null backend (ADR-0023, ADR-0031, ADR-0041): a model's nodes as entities through SpawnNodes, its
 // skeletons through the skinning source, then a MeshRenderer per mesh (and a SkinnedMesh per skinned one), and the
-// draws the renderer then sees.
+// draws the renderer then sees; each entity numbered with its model id, and SpawnModel as the asset store's model
+// spawner (ADR-0080).
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <set>
 #include <string>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "FenrirAssets/AssetStore.hpp"
 #include "FenrirAssets/Model.hpp"
+#include "FenrirAssets/ModelSpawner.hpp"
 #include "FenrirECS/ComponentType.hpp"
+#include "FenrirECS/EntityId.hpp"
 #include "FenrirECS/EntityList.hpp"
+#include "FenrirECS/SceneComponents.hpp"
 #include "FenrirRenderer/SpawnModel.hpp"
 #include "FenrirSkeleton/SkeletonPose.hpp"
 #include "SkinningTestApp.hpp"
@@ -245,4 +252,81 @@ TEST_CASE("SpawnModel with a stale model spawns nothing and returns a null entit
     INFO("the root is null and nothing has a MeshRenderer");
     REQUIRE_FALSE(root.IsValid());
     REQUIRE(MeshRenderers(test).empty());
+}
+
+namespace
+{
+    /** @brief The ids of every entity below `root`, depth-first in sibling order: 0 for one with none. */
+    void CollectIds(const Entity& root, std::vector<std::uint64_t>& ids)
+    {
+        root.ForEachChild([&](const Entity& child) {
+            ids.push_back(child.HasComponent<Fenrir::EntityId>() ? child.GetComponent<Fenrir::EntityId>().value : 0);
+            CollectIds(child, ids);
+        });
+    }
+} // namespace
+
+TEST_CASE("Instantiate spawns a model through SpawnModel once the Renderer is installed, numbering each mesh child "
+          "after the nodes",
+          "[renderer][spawn-model][instances]")
+{
+    RendererTestApp test(RendererTest::NullBackend(), {FENRIR_TEST_FIXTURES});
+
+    const Fenrir::InstanceResult first = test.Store().Instantiate(test.ActiveScene(), "two_parts.gltf");
+    const Fenrir::InstanceResult second = test.Store().Instantiate(test.ActiveScene(), "two_parts.gltf");
+
+    INFO("each instance is SpawnModel's tree under a root marked with the file's path");
+    REQUIRE(first.load.status == Fenrir::LoadStatus::Succeeded);
+    REQUIRE(std::string(first.root.GetComponent<Fenrir::Instance>().source) == "two_parts.gltf");
+    INFO("both of Body's meshes get MeshRenderers in each instance");
+    REQUIRE(MeshRenderers(test).size() == 4);
+    INFO("Body and Tip are 1 and 2; Body's second mesh, on a child, is 3, after every node");
+    const Entity body = first.Find(Fenrir::ModelEntityId(1));
+    REQUIRE(std::string(body.GetComponent<Fenrir::Name>().Get()) == "Body");
+    REQUIRE(std::string(first.Find(Fenrir::ModelEntityId(2)).GetComponent<Fenrir::Name>().Get()) == "Tip");
+    const Entity extra = first.Find(Fenrir::ModelEntityId(3));
+    REQUIRE(std::string(extra.GetComponent<Fenrir::Name>().Get()) == "Body mesh 2");
+    REQUIRE(ParentOf(extra) == body);
+    REQUIRE(extra.HasComponent<Fenrir::MeshRenderer>());
+    INFO("the second instance has the same ids");
+    std::vector<std::uint64_t> firstIds;
+    std::vector<std::uint64_t> secondIds;
+    CollectIds(first.root, firstIds);
+    CollectIds(second.root, secondIds);
+    REQUIRE(firstIds == secondIds);
+    REQUIRE(firstIds.size() == 3);
+}
+
+TEST_CASE("SpawnModel gives a model's skinned mesh entities the same ids on every spawn, after every node's",
+          "[renderer][spawn-model][instances]")
+{
+    RendererTest::SkinningTestApp test(true, RendererTest::NullBackend(), {FENRIR_TEST_MODEL_FIXTURES});
+    const Fenrir::LoadResult<Fenrir::Model> model =
+        test.Store().Load<Fenrir::Model>("armatures.gltf", Fenrir::AssetOwner::App());
+    REQUIRE(model.Ok());
+    const std::size_t nodes = test.Store().TryGet(model.handle)->nodes.size();
+
+    const Entity first = Fenrir::SpawnModel(test.app, test.ActiveScene(), model.handle);
+    const Entity second = Fenrir::SpawnModel(test.app, test.ActiveScene(), model.handle);
+
+    std::vector<std::uint64_t> firstIds;
+    std::vector<std::uint64_t> secondIds;
+    CollectIds(first, firstIds);
+    CollectIds(second, secondIds);
+    INFO("both spawns give every entity an id, each different, and the same ids in the same places");
+    REQUIRE(firstIds == secondIds);
+    REQUIRE(std::set<std::uint64_t>(firstIds.begin(), firstIds.end()).size() == firstIds.size());
+    REQUIRE(std::ranges::find(firstIds, 0u) == firstIds.end());
+    INFO("the four skinned mesh entities are numbered after every node, in spawn order");
+    std::vector<std::uint64_t> skinned;
+    for (const Entity& entity : SkinnedMeshes(test))
+    {
+        if (IsUnder(entity, first))
+        {
+            skinned.push_back(entity.GetComponent<Fenrir::EntityId>().value);
+        }
+    }
+    REQUIRE(std::set<std::uint64_t>(skinned.begin(), skinned.end()) ==
+            std::set<std::uint64_t>{Fenrir::ModelEntityId(nodes + 1).value, Fenrir::ModelEntityId(nodes + 2).value,
+                                    Fenrir::ModelEntityId(nodes + 3).value, Fenrir::ModelEntityId(nodes + 4).value});
 }

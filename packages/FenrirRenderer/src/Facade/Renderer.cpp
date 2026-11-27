@@ -1647,6 +1647,13 @@ namespace Fenrir
             }
             // Only this state's resource: a later Install's must stay.
             const InstalledRenderer* installed = app == nullptr ? nullptr : app->TryGetResource<InstalledRenderer>();
+            if (spawner != nullptr && app != nullptr)
+            {
+                if (AssetStore* store = app->TryGetResource<AssetStore>())
+                {
+                    store->UnregisterModelSpawner(*spawner);
+                }
+            }
             if (installed != nullptr && installed->state.expired())
             {
                 app->RemoveResource<InstalledRenderer>();
@@ -1754,6 +1761,13 @@ namespace Fenrir
                                     }
                                 });
         app.AddResource<Detail::InstalledRenderer>(Detail::InstalledRenderer{state});
+        // Instantiate spawns a model source through SpawnModel, so an instanced model draws (ADR-0080 §3). A store
+        // that has another spawner logs it and keeps that one.
+        state->spawner = Detail::MakeModelSpawner(app);
+        if (!store->RegisterModelSpawner(*state->spawner))
+        {
+            state->spawner.reset();
+        }
         app.AddResource<Overlay>();
         app.AddResource<ImageTargets2D>();
         app.AddResource<WorldTargets2D>();

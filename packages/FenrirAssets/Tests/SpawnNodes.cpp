@@ -1,4 +1,5 @@
-// SpawnNodes (ADR-0028, ADR-0031): a model's node tree as entities, under a given parent.
+// SpawnNodes (ADR-0028, ADR-0031, ADR-0080): a model's node tree as entities, under a given parent, each node numbered
+// with its model id and the root marked as the model's instance.
 #include <cmath>
 #include <cstddef>
 #include <string>
@@ -7,6 +8,9 @@
 
 #include "AssetsTest.hpp"
 #include "FenrirAssets/Model.hpp"
+#include "FenrirAssets/ModelSpawner.hpp"
+#include "FenrirECS/EntityId.hpp"
+#include "FenrirECS/SceneComponents.hpp"
 #include "FenrirECS/WorldTransform.hpp"
 #include "FenrirScene/Scene.hpp"
 
@@ -103,4 +107,43 @@ TEST_CASE("SpawnNodes on a stale model spawns nothing and logs", "[assets][spawn
     REQUIRE_FALSE(spawned.root.IsValid());
     REQUIRE(spawned.nodes.empty());
     REQUIRE(test.errors->size() == 1);
+}
+
+TEST_CASE("Spawning a model twice gives each node's entity the same id, its node index plus one", "[assets][spawn]")
+{
+    AssetsApp test;
+    Fenrir::Scene& level = test.app.CreateScene("Level");
+    const Fenrir::LoadResult<Fenrir::Model> model = test.store.Load<Fenrir::Model>("models/scene.gltf", level);
+    REQUIRE(model.Ok());
+
+    const Fenrir::SpawnedNodes first = test.store.SpawnNodes(level, model.handle);
+    const Fenrir::SpawnedNodes second = test.store.SpawnNodes(level, model.handle);
+
+    REQUIRE(first.nodes.size() == 4);
+    REQUIRE(second.nodes.size() == 4);
+    for (std::size_t i = 0; i < first.nodes.size(); ++i)
+    {
+        INFO("node " << i << " is numbered " << i + 1 << " in both spawns");
+        REQUIRE(first.nodes[i].HasComponent<Fenrir::EntityId>());
+        REQUIRE(first.nodes[i].GetComponent<Fenrir::EntityId>().value == Fenrir::ModelEntityId(i + 1).value);
+        REQUIRE(second.nodes[i].GetComponent<Fenrir::EntityId>().value ==
+                first.nodes[i].GetComponent<Fenrir::EntityId>().value);
+    }
+    REQUIRE(Fenrir::SpellEntityId(first.nodes[0].GetComponent<Fenrir::EntityId>()) == "1");
+    REQUIRE(Fenrir::SpellEntityId(first.nodes[3].GetComponent<Fenrir::EntityId>()) == "4");
+}
+
+TEST_CASE("SpawnNodes marks its root as the model's instance, naming its asset path, and gives it no id",
+          "[assets][spawn]")
+{
+    AssetsApp test;
+    Fenrir::Scene& level = test.app.CreateScene("Level");
+    const Fenrir::LoadResult<Fenrir::Model> model = test.store.Load<Fenrir::Model>("models/scene.gltf", level);
+    REQUIRE(model.Ok());
+
+    const Fenrir::SpawnedNodes spawned = test.store.SpawnNodes(level, model.handle);
+
+    REQUIRE(spawned.root.HasComponent<Fenrir::Instance>());
+    REQUIRE(std::string(spawned.root.GetComponent<Fenrir::Instance>().source) == "models/scene.gltf");
+    REQUIRE_FALSE(spawned.root.HasComponent<Fenrir::EntityId>());
 }

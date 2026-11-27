@@ -22,6 +22,7 @@ add_library(FenrirAssets STATIC
     include/FenrirAssets/MaterialData.hpp
     include/FenrirAssets/MeshData.hpp
     include/FenrirAssets/Model.hpp
+    include/FenrirAssets/ModelSpawner.hpp
     include/FenrirAssets/Move.hpp
     include/FenrirAssets/ShaderData.hpp
     include/FenrirAssets/SkeletonData.hpp

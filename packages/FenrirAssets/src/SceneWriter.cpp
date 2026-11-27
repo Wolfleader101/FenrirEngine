@@ -1,5 +1,5 @@
 // The scene writer (ADR-0078, ADR-0079, ADR-0080): AssetStore::SaveScene, a scene, or a subtree of one, to its scene
-// envelope.
+// envelope, each instance in it as one block naming its source.
 
 #include <algorithm>
 #include <cstddef>
@@ -95,7 +95,7 @@ namespace Fenrir
 
         // Appends the entities of the subtree `entity` roots that the file holds to `written`, depth-first with each
         // entity's children after it in their sibling order; a Transient entity is left out with its children, and
-        // counted in `skipped`.
+        // counted in `skipped`. An instance's root is written as its one block, so what is below it is its source's.
         void CollectWritten(const Entity& entity, std::vector<Entity>& written, std::size_t& skipped)
         {
             if (entity.HasComponent<Transient>())
@@ -104,7 +104,32 @@ namespace Fenrir
                 return;
             }
             written.push_back(entity);
+            if (entity.HasComponent<Instance>())
+            {
+                return;
+            }
             entity.ForEachChild([&](const Entity& child) { CollectWritten(child, written, skipped); });
+        }
+
+        // Records in `paths` the slash path of each entity inside the instance `root` tops, whose own path is
+        // `prefix` (ADR-0080 §5): the path, `/`, and the entity's id in the source, chained through each nested
+        // instance's root. An entity with no id, or tagged Transient, has none a file could name.
+        void MapInstance(const Entity& root, const std::string& prefix,
+                         std::unordered_map<std::uint32_t, std::string>& paths)
+        {
+            Detail::ForEachInInstance(root, [&](const Entity& entity) {
+                if (!entity.HasComponent<EntityId>() || entity.GetComponent<EntityId>().value == 0 ||
+                    entity.HasComponent<Transient>())
+                {
+                    return;
+                }
+                std::string path = std::format("{}/{}", prefix, SpellEntityId(entity.GetComponent<EntityId>()));
+                if (entity.HasComponent<Instance>())
+                {
+                    MapInstance(entity, path, paths);
+                }
+                paths.emplace(entity.GetId(), std::move(path));
+            });
         }
 
         // An entry's object: `version` when it is above 1, then `fields`, the type's fields as ToTree gave them.
@@ -222,6 +247,15 @@ namespace Fenrir
             }
             ids.emplace(entity.GetId(), SpellEntityId(id));
         }
+        // An entity inside an instance the file holds is named by its slash path, once every instance's root has its
+        // id.
+        for (const Entity& entity : written)
+        {
+            if (entity.HasComponent<Instance>())
+            {
+                MapInstance(entity, ids.at(entity.GetId()), ids);
+            }
+        }
 
         // An asset handle field is written as its asset's path, as a data asset's is; an `entity` field as its
         // target's id, or `null` when the file holds no such entity, since a load could resolve nothing else. Each
@@ -241,8 +275,8 @@ namespace Fenrir
             }
             Detail::WarnWrittenNull(
                 std::format("{}`{}` names an entity the file does not hold (one tagged Transient or "
-                            "below one, one outside the subtree saved, one destroyed, or one of another scene); it is "
-                            "written null",
+                            "below one, one outside the subtree saved, one inside an instance with no id in its "
+                            "source, one destroyed, or one of another scene); it is written null",
                             where, field.name),
                 named, *m_state->logger, result.diagnostics, result.nullReferences);
             return {};
@@ -281,6 +315,15 @@ namespace Fenrir
             if (const Entity parent = entity.GetComponent<Relationship>().parent; parent.IsValid() && entity != root)
             {
                 block.Add("parent", ids.at(parent.GetId()));
+            }
+            // An instance is its source: the block names it, and its components and inner entities are not written.
+            if (entity.HasComponent<Instance>())
+            {
+                block.Add("instance", std::string(entity.GetComponent<Instance>().source));
+                blocks.Add(std::move(block));
+                ++result.entitiesWritten;
+                result.componentsSkipped += entities.ComponentCountOf(id);
+                continue;
             }
             std::vector<Ser::Member> entries;
             std::size_t reached = 0;

@@ -10,6 +10,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -21,10 +22,12 @@
 #include "FenrirAssets/ImageData.hpp"
 #include "FenrirAssets/InstanceListData.hpp"
 #include "FenrirAssets/MaterialData.hpp"
+#include "FenrirAssets/ModelSpawner.hpp"
 #include "FenrirAssets/ShaderContainer.hpp"
 #include "FenrirAssets/SkeletonData.hpp"
 #include "FenrirAssets/SpawnNodes.hpp"
 #include "FenrirECS/Entity.hpp"
+#include "FenrirECS/EntityId.hpp"
 #include "FenrirMath/Colour.hpp"
 #include "FenrirMath/Math.hpp"
 #include "FenrirSerialisation/Diagnostic.hpp"
@@ -67,14 +70,21 @@ namespace Fenrir
         /** @brief What a check found that leaves the data usable, one message each, logged as warnings. */
         using AssetWarnings = std::vector<std::string>;
 
-        /**
-         * @brief What a scene read does with the file's `resources`: applies them to the scene (LoadScene), or leaves
-         * the scene's own standing and counts each as skipped (LoadSceneInto).
-         */
-        enum class SceneResources
+        /** @brief Which door a scene read serves, which decides what it does with the file's `resources` and ids. */
+        enum class SceneRead
         {
-            Apply,
-            Skip,
+            /** @brief LoadScene: the file's resources are applied to the scene. */
+            Load,
+            /**
+             * @brief LoadSceneInto: the scene's own resources stand, each of the file's counted as skipped, and a
+             * block's id an entity of the scene already has is re-minted.
+             */
+            Merge,
+            /**
+             * @brief Instantiate: resources as a merge's, and every block keeps the file's id, since ids inside an
+             * instance are scoped by its root and repeat in every instance of the file (ADR-0080 §2).
+             */
+            Instance,
         };
 
         /**
@@ -395,8 +405,16 @@ namespace Fenrir
          * loaded scene, or what a merge appended under its parent.
          */
         std::vector<Entity> roots;
-        /** @brief The entities made, a block apiece. */
+        /**
+         * @brief The entities made: a block apiece, and every entity an instance block expanded to, the synthetic root
+         * of a source with several roots included.
+         */
         std::size_t entities = 0;
+        /**
+         * @brief The blocks left out with an error: each instance block whose source is the file being read or a file
+         * instancing it, directly or through a chain (ADR-0080 §5).
+         */
+        std::size_t entitiesSkipped = 0;
         /** @brief The components added and filled, under the blocks' `components`. */
         std::size_t components = 0;
         /**
@@ -425,6 +443,35 @@ namespace Fenrir
          * store's logger: the text's, the upgraders', the bridge's and the reader's own.
          */
         std::vector<Serialisation::Diagnostic> diagnostics;
+    };
+
+    /**
+     * @brief What AssetStore::Instantiate gives back (ADR-0080 §7): the instance's root, how its source read, and its
+     * entities by their ids in the source.
+     */
+    struct InstanceResult
+    {
+        /** @brief The instance's root, marked with `Instance`; null when the source did not load. */
+        Entity root;
+        /**
+         * @brief How the source read. For a scene file, its read's result (`roots` the file's own top-level entities,
+         * under `root` when it made a synthetic one); for a model, `entities` counts what the spawn made, and `roots`
+         * holds `root`. Failed, with `root` null and nothing added, when the source did not load.
+         */
+        SceneLoadResult load;
+        /**
+         * @brief The instance's entities by the value of their id in the source: a scene file's blocks, or a model's
+         * numbered entities (ModelEntityId). An instance nested in the source is here by its own id, its inner entities
+         * not; `root` is here by its source id only when it is a scene file's single root.
+         */
+        std::unordered_map<std::uint64_t, Entity> entities;
+
+        /** @brief The instance's entity whose id in the source is `id`, or the null entity. */
+        [[nodiscard]] Entity Find(EntityId id) const
+        {
+            const auto found = entities.find(id.value);
+            return found == entities.end() ? Entity{} : found->second;
+        }
     };
 
     /**
@@ -740,6 +787,9 @@ namespace Fenrir
          * - `entities` holds one block per entity, depth-first: the roots in the order of their entity ids, each
          *   entity's children directly after it in their sibling order. A block is `id`, then `parent` (absent on a
          *   root), then `components`.
+         * - An instance root (an entity with `Instance`, which Instantiate and SpawnNodes mark) is one block of `id`,
+         *   `parent` and `instance: "<source>"` (ADR-0080 §4): the entities below it are its source's, and none is
+         *   written, nor are its own components, counted in `componentsSkipped`.
          * - `components` holds each described component the entity has, keyed by canonical name: `Fenrir::Name` and
          *   `Fenrir::Transform` first, then the rest in name order. One holding its type's defaults is written as
          *   `{}`, so the file still says the entity has it. Each component a load kept in the entity's
@@ -754,7 +804,9 @@ namespace Fenrir
          * `parent` and the order spell; `EntityId` and `Instance`, which `id` and `instance` spell; undescribed
          * components; and components of a `@transient` type. A `@transient` field is left out by the bridge, uncounted.
          *
-         * An `entity` field names its target by its id. One naming an entity the file does not hold (a left-out entity
+         * An `entity` field names its target by its id, or one inside an instance by its slash path,
+         * `"<instance id>/<source id>"`, chained through nested instances (`"<id>/<id>/<id>"`; ADR-0080 §5). One
+         * naming an entity the file does not hold (a left-out entity, one inside an instance with no id in its source,
          * or one of another scene) is written `null`, with a warning, and counted; a null entity is its default, left
          * out. An asset handle field is written as its asset's path (PathOf), or `null`, with a warning, and counted,
          * as Save writes it.
@@ -800,6 +852,13 @@ namespace Fenrir
          * Then each entry of `resources` is added to the scene by canonical name (or filled, when the scene already
          * has one), so an `entity` field in a resource names an entity of the file.
          *
+         * A block with `instance` is an instance of that source, expanded as Instantiate expands one in the first pass,
+         * so a field may name an entity inside it by its slash path (`"<instance id>/<source id>"`, chained through
+         * nested instances); the root takes the block's id. A source that does not load leaves the root alone, marked
+         * with `Instance`, with an error, so a save writes the block back. A source that is the file being read, or a
+         * file instancing it through a chain, is refused at the block with an error, counted in `entitiesSkipped`. The
+         * source's read's diagnostics and counts are the load's too.
+         *
          * Tolerant past the envelope: a block that is not an object is left out; one with a bad id, or an id an
          * earlier block has, loads with no `EntityId` and no place in the id map, so a save mints it one; one whose
          * `parent` names no earlier block loads as a root. A component type the registry lacks is kept opaque in the
@@ -824,6 +883,37 @@ namespace Fenrir
          * reload.
          */
         SceneLoadResult LoadSceneInto(Scene& scene, std::string_view path, Entity parent = {});
+
+        /**
+         * @brief Places the scene or model file `path` into `scene` as one instance (ADR-0080): its entities, made
+         * under `parent` (or at the top when it is empty), below a root marked with `Instance { path }`, so SaveScene
+         * writes the whole instance as one block. The host scene owns what it made, the model's assets included.
+         *
+         * - A `.scene.json5` source is read as LoadSceneInto reads one (its `resources` skipped and counted), each
+         *   entity keeping its id in the file. Its root is the file's single root, which loses its id (the host's file
+         *   gives the root its own), or, when the file has several roots or none, a new root named after the file
+         *   (`tree` for `props/tree.scene.json5`) at the identity transform, holding them in file order.
+         * - Any other source is loaded as a model, owned by `scene`, and spawned through the registered ModelSpawner,
+         *   or SpawnNodes with none: its root is SpawnNodes', named after the file, and each node's entity has
+         *   ModelEntityId of its index plus one.
+         *
+         * A source that is no scene file the reader accepts, no model that loads, lies outside the asset root or has
+         * an asset path over 255 bytes is refused, Failed, with `root` null and nothing added. A `parent` that is no
+         * live entity of `scene` is reported with an error, and the root goes at the top. Synchronous, on the main
+         * thread.
+         */
+        InstanceResult Instantiate(Scene& scene, std::string_view path, Entity parent = {});
+
+        /**
+         * @brief Makes `spawner` the store's ModelSpawner, which Instantiate expands a model source through, until
+         * UnregisterModelSpawner: FenrirRenderer registers its SpawnModel at install. False, with a logged error and
+         * nothing changed, when another is registered. `spawner` is the caller's, and must stay alive until it is
+         * unregistered.
+         */
+        bool RegisterModelSpawner(ModelSpawner& spawner);
+
+        /** @brief Unregisters `spawner` if it is the store's ModelSpawner, so SpawnNodes spawns models again. */
+        void UnregisterModelSpawner(const ModelSpawner& spawner) noexcept;
 
         /** @brief Whether `handle` names a live asset: false for an empty or stale handle. */
         template <typename T>
@@ -1007,6 +1097,11 @@ namespace Fenrir
          * top of the scene if `parent` is null), and below it one entity per model node with its `Name`, its rest
          * transform as its `Transform`, and its parent link. It adds nothing that draws: FenrirRenderer's SpawnModel
          * adds the meshes. Nothing is spawned, and an error logged, if the handle does not resolve.
+         *
+         * Each node's entity has the `EntityId` ModelEntityId gives its node index plus one, the same on every spawn.
+         * The root, given no id, is marked with `Instance` naming the model's asset path, so SaveScene writes the
+         * spawned model as one instance block (ADR-0080 §3); a model added in code, or loaded from outside the asset
+         * root, has no such path and its root is left unmarked.
          */
         SpawnedNodes SpawnNodes(Scene& scene, AssetHandle<Model> model, Entity parent = {});
 
@@ -1088,13 +1183,19 @@ namespace Fenrir
                                        std::optional<LoadDiagnostic>& diagnostic,
                                        std::vector<Serialisation::Diagnostic>& diagnostics, bool& incomplete);
         /**
-         * @brief LoadScene's and LoadSceneInto's read of the scene file `path`: checks its envelope, then fills the
-         * scene `makeScene` gives, called once the file is known to be a scene, so a refused file makes none. The
-         * file's roots go under `parent` (the top when empty), and its `resources` are applied or skipped as
-         * `resources` says.
+         * @brief LoadScene's, LoadSceneInto's and Instantiate's read of the scene file `path`: checks its envelope,
+         * then fills the scene `makeScene` gives, called once the file is known to be a scene, so a refused file makes
+         * none. The file's roots go under `parent` (the top when empty), and its `resources` and ids are treated as
+         * `read` says. While it reads, the file is on the store's chain of scene files being read, so an instance block
+         * naming one on the chain is refused.
          */
         SceneLoadResult ReadSceneFile(std::string_view path, const std::function<Scene&()>& makeScene, Entity parent,
-                                      Detail::SceneResources resources);
+                                      Detail::SceneRead read);
+        /**
+         * @brief Instantiate's work, and an instance block's in the reader: expands the source `path` at the top of
+         * `scene` and marks its root, which the caller then places.
+         */
+        InstanceResult ExpandInstance(Scene& scene, std::string_view path);
         /**
          * @brief Both SaveScene doors: writes the subtree `root` tops, or the whole scene when `root` is empty, to
          * `path`.
