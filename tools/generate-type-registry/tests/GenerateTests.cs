@@ -476,6 +476,18 @@ public sealed class GenerateTests
     }
 
     [Fact]
+    public void DescribeNamesEachTypesRoleAtCompileTime()
+    {
+        var generated = Generate(Description(Type("Test::Plain", "struct", "data-asset", Field("value", "\"kind\": \"i32\""))));
+
+        AssertContains(generated.Header,
+                       "struct Fenrir::Describe<Test::Plain>\n{\n" +
+                       "    static constexpr Fenrir::Role role = Fenrir::Role::DataAsset;\n" +
+                       "    static const Fenrir::TypeDescription& Description() noexcept;\n};",
+                       "A template constrains on a type's role through Describe<T>::role, without a registry.");
+    }
+
+    [Fact]
     public void ATypeAUsedRegistrationDescribesIsItsAndIsPointedAtNotDescribedAgain()
     {
         using var directory = new TemporaryDirectory();

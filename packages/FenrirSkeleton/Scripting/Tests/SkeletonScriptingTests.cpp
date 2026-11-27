@@ -283,7 +283,7 @@ TEST_CASE("Skeletons.SpawnModel from C# spawns the model with its skeleton's Ske
           "[skeleton][scripting][spawn]")
 {
     SkeletonScriptingApp test;
-    const auto model = test.assets.Store().Load<Model>(FENRIR_SKELETON_SCRIPTING_RIG, Active(test));
+    const auto model = test.assets.Store().Load<Model>("rig.gltf", Active(test));
     REQUIRE(model.Ok());
     const auto root =
         test.Call<std::uint32_t>(AttachingType, "SpawnModel", model.handle.index, model.handle.generation);

@@ -5,6 +5,6 @@
 fenrir_scripting_rules_tests(Animation SOURCES Rules.cpp)
 fenrir_scripting_tests(Animation SOURCES AnimationScriptingApp.hpp AnimationScriptingTests.cpp TEST_ARGS --order decl)
 fenrir_script_fixture(Animation USES Assets Skeleton)
-# The animation tests' rig, a skinned glTF with clips.
+# The animation tests' fixtures, the asset root, for their rig, a skinned glTF with clips.
 target_compile_definitions(FenrirAnimationScriptingTests PRIVATE
-    FENRIR_ANIMATION_SCRIPTING_RIG="${CMAKE_CURRENT_SOURCE_DIR}/../../Tests/fixtures/rig.gltf")
+    FENRIR_ANIMATION_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/../../Tests/fixtures")

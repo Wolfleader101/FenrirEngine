@@ -46,14 +46,14 @@ fenrir_add_shaders(FenrirRendererTests PROGRAM UserTint VERTEX fixtures/user.ver
 # A user's material shader with a SKINNED key, which compute skinning leaves to its SKINNED variant (ADR-0050).
 fenrir_add_shaders(FenrirRendererTests PROGRAM UserSkinned VERTEX ../Shaders/Builtin/mesh.vert
                    FRAGMENT fixtures/plain.frag KEYS SKINNED EMBED)
-# Khronos's BoxTextured from the demo apps' shared assets, for SpawnModel on a real model, a glTF node with two meshes,
-# and FenrirAssets's skinned armatures fixture.
+# The asset roots of the tests that load a model, which load it by its path under that root: the demo apps' shared assets
+# (Khronos's BoxTextured, for SpawnModel on a real model), this package's fixtures (a glTF node with two meshes), and
+# FenrirAssets's model fixtures (its skinned armatures and its lights).
 target_compile_definitions(FenrirRendererTests PRIVATE
     FENRIR_TEST_USER_SHADER="${CMAKE_CURRENT_BINARY_DIR}/shaders/UserTint.fshader"
-    FENRIR_TEST_BOX_TEXTURED="${CMAKE_CURRENT_SOURCE_DIR}/../../../examples/assets/BoxTextured/BoxTextured.gltf"
-    FENRIR_TEST_TWO_PARTS="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/two_parts.gltf"
-    FENRIR_TEST_ARMATURES="${CMAKE_CURRENT_SOURCE_DIR}/../../FenrirAssets/tests/fixtures/models/armatures.gltf"
-    FENRIR_TEST_LIGHTS="${CMAKE_CURRENT_SOURCE_DIR}/../../FenrirAssets/tests/fixtures/models/lights.gltf")
+    FENRIR_TEST_EXAMPLE_ASSETS="${CMAKE_CURRENT_SOURCE_DIR}/../../../examples/assets"
+    FENRIR_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
+    FENRIR_TEST_MODEL_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/../../FenrirAssets/Tests/fixtures/models")
 add_test(NAME FenrirRenderer COMMAND FenrirRendererTests)
 
 # The GL pixel probes (the spec's seam 2): the OpenGL backend on a hidden window's OpenGL 4.6 core context, made through

@@ -2,7 +2,6 @@
 // scaling and hemisphere flips. Each clip keys the chain's tip; the test seeks a paused animator and reads the tip's
 // base pose, so the sampled value is read straight off it.
 #include <cmath>
-#include <filesystem>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
@@ -181,8 +180,7 @@ TEST_CASE("an imported CubicSpline rotation, its far-hemisphere key flipped with
           "[animation][sampling]")
 {
     AnimationApp test;
-    const auto model = test.store.Load<Fenrir::Model>(
-        (std::filesystem::path(FENRIR_ANIMATION_FIXTURES) / "rig.gltf").string(), test.level);
+    const auto model = test.store.Load<Fenrir::Model>("rig.gltf", test.level);
     REQUIRE(model.Ok());
     const Fenrir::Model& data = *test.store.TryGet(model.handle);
     const Fenrir::SpawnedNodes spawned = test.skeletons.SpawnModel(test.level, model.handle);

@@ -4,6 +4,9 @@
 fenrir_scripting_rules_tests(Text SOURCES NoOps.cpp)
 fenrir_scripting_tests(Text SOURCES TextScriptingApp.hpp Paragraphs.cpp)
 fenrir_script_fixture(Text)
-# The font the fixture registers by path: one of HarfBuzz's test fonts, which FenrirText's own tests use.
+# The asset root, HarfBuzz's test directory, which FenrirText's own tests use too, and the font the fixture registers by
+# its asset path under it, one of HarfBuzz's test fonts.
+target_compile_definitions(FenrirTextScriptingTests PRIVATE
+    FENRIR_TEXT_HARFBUZZ_TEST="${CMAKE_CURRENT_SOURCE_DIR}/../../libs/harfbuzz/test")
 set_property(TEST FenrirTextScripting APPEND PROPERTY ENVIRONMENT
-    "FENRIR_TEST_TEXT_FONT=${CMAKE_CURRENT_SOURCE_DIR}/../../libs/harfbuzz/test/subset/data/fonts/Roboto-Regular.ttf")
+    "FENRIR_TEST_TEXT_FONT=subset/data/fonts/Roboto-Regular.ttf")

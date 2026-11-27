@@ -152,9 +152,7 @@ namespace Fenrir::Serialisation
         /** @brief A null. */
         Value() = default;
         /** @brief A null. */
-        Value(std::nullptr_t) noexcept
-        {
-        }
+        Value(std::nullptr_t) noexcept;
         /** @brief An object. */
         Value(Object object);
         /** @brief An array. */
@@ -172,10 +170,13 @@ namespace Fenrir::Serialisation
         Value(T flag) : m_value(flag)
         {
         }
-        /** @brief A number from an integer or a float, in that type's width. */
+        /**
+         * @brief A number from an integer or a float, in that type's width. Made in place from `number`, so the
+         * variant is not made until the template is, when Member and Element are complete (see Value(std::nullptr_t)).
+         */
         template <typename T>
             requires((std::integral<T> && !std::same_as<T, bool>) || std::floating_point<T>)
-        Value(T number) : m_value(Number(number))
+        Value(T number) : m_value(std::in_place_type<Number>, number)
         {
         }
 
@@ -236,6 +237,12 @@ namespace Fenrir::Serialisation
         /** @brief A comment on the element's line, after its comma, verbatim with its delimiters. */
         std::optional<std::string> trailingComment;
     };
+
+    // Defined once Member and Element are complete: making the variant needs Object's and Array's vectors whole, which
+    // clang reading a header with Microsoft's standard library (describe-api, for a package including this) insists on.
+    inline Value::Value(std::nullptr_t) noexcept
+    {
+    }
 
     /**
      * @brief Whether two trees hold equal values, ignoring locations; with `Trivia::Keep` their comments must be

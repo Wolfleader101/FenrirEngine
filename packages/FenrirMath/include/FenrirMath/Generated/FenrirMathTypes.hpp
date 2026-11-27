@@ -46,6 +46,7 @@ namespace Fenrir::Generated::FenrirMathTypes
 template <>
 struct Fenrir::Describe<Fenrir::Colour>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -53,6 +54,7 @@ struct Fenrir::Describe<Fenrir::Colour>
 template <>
 struct Fenrir::Describe<Fenrir::Math::Vec3>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::BoundType;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -60,6 +62,7 @@ struct Fenrir::Describe<Fenrir::Math::Vec3>
 template <>
 struct Fenrir::Describe<Fenrir::Math::AABB>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -67,6 +70,7 @@ struct Fenrir::Describe<Fenrir::Math::AABB>
 template <>
 struct Fenrir::Describe<Fenrir::Math::Vec4>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::BoundType;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -74,6 +78,7 @@ struct Fenrir::Describe<Fenrir::Math::Vec4>
 template <>
 struct Fenrir::Describe<Fenrir::Math::Frustum>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -81,6 +86,7 @@ struct Fenrir::Describe<Fenrir::Math::Frustum>
 template <>
 struct Fenrir::Describe<Fenrir::Math::Mat4>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::BoundType;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -88,6 +94,7 @@ struct Fenrir::Describe<Fenrir::Math::Mat4>
 template <>
 struct Fenrir::Describe<Fenrir::Math::Quat>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::BoundType;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -95,6 +102,7 @@ struct Fenrir::Describe<Fenrir::Math::Quat>
 template <>
 struct Fenrir::Describe<Fenrir::Math::Ray>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -102,6 +110,7 @@ struct Fenrir::Describe<Fenrir::Math::Ray>
 template <>
 struct Fenrir::Describe<Fenrir::Math::Vec2>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::BoundType;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 

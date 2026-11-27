@@ -18,12 +18,12 @@ namespace Fenrir::Testing
     inline constexpr const char* ParagraphCallsType = "TextScriptFixture.ParagraphCalls";
 
     /**
-     * @brief Assets, and the app's FontLibrary over their store, which ends first: the library unloads its atlas pages
-     * from the store when it ends.
+     * @brief Assets over HarfBuzz's test directory, and the app's FontLibrary over their store, which ends first: the
+     * library unloads its atlas pages from the store when it ends.
      */
     struct TextPackages
     {
-        explicit TextPackages(App& app) : app(app), assets(Assets::Install(app, {}))
+        explicit TextPackages(App& app) : app(app), assets(Assets::Install(app, {FENRIR_TEXT_HARFBUZZ_TEST}))
         {
             app.AddResource<FontLibrary>(assets.Store());
         }

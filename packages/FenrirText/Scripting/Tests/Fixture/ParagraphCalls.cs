@@ -7,7 +7,7 @@ namespace TextScriptFixture;
 // FontLibrary (Paragraphs.cpp) and compare what each reads back.
 public static class ParagraphCalls
 {
-    // The family the tests register the font CTest names in FENRIR_TEST_TEXT_FONT as.
+    // The family the tests register the font CTest names in FENRIR_TEST_TEXT_FONT, by its asset path, as.
     public const string Family = "Roboto";
     public const string Text = "Hello, scripted world";
     public const float Size = 20.0f;
@@ -15,7 +15,7 @@ public static class ParagraphCalls
     private static Paragraph paragraph;
     private static LineMetrics[] lines = [];
 
-    // Registers the font file CTest names as the family Roboto: 1 when it was registered.
+    // Registers the font file whose asset path CTest names as the family Roboto: 1 when it was registered.
     public static int RegisterFont() =>
         Fonts.AddFace(Family, Environment.GetEnvironmentVariable("FENRIR_TEST_TEXT_FONT") ?? "", 400, FontStyle.Normal)
             ? 1

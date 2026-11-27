@@ -458,20 +458,22 @@ namespace RendererTest
     }
 
     /**
-     * @brief An App with FenrirAssets and the Renderer on the null backend, run one frame at a time, with helpers to
-     * spawn what the renderer draws.
+     * @brief An App with FenrirAssets over `assetsConfig` and the Renderer on the null backend, run one frame at a
+     * time, with helpers to spawn what the renderer draws. A test that loads a fixture gives the fixture's directory as
+     * the asset root.
      */
     class RendererTestApp
     {
       public:
-        explicit RendererTestApp(Fenrir::RendererConfig config = NullBackend())
-            : renderer(Fenrir::Renderer::Install(app, config))
+        explicit RendererTestApp(Fenrir::RendererConfig config = NullBackend(), Fenrir::AssetsConfig assetsConfig = {})
+            : assets(Fenrir::Assets::Install(app, std::move(assetsConfig))),
+              renderer(Fenrir::Renderer::Install(app, config))
         {
         }
 
         std::shared_ptr<LoggedMessages> messages = std::make_shared<LoggedMessages>();
         Fenrir::App app{std::make_unique<RecordingLogger>(messages), 1};
-        Fenrir::Assets assets{Fenrir::Assets::Install(app)};
+        Fenrir::Assets assets;
         Fenrir::Renderer renderer;
 
         [[nodiscard]] Fenrir::AssetStore& Store()

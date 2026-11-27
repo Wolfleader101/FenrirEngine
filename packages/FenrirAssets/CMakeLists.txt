@@ -1,6 +1,8 @@
 # FenrirAssets: plain CPU-side assets behind generational handles, owned by the app or a scene (ADR-0021). Its
 # importers sit behind a private seam: only src/Importers/ includes a third-party library, and each is linked PRIVATE,
 # so neither its headers nor its compile definitions reach FenrirAssets's users.
+# Data assets (ADR-0075, ADR-0079) are read through FenrirSerialisation, whose Diagnostic LoadResult carries, so it
+# links FenrirSerialisation PUBLIC too.
 # It registers its described types with FenrirTypes' type registry (ADR-0074), through the generated registration
 # it compiles, so it links FenrirTypes PUBLIC: the generated header, public, gives a game Describe<T>.
 add_subdirectory(libs)
@@ -20,6 +22,7 @@ add_library(FenrirAssets STATIC
     include/FenrirAssets/MaterialData.hpp
     include/FenrirAssets/MeshData.hpp
     include/FenrirAssets/Model.hpp
+    include/FenrirAssets/Move.hpp
     include/FenrirAssets/ShaderData.hpp
     include/FenrirAssets/SkeletonData.hpp
     include/FenrirAssets/SkinningSource.hpp
@@ -28,6 +31,13 @@ add_library(FenrirAssets STATIC
     src/Assets.cpp
     src/AssetStore.cpp
     src/AssetStoreState.hpp
+    src/AssetSource.hpp
+    src/AssetWatcher.hpp
+    src/AssetWatcher.cpp
+    src/DirectorySource.cpp
+    src/Move.cpp
+    src/Envelope.hpp
+    src/Envelope.cpp
     src/AssetData.cpp
     src/AnimationData.cpp
     src/AnimationEdits.cpp
@@ -51,7 +61,7 @@ add_library(FenrirAssets STATIC
     src/Importers/Ufbx/UfbxModelImporter.cpp
 )
 
-target_link_libraries(FenrirAssets PUBLIC FenrirApp FenrirScene FenrirMath FenrirShaderContainer PRIVATE FenrirStbImage FenrirCgltf FenrirUfbx meshoptimizer)
+target_link_libraries(FenrirAssets PUBLIC FenrirApp FenrirScene FenrirMath FenrirShaderContainer PRIVATE FenrirCore FenrirStbImage FenrirCgltf FenrirUfbx meshoptimizer)
 
 target_include_directories(FenrirAssets PUBLIC include PRIVATE src)
 
@@ -62,7 +72,11 @@ fenrir_describe_api(FenrirAssets api/FenrirAssets.api.toml)
 fenrir_generate_type_registry(FenrirAssets api/FenrirAssets.api.toml)
 target_sources(FenrirAssets PRIVATE include/FenrirAssets/Generated/FenrirAssetsTypes.hpp
                                     src/Generated/FenrirAssetsTypes.cpp)
-target_link_libraries(FenrirAssets PUBLIC FenrirTypes)
+target_link_libraries(FenrirAssets PUBLIC FenrirTypes FenrirSerialisation)
+
+# The data asset test package (Tests/Package/): its description and registration regenerate with every package's, so it
+# is added whether or not the tests build.
+add_subdirectory(Tests/Package)
 
 # Tests that use Catch2: only with -DFENRIR_BUILD_TESTS=ON (see the root CMakeLists.txt).
 if(FENRIR_BUILD_TESTS)

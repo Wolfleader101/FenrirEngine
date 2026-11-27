@@ -1,0 +1,10 @@
+{
+  format: 1,
+  type: "AssetsTest::ShieldData",
+  version: 1,
+  data: {
+    block: 0.8,
+    // Made for the spare blade.
+    parries: "weapons/sword.asset.json5#spare",
+  },
+}

@@ -1,0 +1,14 @@
+// A sword with an embedded spare blade, written as the store writes it: saved whole through either handle.
+{
+  format: 1,
+  type: "AssetsTest::Sword",
+  version: 2,
+  data: {displayName: "Sheathed sword"},
+  sub: {
+    spare: {
+      type: "AssetsTest::Sword",
+      version: 2,
+      data: {displayName: "Spare blade"},
+    },
+  },
+}

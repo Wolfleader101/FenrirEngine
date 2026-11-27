@@ -512,6 +512,7 @@ internal static class Generator
             text.Line("template <>");
             text.Line($"struct Fenrir::Describe<{type.Name}>");
             text.Line("{");
+            text.Line($"    static constexpr Fenrir::Role role = Fenrir::Role::{RoleEnumerator(type.Json)};");
             text.Line("    static const Fenrir::TypeDescription& Description() noexcept;");
             text.Line("};");
         }
@@ -696,7 +697,7 @@ internal static class Generator
 
         var visit = byMember ? WriteVisit(text, type, fields, visits, typeIds, identifiers) : null;
 
-        var role = isEnum ? "Enum" : RoleName(json.GetProperty("role").GetString()!)!;
+        var role = RoleEnumerator(json);
         text.Line($"    constexpr Fenrir::TypeDescription {id}{{");
         text.Line($"        .name = {Literal(name)},");
         text.Line($"        .package = {Literal(registration.Package)},");
@@ -1303,6 +1304,11 @@ internal static class Generator
         "path" => "Path",
         _ => null,
     };
+
+    // The Fenrir::Role enumerator a described type has: an enum's is Enum, and any other type's its role's, which
+    // CheckKnown has already found the tool knows.
+    private static string RoleEnumerator(JsonElement type) =>
+        type.GetProperty("category").GetString() == "enum" ? "Enum" : RoleName(type.GetProperty("role").GetString()!)!;
 
     // The Fenrir::Role enumerator of a description's role; null for one the tool does not know.
     private static string? RoleName(string role) => role switch

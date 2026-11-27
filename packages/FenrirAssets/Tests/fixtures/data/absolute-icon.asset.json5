@@ -1,0 +1,10 @@
+// A sword whose icon's path is absolute, which a path in a file may not be.
+{
+  format: 1,
+  type: "AssetsTest::Sword",
+  version: 2,
+  data: {
+    displayName: "Rooted sword",
+    icon: "/icons/sword.png",
+  },
+}

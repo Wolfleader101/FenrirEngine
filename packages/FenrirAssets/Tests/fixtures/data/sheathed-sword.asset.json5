@@ -1,0 +1,21 @@
+// A sword carrying two embedded sub-assets: its sheath, of another type, and a spare blade of its own type.
+{
+  format: 1,
+  type: "AssetsTest::Sword",
+  version: 2,
+  data: {
+    displayName: "Sheathed sword",
+  },
+  sub: {
+    sheath: {
+      type: "AssetsTest::ShieldData",
+      version: 1,
+      data: { block: 0.8 },
+    },
+    spare: {
+      type: "AssetsTest::Sword",
+      version: 2,
+      data: { displayName: "Spare blade" },
+    },
+  },
+}

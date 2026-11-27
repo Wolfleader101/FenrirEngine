@@ -1,0 +1,7 @@
+// A sword at a file format the engine does not know.
+{
+  format: 2,
+  type: "AssetsTest::Sword",
+  version: 2,
+  data: {},
+}

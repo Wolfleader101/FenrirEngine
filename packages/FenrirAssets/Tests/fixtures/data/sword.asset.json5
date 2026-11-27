@@ -1,0 +1,12 @@
+// A sword, every field it has set but its two handles, which it leaves empty.
+{
+  format: 1,
+  type: "AssetsTest::Sword",
+  version: 2,
+  data: {
+    displayName: "Longsword",
+    tags: ["blade", "steel"],
+    stats: { damage: 25, weight: 3.5 },
+    edge: 0.9,
+  },
+}

@@ -1,0 +1,20 @@
+// The sword the smoke run moves.
+{
+  format: 1,
+  type: "AssetsTest::Sword",
+  version: 2,
+  data: {
+    displayName: "Longsword",
+    edge: 0.9,
+  },
+  sub: {
+    spare: {
+      type: "AssetsTest::Sword",
+      version: 2,
+      data: {
+        displayName: "Spare blade",
+        upgradesTo: "weapons/sword.asset.json5", // back to the sword
+      },
+    },
+  },
+}

@@ -41,11 +41,12 @@ namespace Fenrir::Testing
         return config;
     }
 
-    // Assets with its asset root FenrirRenderer's test fixtures, then the renderer on the null backend over it.
+    // Assets with its asset root `assetRoot`, by default FenrirRenderer's test fixtures, then the renderer on the null
+    // backend over it.
     struct RendererPackages
     {
-        explicit RendererPackages(App& app)
-            : assets(Assets::Install(app, {std::filesystem::absolute(FENRIR_RENDERER_FIXTURES)})),
+        explicit RendererPackages(App& app, const std::filesystem::path& assetRoot)
+            : assets(Assets::Install(app, {std::filesystem::absolute(assetRoot)})),
               renderer(Renderer::Install(app, NullBackend()))
         {
         }
@@ -58,10 +59,11 @@ namespace Fenrir::Testing
     // renderer's contract builds on, then the renderer's.
     struct RendererScriptingApp : ExtensionTestApp<RendererPackages>
     {
-        RendererScriptingApp()
+        explicit RendererScriptingApp(const std::filesystem::path& assetRoot = FENRIR_RENDERER_FIXTURES)
             : ExtensionTestApp(
                   FixtureFromEnvironment("FENRIR_TEST_RENDERER_FIXTURE"),
-                  {Input::ScriptingExtension(), Assets::ScriptingExtension(), Renderer::ScriptingExtension()})
+                  {Input::ScriptingExtension(), Assets::ScriptingExtension(), Renderer::ScriptingExtension()},
+                  assetRoot)
         {
             INFO("The renderer did not install on the null backend");
             REQUIRE(renderer.IsValid());

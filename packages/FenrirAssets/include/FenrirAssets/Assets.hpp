@@ -1,17 +1,22 @@
 #pragma once
 
+#include <filesystem>
+#include <string_view>
+
 #include "FenrirAssets/AssetHandle.hpp"
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirAssets/ImageData.hpp"
 #include "FenrirAssets/MaterialData.hpp"
 #include "FenrirAssets/MeshData.hpp"
 #include "FenrirAssets/Model.hpp"
+#include "FenrirAssets/Move.hpp"
 #include "FenrirAssets/ShaderData.hpp"
 #include "FenrirAssets/SpawnNodes.hpp"
 
 namespace Fenrir
 {
     class App;
+    class TypeRegistry;
     // Only named here: FenrirAssetsScripting defines Assets::ScriptingExtension().
     struct ScriptingExtension;
 
@@ -24,7 +29,9 @@ namespace Fenrir
       public:
         /**
          * @brief Turns assets on for `app`: adds the AssetStore app resource, with its asset root from `config`. It
-         * cannot fail, and it adds no systems: assets are loaded, added and freed only when called.
+         * cannot fail. Assets are loaded, added and freed only when called; with AssetsConfig::hotReload on, it adds
+         * one sequential system at SchedulePriority::PreUpdate that reloads, between frames, each file the store loaded
+         * that changed on disk (AssetStore::Reloaded), and with it off it adds none.
          */
         [[nodiscard]] static Assets Install(App& app, AssetsConfig config = {});
 
@@ -43,6 +50,32 @@ namespace Fenrir
          * link FenrirAssetsScripting to call it.
          */
         [[nodiscard]] static Fenrir::ScriptingExtension ScriptingExtension();
+
+        /**
+         * @brief Moves or renames the file at the asset path `from` to the asset path `to`, both under `root`, and
+         * rewrites every reference to it across the root's envelopes (ADR-0076 §5, ADR-0079 §6). It needs no running
+         * store, and `registry` holds the types of the files it scans.
+         *
+         * `from` must name a file, and `to` must name nothing yet: a destination that exists is refused, and so is a
+         * path that is absolute, climbs through `..`, names a sub-asset (`#`) or a `builtin:` asset, or leaves the
+         * root. Every `.json5` file under the root is read with ReadText, and each string a `reference` field of its
+         * entries' types holds (the top level's and each `sub` entry's, as the registry describes them) that is `from`,
+         * or `from#name` for a sub-asset of it, is rewritten to `to` or `to#name`; the moved file's own references
+         * included. A changed file is written back atomically through WriteText from its edited tree, so its comments
+         * are kept and a file the engine wrote changes in those strings alone. A file that does not parse, is no
+         * envelope, or names a type `registry` lacks, in its top level or a sub-asset, is left as it was and listed in
+         * MoveResult::unscanned.
+         *
+         * A reference is matched as Load resolves it, so `./from` and one spelled with backslashes are rewritten too,
+         * and a rename that changes only the case is allowed where the disk ignores case. The file is moved first, so a
+         * failure there writes nothing. Fields are found by the types' current
+         * descriptions, so a reference in a file at an older version is found where its field kept its name or a
+         * former one.
+         *
+         * @param dryRun When true, nothing is written or moved, and the result lists the same changes.
+         */
+        [[nodiscard]] static MoveResult Move(const std::filesystem::path& root, std::string_view from,
+                                             std::string_view to, const TypeRegistry& registry, bool dryRun = false);
 
         Assets(Assets&& other) noexcept;
         Assets& operator=(Assets&& other) noexcept;

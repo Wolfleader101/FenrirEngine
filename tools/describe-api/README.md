@@ -57,7 +57,7 @@ A `[registration]` table is accepted and left alone: it configures `tools/genera
 
 A package whose types files read and write (ADR-0074) also gives its selection a `[registration]` table, and `tools/generate-type-registry` writes from the package's description a committed header and source that register those types with FenrirTypes' type registry and specialise `Describe<T>` for each: `header`, `source`, `function` and `includes` say where they go, what the registration function is called and which headers declare the types. The fixture's `tests/Fixture/Fixture.api.toml` has one. `tools/generate-type-registry/README.md` says what the tool writes and how a package joins its `fenrir-generate-type-registry` target.
 
-Types a selected type's fields use (nested structs, tagged unions, enums) are described too, without being listed. A type the fields use that is neither plain data nor a selected bound type fails the tool. A nested struct may hold strings, lists, optionals and paths only when nothing but data assets and settings types reach it (`SCHEMA.md`, "Owning kinds"). The selection says nothing binding-specific: names, namespaces and type mappings for a language belong to its binding.
+Types a selected type's fields use (nested structs, tagged unions, enums) are described too, without being listed. A type the fields use that is neither plain data nor a selected bound type fails the tool. A nested struct may hold strings, lists, optionals and paths only when nothing but data assets and settings types reach it (`SCHEMA.md`, "Owning kinds"), and no struct a data asset reaches may hold an entity. The selection says nothing binding-specific: names, namespaces and type mappings for a language belong to its binding.
 
 ## The description
 
@@ -104,6 +104,7 @@ Everything the tool cannot describe fails it, naming the type and member, and ev
 | `not trivially copyable: it declares its own copy, move, assignment or destructor, which <a role> may not (...)` | A user-declared copy or move constructor or assignment, or destructor, in any role but `data-asset` and `settings`. |
 | `a string, which <a role> cannot hold: the owning kinds (string, list, optional and path) are for data assets and settings types` (and `a list`, `an optional`, `a path`) | An owning kind in a component, event, resource or shared struct, or in a nested struct one of them reaches. |
 | `holds a <kind> (<T>::<member>), which <a role> cannot reach, but is reached from <a role> through ... and from <a role> through ...` | A struct holding an owning kind that both a fixed-layout role and a data asset or settings type reach. |
+| `an entity, which the data asset <T> reaches (<path>) and cannot hold: a data asset is not in a scene` | An entity a data asset reaches, in a field of its own or through a nested struct, a list, optional or array element, a tagged union's kind, a base or a component it holds by value (ADR-0075). |
 | `its type '<T>' is not a kind the description records` | A member of a type the kinds cannot express (`long double`, `wchar_t`, ...). |
 | `a bit-field: a shared type's fields are whole bytes` | A bit-field. |
 | `an array of arrays, which the kinds cannot express`, `an array of strings, ...: hold a list` | A multi-dimensional array, or an array of an owning kind. |

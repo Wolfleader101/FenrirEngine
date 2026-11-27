@@ -1,0 +1,10 @@
+// A weapon that upgrades to a sword, which is a weapon too.
+{
+  format: 1,
+  type: "AssetsTest::WeaponData",
+  version: 1,
+  data: {
+    displayName: "Practice blade",
+    upgradesTo: "data/sword.asset.json5",
+  },
+}

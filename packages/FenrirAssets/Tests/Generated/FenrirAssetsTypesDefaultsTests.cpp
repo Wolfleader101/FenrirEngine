@@ -18,6 +18,9 @@ TEST_CASE("Fenrir::AssetsConfig, default-constructed through its registration, h
 {
     Fenrir::Testing::CheckDefaults(Fenrir::Describe<Fenrir::AssetsConfig>::Description(), {
         {"root", std::string("")},
+        {"hotReload", true},
+        {"reloadInterval", std::int64_t{250}},
+        {"reloadDebounce", std::int64_t{400}},
     });
 }
 

@@ -111,6 +111,8 @@ if(FENRIR_ENABLE_ASSETS)
     add_subdirectory(packages/FenrirDraw2D)
     add_subdirectory(packages/FenrirSkeleton)
     add_subdirectory(packages/FenrirAnimation)
+    # Assets::Move from a shell, and its smoke run (ADR-0079 §6).
+    add_subdirectory(tools/move-asset)
 endif()
 if(FENRIR_ENABLE_TEXT)
     add_subdirectory(packages/FenrirText)

@@ -66,7 +66,13 @@ namespace UITest
     {
         UITestApp() = default;
 
-        // An app whose asset root is `assets`, logging to `logger`.
+        // An app whose asset root is `assetsConfig`'s.
+        explicit UITestApp(Fenrir::AssetsConfig assetsConfig)
+            : assets(Fenrir::Assets::Install(app, std::move(assetsConfig)))
+        {
+        }
+
+        // An app whose asset root is `assetsConfig`'s, logging to `logger`.
         explicit UITestApp(Fenrir::AssetsConfig assetsConfig, std::unique_ptr<Fenrir::ILogger> logger)
             : app(std::move(logger), 1), assets(Fenrir::Assets::Install(app, std::move(assetsConfig)))
         {

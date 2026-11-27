@@ -29,11 +29,12 @@ namespace LightingDemo
         {
             return std::nullopt;
         }
+        // The build links each cached file into the asset root's fetched folder, where the store loads it from.
         const std::filesystem::path file = std::filesystem::path(LIGHTING_DEMO_FETCHED_ASSETS) / path;
         std::error_code error;
         if (std::filesystem::is_regular_file(file, error))
         {
-            return file.generic_string();
+            return std::format("{}/{}", LIGHTING_DEMO_FETCHED_FOLDER, path);
         }
 #else
         static_cast<void>(path);

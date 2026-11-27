@@ -34,7 +34,7 @@ namespace
         std::vector<Node> children;
     };
 
-    Node Describe(const Entity& entity)
+    Node DescribeTree(const Entity& entity)
     {
         Node node;
         node.name = entity.GetComponent<Name>().Get();
@@ -48,7 +48,7 @@ namespace
             node.mesh = entity.GetComponent<MeshRenderer>().mesh;
             node.material = entity.GetComponent<MeshRenderer>().material;
         }
-        entity.ForEachChild([&](const Entity& child) { node.children.push_back(Describe(child)); });
+        entity.ForEachChild([&](const Entity& child) { node.children.push_back(DescribeTree(child)); });
         return node;
     }
 
@@ -100,8 +100,8 @@ TEST_CASE("SpawnModel from C# returns a root usable in the same system, over the
 
     const auto model = test.Store().Load<Model>("two_parts.gltf", AssetOwner::App()).handle;
     const Entity expected = SpawnModel(test.Get(), test.Get().GetActiveScene(), model);
-    const Node spawned = Describe(root);
-    const Node made = Describe(expected);
+    const Node spawned = DescribeTree(root);
+    const Node made = DescribeTree(expected);
     INFO("The tree under the root should be C++'s: two_parts, Body drawing its first mesh, under it Tip and "
          "Body mesh 2 drawing the second, with the same names, places, meshes and materials, in order");
     REQUIRE(spawned.name == "two_parts");
@@ -126,11 +126,11 @@ TEST_CASE(
     "SpawnModel from C# gives a skinned model its SkinnedMeshes, naming the spawned skeleton, and its SkeletonPose",
     "[renderer][scripting][skinning]")
 {
-    RendererScriptingApp test;
+    RendererScriptingApp test(FENRIR_ANIMATION_FIXTURES);
     // The skinning source the playback gives the skeletons through; installed after scripting, which it need not
     // precede, since SpawnModel finds it when its changes play back.
     Skeletons skeletons = Skeletons::Install(test.Get());
-    const auto model = test.Store().Load<Model>(FENRIR_RENDERER_SCRIPTING_RIG, AssetOwner::App());
+    const auto model = test.Store().Load<Model>("rig.gltf", AssetOwner::App());
     REQUIRE(model.Ok());
     const auto rootId =
         test.Call<std::uint32_t>(RendererCallsType, "SpawnHandle", model.handle.index, model.handle.generation);

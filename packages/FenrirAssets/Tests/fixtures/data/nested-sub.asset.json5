@@ -1,0 +1,24 @@
+// A sword whose scabbard sub-asset holds a sub of its own, which sub-assets cannot.
+{
+  format: 1,
+  type: "AssetsTest::Sword",
+  version: 2,
+  data: {
+    displayName: "Nested sword",
+  },
+  sub: {
+    sheath: {
+      type: "AssetsTest::ShieldData",
+      version: 1,
+      data: {},
+    },
+    scabbard: {
+      type: "AssetsTest::ShieldData",
+      version: 1,
+      data: {},
+      sub: {
+        strap: { type: "AssetsTest::ShieldData", version: 1, data: {} },
+      },
+    },
+  },
+}

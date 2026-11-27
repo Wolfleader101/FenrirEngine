@@ -39,7 +39,7 @@ namespace
     {
         AssetStore& store = test.assets.Store();
         Scene& scene = test.Get().GetActiveScene();
-        const auto model = store.Load<Model>(FENRIR_ANIMATION_SCRIPTING_RIG, scene);
+        const auto model = store.Load<Model>("rig.gltf", scene);
         REQUIRE(model.Ok());
         const SpawnedNodes spawned = test.skeletons.SpawnModel(scene, model.handle);
         SpawnedFixture fixture;

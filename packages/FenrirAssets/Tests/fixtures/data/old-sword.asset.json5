@@ -1,0 +1,10 @@
+// A sword written at version 1, when its edge was called sharpness.
+{
+  format: 1,
+  type: "AssetsTest::Sword",
+  version: 1,
+  data: {
+    displayName: "Old sword",
+    sharpness: 0.75,
+  },
+}

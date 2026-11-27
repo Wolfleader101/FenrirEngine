@@ -101,6 +101,7 @@ namespace Fenrir::Generated::FixtureTypes
 template <>
 struct Fenrir::Describe<Fixture::Handle>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::BoundType;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -108,6 +109,7 @@ struct Fenrir::Describe<Fixture::Handle>
 template <>
 struct Fenrir::Describe<Fixture::Limits>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -115,6 +117,7 @@ struct Fenrir::Describe<Fixture::Limits>
 template <>
 struct Fenrir::Describe<Fixture::Marker>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -122,6 +125,7 @@ struct Fenrir::Describe<Fixture::Marker>
 template <>
 struct Fenrir::Describe<Fixture::Motion>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -129,6 +133,7 @@ struct Fenrir::Describe<Fixture::Motion>
 template <>
 struct Fenrir::Describe<Fixture::Offset>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -136,6 +141,7 @@ struct Fenrir::Describe<Fixture::Offset>
 template <>
 struct Fenrir::Describe<Fixture::Numbers>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -143,6 +149,7 @@ struct Fenrir::Describe<Fixture::Numbers>
 template <>
 struct Fenrir::Describe<Fixture::Quat>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::BoundType;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -150,6 +157,7 @@ struct Fenrir::Describe<Fixture::Quat>
 template <>
 struct Fenrir::Describe<Fixture::Spring>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -157,6 +165,7 @@ struct Fenrir::Describe<Fixture::Spring>
 template <>
 struct Fenrir::Describe<Fixture::Vec3>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::BoundType;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -164,6 +173,7 @@ struct Fenrir::Describe<Fixture::Vec3>
 template <>
 struct Fenrir::Describe<Fixture::Body>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -171,6 +181,7 @@ struct Fenrir::Describe<Fixture::Body>
 template <>
 struct Fenrir::Describe<Fixture::BodyId>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -178,6 +189,7 @@ struct Fenrir::Describe<Fixture::BodyId>
 template <>
 struct Fenrir::Describe<Fixture::BoxShape>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -185,6 +197,7 @@ struct Fenrir::Describe<Fixture::BoxShape>
 template <>
 struct Fenrir::Describe<Fixture::Clock>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::AppResource;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -192,6 +205,7 @@ struct Fenrir::Describe<Fixture::Clock>
 template <>
 struct Fenrir::Describe<Fixture::ShapeType>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -199,6 +213,7 @@ struct Fenrir::Describe<Fixture::ShapeType>
 template <>
 struct Fenrir::Describe<Fixture::SphereShape>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -206,6 +221,7 @@ struct Fenrir::Describe<Fixture::SphereShape>
 template <>
 struct Fenrir::Describe<Fixture::Shape>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -213,6 +229,7 @@ struct Fenrir::Describe<Fixture::Shape>
 template <>
 struct Fenrir::Describe<Fixture::Collider>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -220,6 +237,7 @@ struct Fenrir::Describe<Fixture::Collider>
 template <>
 struct Fenrir::Describe<Fixture::Columns>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::BoundType;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -227,6 +245,7 @@ struct Fenrir::Describe<Fixture::Columns>
 template <>
 struct Fenrir::Describe<Fixture::Contacts>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -234,6 +253,7 @@ struct Fenrir::Describe<Fixture::Contacts>
 template <>
 struct Fenrir::Describe<Fixture::Dial>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -241,6 +261,7 @@ struct Fenrir::Describe<Fixture::Dial>
 template <>
 struct Fenrir::Describe<Fixture::Folder>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -248,6 +269,7 @@ struct Fenrir::Describe<Fixture::Folder>
 template <>
 struct Fenrir::Describe<Fixture::Heading>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -255,6 +277,7 @@ struct Fenrir::Describe<Fixture::Heading>
 template <>
 struct Fenrir::Describe<Fixture::Hit>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -262,6 +285,7 @@ struct Fenrir::Describe<Fixture::Hit>
 template <>
 struct Fenrir::Describe<Fixture::Pair<double>>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::BoundType;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -269,6 +293,7 @@ struct Fenrir::Describe<Fixture::Pair<double>>
 template <>
 struct Fenrir::Describe<Fixture::Paths>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Settings;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -276,6 +301,7 @@ struct Fenrir::Describe<Fixture::Paths>
 template <>
 struct Fenrir::Describe<Fixture::Size>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::BoundType;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -283,6 +309,7 @@ struct Fenrir::Describe<Fixture::Size>
 template <>
 struct Fenrir::Describe<Fixture::Sky>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::AppResource;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -290,6 +317,7 @@ struct Fenrir::Describe<Fixture::Sky>
 template <>
 struct Fenrir::Describe<Fixture::Socket>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -297,6 +325,7 @@ struct Fenrir::Describe<Fixture::Socket>
 template <>
 struct Fenrir::Describe<Fixture::Stat>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -304,6 +333,7 @@ struct Fenrir::Describe<Fixture::Stat>
 template <>
 struct Fenrir::Describe<Fixture::WeaponData>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::DataAsset;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -311,6 +341,7 @@ struct Fenrir::Describe<Fixture::WeaponData>
 template <>
 struct Fenrir::Describe<Fixture::Sword>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::DataAsset;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -318,6 +349,7 @@ struct Fenrir::Describe<Fixture::Sword>
 template <>
 struct Fenrir::Describe<Fixture::Tag>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -325,6 +357,7 @@ struct Fenrir::Describe<Fixture::Tag>
 template <>
 struct Fenrir::Describe<Fixture::Ticket>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::BoundType;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -332,6 +365,7 @@ struct Fenrir::Describe<Fixture::Ticket>
 template <>
 struct Fenrir::Describe<Fixture::Touched>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::Event;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
@@ -339,6 +373,7 @@ struct Fenrir::Describe<Fixture::Touched>
 template <>
 struct Fenrir::Describe<Fixture::Weather>
 {
+    static constexpr Fenrir::Role role = Fenrir::Role::SceneResource;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 
