@@ -394,21 +394,32 @@ namespace Fenrir
             {
                 return std::format("it is no scene envelope: its `type` is not \"{}\"", Detail::SceneTypeName);
             }
+            // The rest of what a load refuses a file for: such a file is no scene, so nothing in it names the file.
+            if (std::optional<std::string> problem = Detail::FormatProblem(envelope.Find("format")))
+            {
+                return std::format("it is no scene envelope: {}", *problem);
+            }
+            if (Detail::PositiveWhole(envelope.Find("version"), Detail::SceneVersion) == std::nullopt)
+            {
+                return std::format("it is no scene envelope: its `version` is not the scene layout's, from 1 up to {}",
+                                   Detail::SceneVersion);
+            }
             Ser::Value* data = envelope.Find("data");
             if (data == nullptr || data->Kind() != Ser::ValueKind::Object)
             {
-                return std::nullopt;
+                return "it is no scene envelope: it has no `data` object";
             }
-            // The entries of an object keyed by type name. Those the block spells apart are ignored by the reader.
-            const auto addEntries = [&](Ser::Value* entries) {
+            // The entries of an object keyed by type name. In a block's `components`, those the block spells apart
+            // are ignored by the reader, so are skipped.
+            const auto addEntries = [&](Ser::Value* entries, bool inBlock) {
                 if (entries == nullptr || entries->Kind() != Ser::ValueKind::Object)
                 {
                     return;
                 }
                 for (Ser::Member& member : entries->AsObject().members)
                 {
-                    if (std::ranges::find(Detail::SpelledApart, std::string_view(member.key)) !=
-                        std::ranges::end(Detail::SpelledApart))
+                    if (inBlock && std::ranges::find(Detail::SpelledApart, std::string_view(member.key)) !=
+                                       std::ranges::end(Detail::SpelledApart))
                     {
                         continue;
                     }
@@ -422,7 +433,7 @@ namespace Fenrir
                     }
                 }
             };
-            addEntries(data->AsObject().Find("resources"));
+            addEntries(data->AsObject().Find("resources"), false);
             Ser::Value* blocks = data->AsObject().Find("entities");
             if (blocks == nullptr || blocks->Kind() != Ser::ValueKind::Array)
             {
@@ -435,11 +446,14 @@ namespace Fenrir
                     continue;
                 }
                 Ser::Object& block = element.value.AsObject();
-                if (Ser::Value* instance = block.Find("instance"); instance != nullptr)
+                addEntries(block.Find("components"), true);
+                // A block's `overrides` are read only on an instance block, against its source.
+                Ser::Value* instance = block.Find("instance");
+                if (instance == nullptr)
                 {
-                    scan.instances.push_back(instance);
+                    continue;
                 }
-                addEntries(block.Find("components"));
+                scan.instances.push_back(instance);
                 Ser::Value* overrides = block.Find("overrides");
                 if (overrides == nullptr || overrides->Kind() != Ser::ValueKind::Object)
                 {
@@ -449,7 +463,7 @@ namespace Fenrir
                 {
                     if (diff.value.Kind() == Ser::ValueKind::Object)
                     {
-                        addEntries(diff.value.AsObject().Find("components"));
+                        addEntries(diff.value.AsObject().Find("components"), true);
                     }
                 }
             }
