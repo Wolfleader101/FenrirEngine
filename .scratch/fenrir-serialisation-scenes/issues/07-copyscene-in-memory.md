@@ -12,8 +12,8 @@
 
 **Touches:** `packages/FenrirAssets/` (`include/FenrirAssets/AssetStore.hpp`, `src/SceneReader.cpp`, `src/SceneWriter.cpp`, `Tests/Scenes.cpp`)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A copy of ticket 02's code-built scene saves to the same bytes as the original.
-- [ ] A `Transient` entity and an undescribed component are not in the copy.
-- [ ] No file is written or read for the copy.
+- [x] A copy of ticket 02's code-built scene saves to the same bytes as the original.
+- [x] A `Transient` entity and an undescribed component are not in the copy.
+- [x] No file is written or read for the copy.
