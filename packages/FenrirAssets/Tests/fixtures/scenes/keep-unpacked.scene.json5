@@ -45,7 +45,7 @@
         },
       },
       {
-        id: "b8nn0",
+        id: "b4nnr",
         parent: "f8a90",
         components: {
           "Fenrir::Name": {name: "Banner"},

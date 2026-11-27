@@ -298,18 +298,18 @@ namespace Fenrir
                 Attach(block, at, root, spelled, filled);
             }
 
-            // The entity `key`, a slash path from the instance `root` tops, names, or the null entity with a warning
-            // naming `what` when it names none.
-            Entity Keyed(Entity root, const Ser::Value& key, const Ser::Value& at, const std::string& spelled,
-                         std::string_view what)
+            // The entity `key`, a slash path from the instance `root` tops, names, or the null entity with a warning at
+            // `node` naming `what` (the diff's member holding the key) when it names none.
+            Entity Keyed(Entity root, std::string_view key, const Ser::Value* node, const Ser::Value& at,
+                         const std::string& spelled, std::string_view what)
             {
-                Entity found =
-                    key.Kind() == Ser::ValueKind::String ? Detail::FollowSlashPath(root, key.AsString()) : Entity{};
+                const Entity found = Detail::FollowSlashPath(root, key);
                 if (!found.IsValid() || found == root)
                 {
-                    Report(Ser::DiagnosticSeverity::Warning, &key, at,
-                           std::format("entity `{}`: {} {} names no entity of the instance's source; it is ignored",
-                                       spelled, what, Detail::Found(&key)));
+                    Report(Ser::DiagnosticSeverity::Warning, node, at,
+                           std::format("entity `{}`: the {} `{}` names no entity of the instance's source; it is "
+                                       "ignored",
+                                       spelled, what, key));
                     return {};
                 }
                 return found;
@@ -334,7 +334,11 @@ namespace Fenrir
                     {
                         for (const Ser::Element& element : removed->AsArray().elements)
                         {
-                            if (const Entity gone = Keyed(root, element.value, *removed, spelled, "`removedEntities`");
+                            const std::string key = element.value.Kind() == Ser::ValueKind::String
+                                                        ? element.value.AsString()
+                                                        : Detail::Found(&element.value);
+                            if (const Entity gone =
+                                    Keyed(root, key, &element.value, *removed, spelled, "removed entity");
                                 gone.IsValid())
                             {
                                 Detail::DestroySubtree(scene.GetEntityList(), gone);
@@ -359,14 +363,10 @@ namespace Fenrir
                 }
                 for (Ser::Member& member : overrides->AsObject().members)
                 {
-                    const Entity target = Detail::FollowSlashPath(root, member.key);
+                    const Entity target = Keyed(root, member.key, &member.value, *overrides, spelled, "override");
                     const std::string named = std::format("{}/{}", spelled, member.key);
-                    if (!target.IsValid() || target == root)
+                    if (!target.IsValid())
                     {
-                        Report(Ser::DiagnosticSeverity::Warning, &member.value, *overrides,
-                               std::format("entity `{}`: the override `{}` names no entity of the instance's source; "
-                                           "it is ignored",
-                                           spelled, member.key));
                         continue;
                     }
                     if (member.value.Kind() != Ser::ValueKind::Object)
@@ -635,7 +635,8 @@ namespace Fenrir
 
             // Expands the source of the instance block `block` at the top of the scene, adding what its read found to
             // this load's, and gives its root's entity, `expanded` when the source loaded. A source that does not load
-            // leaves the root alone, marked with `Instance`, with an error, so a save writes the block back.
+            // leaves the root alone, marked with `Instance`, with an error, and its diff unread: a save writes the
+            // block back naming its source alone.
             std::uint32_t Expand(const BlockInstance& instance, const Ser::Object& block, const Ser::Value& at,
                                  const std::optional<EntityId>& id, bool& expanded)
             {

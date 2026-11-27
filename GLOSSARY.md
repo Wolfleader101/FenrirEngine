@@ -240,7 +240,7 @@ The file a scene is created from: its described scene resources, and its entitie
 *Avoid:* map file, level file (the game's words), save file (a game's own), world.
 
 **Entity id**
-The readable random string a scene file gives an entity, held in its `EntityId` component, minted once when the entity is first saved and kept for its life. It is how a file names an entity, for a parent or a component's entity field; it is not the run-time `Entity`, which is reassigned on every load (ADR-0078). Inside a scene instance the ids are its source's, scoped by its root; a model's are fixed at spawn, its node index plus one (see *Slash path*, ADR-0080).
+The readable random string a scene file gives an entity, held in its `EntityId` component, minted once when the entity is first saved and kept for its life, but for unpacking an instance, which gives the source's entities fresh ones. It is how a file names an entity, for a parent or a component's entity field; it is not the run-time `Entity`, which is reassigned on every load (ADR-0078). Inside a scene instance the ids are its source's, scoped by its root; a model's are fixed at spawn, its node index plus one (see *Slash path*, ADR-0080).
 *Avoid:* entity handle, fileID, GUID, name (the display string).
 
 **Transient**
@@ -264,7 +264,7 @@ The seam (`ModelSpawner`, FenrirAssets) a model source is spawned through when i
 *Avoid:* model loader, importer (which reads the file), model factory.
 
 **Override**
-A per-placement difference an instance keeps from its source: a field's value, a component or entity added, a component or entity removed. Written in the host's file against the source entity's id; never in the source (ADR-0080).
+A per-placement difference an instance keeps from its source: a field's value, a component or entity added, a component or entity removed. Written in the host's file against the source entity's slash path from the instance's root (its id, or ids chained through nested instances); never in the source (ADR-0080).
 *Avoid:* modification, delta, patch, property override (Unreal's).
 
 **Variant**

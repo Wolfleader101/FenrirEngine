@@ -189,21 +189,25 @@ namespace
     // without health and holding the banner, its guard gone, its nested sword faster.
     void CheckKeep(const Entity& keep)
     {
+        INFO("the tower is the keep's instance, moved, its guard gone");
         const Entity tower = ChildNamed(keep, "Tower");
         REQUIRE(tower.IsValid());
         REQUIRE(IdOf(tower) == "t1nst");
         REQUIRE(SourceOf(tower) == TowerPath);
         REQUIRE(tower.GetComponent<Fenrir::Transform>().pos == Vec3(10.0f, 0.0f, 0.0f));
         REQUIRE(ChildNames(tower) == std::vector<std::string>{"Gate", "Flag", "Player"});
+        INFO("the gate is faster and follows the keep, out of the instance");
         const Entity gate = ChildNamed(tower, "Gate");
         REQUIRE(gate.GetComponent<AssetsTest::Follower>().speed == 4.0f);
         REQUIRE(gate.GetComponent<AssetsTest::Follower>().target == keep);
+        INFO("the flag has lost its health, and holds the banner, which follows the gate");
         const Entity flag = ChildNamed(tower, "Flag");
         REQUIRE_FALSE(flag.HasComponent<AssetsTest::Health>());
         REQUIRE(flag.GetComponent<Fenrir::Transform>().pos == Vec3(0.0f, 5.0f, 0.0f));
         const Entity banner = ChildNamed(flag, "Banner");
         REQUIRE(IdOf(banner) == "b4nnr");
         REQUIRE(banner.GetComponent<AssetsTest::Follower>().target == gate);
+        INFO("the nested player's sword is faster, and still follows its player");
         const Entity player = ChildNamed(tower, "Player");
         const Entity sword = ChildNamed(player, "Sword");
         REQUIRE(sword.GetComponent<AssetsTest::Follower>().speed == 6.0f);
@@ -213,6 +217,7 @@ namespace
     // The keep's one root, from a load of the keep file.
     Entity LoadedKeep(const SceneLoadResult& loaded)
     {
+        INFO("the keep file holds one root, the keep");
         REQUIRE(loaded.roots.size() == 1);
         REQUIRE(NameOf(loaded.roots[0]) == "Keep");
         return loaded.roots[0];
@@ -491,23 +496,22 @@ TEST_CASE("Unpack unlinks an instance one level, re-minting its entities' ids, s
     INFO("the tower is no instance now, and keeps its own id");
     REQUIRE_FALSE(tower.HasComponent<Fenrir::Instance>());
     REQUIRE(IdOf(tower) == "t1nst");
-    INFO("its entities, the nested player's root among them, have fresh ids, none of them repeated");
-    const std::set<std::string> fresh{IdOf(gate), IdOf(flag), IdOf(banner), IdOf(player)};
-    REQUIRE(fresh.size() == 4);
+    INFO("the source's entities, the nested player's root among them, have fresh ids, none of them repeated");
+    const std::set<std::string> fresh{IdOf(gate), IdOf(flag), IdOf(player)};
+    REQUIRE(fresh.size() == 3);
     for (const std::string& id : {"g4te1", "f1ag0", "b4nnr", "p4tr1", "k33p0", "t1nst"})
     {
         REQUIRE_FALSE(fresh.contains(id));
     }
+    INFO("the banner the host added keeps the host's id, unique in its file already");
+    REQUIRE(IdOf(banner) == "b4nnr");
     INFO("the nested player is still an instance, and its sword keeps its id there");
     REQUIRE(SourceOf(player) == PlayerPath);
     REQUIRE(IdOf(sword) == "m9x1p");
-    INFO("unpacking what is no instance's root is refused");
-    REQUIRE_FALSE(test.store.Unpack(scene, gate));
 
     // The minted ids are random: the golden spells them so, which fixes the bytes and changes nothing else.
     GiveId(gate, "g8t30");
     GiveId(flag, "f8a90");
-    GiveId(banner, "b8nn0");
     GiveId(player, "p8tr0");
     const SceneSaveResult saved = test.store.SaveScene(scene, HostPath);
 
@@ -541,7 +545,6 @@ TEST_CASE("A diff naming what its source lacks is warned of and ignored, and the
         },
         removedEntities: ["qqqqq", "g0ard"],
       },
-      {id: "n0b0d", parent: "t1nst/zzzzz", components: {"Fenrir::Name": {name: "Orphan"}}},
     ],
   },
 })");
@@ -554,11 +557,54 @@ TEST_CASE("A diff naming what its source lacks is warned of and ignored, and the
     REQUIRE(FindDiagnostic(loaded.diagnostics, "the override `zzzzz` names no entity") != nullptr);
     REQUIRE(FindDiagnostic(loaded.diagnostics, "qqqqq") != nullptr);
     REQUIRE(FindDiagnostic(loaded.diagnostics, "AssetsTest::Missing") != nullptr);
-    INFO("an added block under a path naming nothing loads at the top, with an error");
-    REQUIRE(FindDiagnostic(loaded.diagnostics, "slash path") != nullptr);
-    REQUIRE(loaded.roots.size() == 2);
+    REQUIRE(loaded.roots.size() == 1);
     INFO("the rest applies: the gate is faster and the guard gone");
     const Entity tower = loaded.roots[0];
     REQUIRE(ChildNamed(tower, "Gate").GetComponent<AssetsTest::Follower>().speed == 3.0f);
     REQUIRE_FALSE(ChildNamed(tower, "Guard").IsValid());
+}
+
+TEST_CASE("Unpacking an entity that is no instance's root is refused, with an error",
+          "[assets][scenes][instances][unpack]")
+{
+    TempRoot root;
+    CopySources(root);
+    DataApp test({root.Path()});
+    Fenrir::Scene& scene = test.app.CreateScene("Host");
+    const InstanceResult tower = test.store.Instantiate(scene, TowerPath);
+    const Entity gate = tower.Find(Id("g4te1"));
+
+    INFO("the gate is inside the instance, not its root: nothing changes, and the refusal is logged");
+    REQUIRE_FALSE(test.store.Unpack(scene, gate));
+    REQUIRE(IdOf(gate) == "g4te1");
+    REQUIRE(SourceOf(tower.root) == TowerPath);
+    REQUIRE(AssetsTest::CountContaining(*test.errors, "Could not unpack") == 1);
+}
+
+TEST_CASE("A block whose parent is a slash path naming nothing in the instance loads at the top, with an error",
+          "[assets][scenes][instances][overrides]")
+{
+    TempRoot root;
+    CopySources(root);
+    root.Write(HostPath, R"({
+  format: 1,
+  type: "Fenrir::Scene",
+  version: 1,
+  data: {
+    resources: {},
+    entities: [
+      {id: "t1nst", instance: "prefabs/tower.scene.json5"},
+      {id: "n0b0d", parent: "t1nst/zzzzz", components: {"Fenrir::Name": {name: "Orphan"}}},
+    ],
+  },
+})");
+    DataApp test({root.Path()});
+
+    const SceneLoadResult loaded = test.store.LoadScene(test.app, HostPath);
+
+    INFO("the load is Partial, the orphan a second root, the error naming the slash path it expected");
+    REQUIRE(loaded.status == LoadStatus::Partial);
+    REQUIRE(FindDiagnostic(loaded.diagnostics, "slash path") != nullptr);
+    REQUIRE(loaded.roots.size() == 2);
+    REQUIRE(NameOf(loaded.roots[1]) == "Orphan");
 }

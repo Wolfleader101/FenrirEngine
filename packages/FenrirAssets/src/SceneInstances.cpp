@@ -36,12 +36,7 @@ namespace Fenrir::Detail
                 const std::string key = ScopedKey(prefix, child);
                 if (key.empty())
                 {
-                    // No key names it, so none names what is inside it when it is an instance; the rest of its scope
-                    // is still its parent's.
-                    if (!child.HasComponent<Instance>())
-                    {
-                        CollectKeyed(baseline, child, prefix);
-                    }
+                    // No key names it, nor what is below it, as MatchInstance hands a live one over whole.
                     return;
                 }
                 if (baseline.byKey.emplace(key, child).second)
@@ -192,8 +187,27 @@ namespace Fenrir
                 held.insert(entity.GetComponent<EntityId>().value);
             }
         });
+        // The source's entities are those a fresh expansion of it has: an entity the host added holds an id of the
+        // host's file already, unique there, and keeps it. With no expansion to tell them apart, every one is
+        // re-minted.
         std::vector<Entity> unlinked;
-        Detail::ForEachInInstance(root, [&](const Entity& entity) { unlinked.push_back(entity); });
+        Detail::InstanceBaselines baselines(
+            [this](Scene& into, std::string_view source) { return ExpandInstance(into, source); });
+        if (const Detail::InstanceBaseline* baseline = baselines.For(std::string(root.GetComponent<Instance>().source)))
+        {
+            const Detail::InstanceMatch match = Detail::MatchInstance(root, baseline, [](const Entity&) {});
+            Detail::ForEachInInstance(root, [&](const Entity& entity) {
+                const auto key = match.keyOf.find(entity.GetId());
+                if (key != match.keyOf.end() && key->second.find('/') == std::string::npos)
+                {
+                    unlinked.push_back(entity);
+                }
+            });
+        }
+        else
+        {
+            Detail::ForEachInInstance(root, [&](const Entity& entity) { unlinked.push_back(entity); });
+        }
         root.RemoveComponent<Instance>();
         for (Entity& entity : unlinked)
         {

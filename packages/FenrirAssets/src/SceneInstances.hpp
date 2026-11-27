@@ -32,7 +32,8 @@ namespace Fenrir::Detail
     /**
      * @brief A fresh expansion of an instance's source, which the scene writer compares the live instance with
      * (ADR-0080 §4): its root, and every entity below it that a key names, depth-first in sibling order, nested
-     * instances' entities included. Of two entities with one key, the first keeps it, as FollowSlashPath finds it.
+     * instances' entities included; an entity with no id, and what is below it, is not walked. Of two entities with
+     * one key, the first keeps it, as FollowSlashPath finds it.
      */
     struct InstanceBaseline
     {
@@ -57,7 +58,9 @@ namespace Fenrir::Detail
         /** @brief How a source is expanded: the store's Instantiate, at the top of the scene given. */
         using Expand = std::function<InstanceResult(Scene&, std::string_view)>;
 
+        /** @brief Baselines expanded through `expand`, into a scene of their own made now. */
         explicit InstanceBaselines(Expand expand);
+        /** @brief Destroys the baselines' scene, releasing what the expansions loaded. */
         ~InstanceBaselines();
         InstanceBaselines(const InstanceBaselines&) = delete;
         InstanceBaselines& operator=(const InstanceBaselines&) = delete;
