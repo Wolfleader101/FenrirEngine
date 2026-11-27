@@ -857,7 +857,7 @@ namespace Fenrir
          * nested instances); the root takes the block's id. A source that does not load leaves the root alone, marked
          * with `Instance`, with an error, so a save writes the block back. A source that is the file being read, or a
          * file instancing it through a chain, is refused at the block with an error, counted in `entitiesSkipped`. The
-         * source's read's diagnostics and counts are the load's too.
+         * source's read's diagnostics and counts are the load's too, but for its `resourcesSkipped`.
          *
          * Tolerant past the envelope: a block that is not an object is left out; one with a bad id, or an id an
          * earlier block has, loads with no `EntityId` and no place in the id map, so a save mints it one; one whose

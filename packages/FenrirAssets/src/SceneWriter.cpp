@@ -113,22 +113,32 @@ namespace Fenrir
 
         // Records in `paths` the slash path of each entity inside the instance `root` tops, whose own path is
         // `prefix` (ADR-0080 §5): the path, `/`, and the entity's id in the source, chained through each nested
-        // instance's root. An entity with no id, or tagged Transient, has none a file could name.
-        void MapInstance(const Entity& root, const std::string& prefix,
+        // instance's root. An entity with no id has none a file could name; one tagged Transient, and every entity
+        // below it, is no entity of any file.
+        void MapInstance(const Entity& scope, const std::string& prefix,
                          std::unordered_map<std::uint32_t, std::string>& paths)
         {
-            Detail::ForEachInInstance(root, [&](const Entity& entity) {
-                if (!entity.HasComponent<EntityId>() || entity.GetComponent<EntityId>().value == 0 ||
-                    entity.HasComponent<Transient>())
+            scope.ForEachChild([&](const Entity& entity) {
+                if (entity.HasComponent<Transient>())
                 {
                     return;
                 }
-                std::string path = std::format("{}/{}", prefix, SpellEntityId(entity.GetComponent<EntityId>()));
-                if (entity.HasComponent<Instance>())
+                const bool named = entity.HasComponent<EntityId>() && entity.GetComponent<EntityId>().value != 0;
+                std::string path = named ? std::format("{}/{}", prefix, SpellEntityId(entity.GetComponent<EntityId>()))
+                                         : std::string();
+                if (!entity.HasComponent<Instance>())
+                {
+                    // Still the same instance: its ids are in this scope.
+                    MapInstance(entity, prefix, paths);
+                }
+                else if (named)
                 {
                     MapInstance(entity, path, paths);
                 }
-                paths.emplace(entity.GetId(), std::move(path));
+                if (named)
+                {
+                    paths.emplace(entity.GetId(), std::move(path));
+                }
             });
         }
 

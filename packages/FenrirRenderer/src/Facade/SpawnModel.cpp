@@ -121,10 +121,10 @@ namespace Fenrir
             }
         }
         /** @brief SpawnModel as a ModelSpawner, for the app it spawns in. */
-        class SpawnModelSpawner final : public ModelSpawner
+        class SpawnModelAsSpawner final : public ModelSpawner
         {
           public:
-            explicit SpawnModelSpawner(App& app) : m_app(&app)
+            explicit SpawnModelAsSpawner(App& app) : m_app(&app)
             {
             }
 
@@ -140,7 +140,7 @@ namespace Fenrir
 
     std::unique_ptr<ModelSpawner> Detail::MakeModelSpawner(App& app)
     {
-        return std::make_unique<SpawnModelSpawner>(app);
+        return std::make_unique<SpawnModelAsSpawner>(app);
     }
 
     Entity SpawnModel(App& app, Scene& scene, AssetHandle<Model> model, Entity parent)

@@ -93,7 +93,8 @@ namespace Fenrir
         };
 
         // Adds what `inner`, an instance's source read, found to `outer`, the read of the file holding the instance:
-        // its counts and its diagnostics, already logged.
+        // its counts and its diagnostics, already logged. The source's resources are never the host's to apply, so
+        // they are no skipped resources of the host's.
         void AddInner(SceneLoadResult& outer, SceneLoadResult& inner)
         {
             outer.entities += inner.entities;
@@ -102,20 +103,13 @@ namespace Fenrir
             outer.unknownComponentsKept += inner.unknownComponentsKept;
             outer.fieldsDropped += inner.fieldsDropped;
             outer.referencesEmptied += inner.referencesEmptied;
-            outer.resourcesSkipped += inner.resourcesSkipped;
             Append(outer.diagnostics, std::move(inner.diagnostics));
         }
 
-        // An `Instance` naming `source`, or none when the path is too long for it to hold.
-        std::optional<Instance> InstanceOf(std::string_view source)
+        // A block's id as its diagnostics name it: `?` when it has none that parses.
+        std::string Spelled(const std::optional<EntityId>& id)
         {
-            Instance instance;
-            if (source.size() >= sizeof(instance.source))
-            {
-                return std::nullopt;
-            }
-            source.copy(instance.source, source.size());
-            return instance;
+            return id ? SpellEntityId(*id) : std::string("?");
         }
 
         // One load's work: the scene being filled, where its types are found, its file's path for diagnostics, how
@@ -235,7 +229,7 @@ namespace Fenrir
                 entities.CompleteEntity(entity);
                 Entity handle = entities.GetEntity(entity);
                 ++result.entities;
-                const std::string spelled = id ? SpellEntityId(*id) : std::string("?");
+                const std::string spelled = Spelled(id);
                 if (holdsId)
                 {
                     GiveId(handle, *id);
@@ -295,7 +289,7 @@ namespace Fenrir
                 {
                     GiveId(root, *id);
                 }
-                Attach(block, at, root, id ? SpellEntityId(*id) : std::string("?"), filled);
+                Attach(block, at, root, Spelled(id), filled);
             }
 
             // Appends `handle`, the entity of `block`, to the block before it that its `parent` names, or makes it a
@@ -430,7 +424,7 @@ namespace Fenrir
                     Report(Ser::DiagnosticSeverity::Error, instance, at,
                            std::format("entity `{}`: expected `instance`, the asset path of a scene or model file, "
                                        "found {}; the entity loads as an ordinary one",
-                                       id ? SpellEntityId(*id) : std::string("?"), Detail::Found(instance)));
+                                       Spelled(id), Detail::Found(instance)));
                     return std::nullopt;
                 }
                 BlockInstance named{instance->AsString(), {}};
@@ -443,7 +437,7 @@ namespace Fenrir
             }
 
             // Whether the scene file `assetPath` is being read now: this file, or one instancing it through a chain.
-            [[nodiscard]] bool Instancing(const std::string& assetPath) const
+            [[nodiscard]] bool OnReadChain(const std::string& assetPath) const
             {
                 return std::ranges::find(reading, assetPath) != reading.end();
             }
@@ -463,10 +457,10 @@ namespace Fenrir
                 Report(Ser::DiagnosticSeverity::Error, block.Find("instance"), at,
                        std::format("entity `{}`: the instance's source `{}` did not load; the entity loads as the "
                                    "instance's root alone, so a save keeps the block",
-                                   id ? SpellEntityId(*id) : std::string("?"), instance.source));
+                                   Spelled(id), instance.source));
                 Entity root = scene.GetEntityList().CreateEntity();
                 ++result.entities;
-                if (const std::optional<Instance> mark = InstanceOf(instance.source))
+                if (const std::optional<Instance> mark = Detail::InstanceOf(instance.source))
                 {
                     root.AddComponent<Instance>(*mark);
                 }
@@ -515,12 +509,12 @@ namespace Fenrir
                         Ser::Object& block = element.value.AsObject();
                         std::optional<EntityId> id = BlockId(block, element.value);
                         const std::optional<BlockInstance> instance = InstanceNamed(block, element.value, id);
-                        if (instance && Instancing(instance->assetPath))
+                        if (instance && OnReadChain(instance->assetPath))
                         {
                             Report(Ser::DiagnosticSeverity::Error, block.Find("instance"), element.value,
                                    std::format("entity `{}`: the instance's source `{}` is {}, so it would instance "
                                                "itself; the block is left out",
-                                               id ? SpellEntityId(*id) : std::string("?"), instance->source,
+                                               Spelled(id), instance->source,
                                                instance->assetPath == reading.back() ? "this file"
                                                                                      : "a file instancing this one"));
                             ++result.entitiesSkipped;
@@ -673,7 +667,7 @@ namespace Fenrir
         {
             return fail(*problem);
         }
-        const std::optional<Instance> mark = InstanceOf(assetPath);
+        const std::optional<Instance> mark = Detail::InstanceOf(assetPath);
         if (!mark)
         {
             return fail(
@@ -846,9 +840,17 @@ namespace Fenrir
             filler.parent = parent;
         }
         // On the chain while its blocks are read, so an instance of it, directly or through another file, is refused.
+        struct OnChain
+        {
+            std::vector<std::string>& chain;
+            ~OnChain()
+            {
+                chain.pop_back();
+            }
+        };
         m_state->scenesReading.push_back(assetPath);
+        const OnChain onChain{m_state->scenesReading};
         filler.FillScene(*data);
-        m_state->scenesReading.pop_back();
         result.status = result.diagnostics.empty() ? LoadStatus::Succeeded : LoadStatus::Partial;
         return result;
     }

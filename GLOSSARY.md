@@ -240,7 +240,7 @@ The file a scene is created from: its described scene resources, and its entitie
 *Avoid:* map file, level file (the game's words), save file (a game's own), world.
 
 **Entity id**
-The readable random string a scene file gives an entity, held in its `EntityId` component, minted once when the entity is first saved and kept for its life. It is how a file names an entity, for a parent or a component's entity field; it is not the run-time `Entity`, which is reassigned on every load (ADR-0078).
+The readable random string a scene file gives an entity, held in its `EntityId` component, minted once when the entity is first saved and kept for its life. It is how a file names an entity, for a parent or a component's entity field; it is not the run-time `Entity`, which is reassigned on every load (ADR-0078). Inside a scene instance the ids are its source's, scoped by its root; a model's are fixed at spawn, its node index plus one (see *Slash path*, ADR-0080).
 *Avoid:* entity handle, fileID, GUID, name (the display string).
 
 **Transient**

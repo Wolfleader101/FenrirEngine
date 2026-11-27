@@ -736,6 +736,17 @@ namespace Fenrir::Detail
         return found;
     }
 
+    std::optional<Instance> InstanceOf(std::string_view source)
+    {
+        Instance instance;
+        if (source.size() >= sizeof(instance.source))
+        {
+            return std::nullopt;
+        }
+        source.copy(instance.source, source.size());
+        return instance;
+    }
+
     bool InsideInstance(const Entity& entity)
     {
         for (Entity above = entity.GetComponent<Relationship>().parent; above.IsValid();

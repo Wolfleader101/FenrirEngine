@@ -9,6 +9,7 @@
 #include <string_view>
 
 #include "AssetStoreState.hpp"
+#include "Envelope.hpp"
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirAssets/Model.hpp"
 #include "FenrirAssets/ModelSpawner.hpp"
@@ -86,11 +87,12 @@ namespace Fenrir
         // path (added in code, or a built-in) has nothing a file could name.
         if (const std::optional<std::string> path =
                 PathOfSlot(Detail::AssetKind::Model, {model.index, model.generation});
-            path && !path->starts_with(Detail::BuiltinPrefix) && path->size() < sizeof(Instance::source))
+            path && !path->starts_with(Detail::BuiltinPrefix))
         {
-            Instance instance;
-            path->copy(instance.source, path->size());
-            spawned.root.AddComponent<Instance>(instance);
+            if (const std::optional<Instance> instance = Detail::InstanceOf(*path))
+            {
+                spawned.root.AddComponent<Instance>(*instance);
+            }
         }
         if (parent.IsValid())
         {

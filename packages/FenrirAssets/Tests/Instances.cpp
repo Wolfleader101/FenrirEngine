@@ -269,6 +269,7 @@ TEST_CASE("Instancing a model spawns its nodes under the parent, the root marked
 
 TEST_CASE("A model id is its number in base32", "[assets][scenes][instances][models]")
 {
+    INFO("one to thirty-one are one character, thirty-two is the first of two");
     REQUIRE(Fenrir::SpellEntityId(Fenrir::ModelEntityId(1)) == "1");
     REQUIRE(Fenrir::SpellEntityId(Fenrir::ModelEntityId(10)) == "a");
     REQUIRE(Fenrir::SpellEntityId(Fenrir::ModelEntityId(31)) == "z");

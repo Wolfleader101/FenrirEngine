@@ -330,3 +330,25 @@ TEST_CASE("SpawnModel gives a model's skinned mesh entities the same ids on ever
             std::set<std::uint64_t>{Fenrir::ModelEntityId(nodes + 1).value, Fenrir::ModelEntityId(nodes + 2).value,
                                     Fenrir::ModelEntityId(nodes + 3).value, Fenrir::ModelEntityId(nodes + 4).value});
 }
+
+TEST_CASE("SpawnModel on scene.gltf twice gives the same ids, nodes and mesh entities alike",
+          "[renderer][spawn-model][instances]")
+{
+    RendererTestApp test(RendererTest::NullBackend(), {FENRIR_TEST_MODEL_FIXTURES});
+    const Fenrir::LoadResult<Fenrir::Model> model =
+        test.Store().Load<Fenrir::Model>("scene.gltf", Fenrir::AssetOwner::App());
+    REQUIRE(model.Ok());
+
+    const Entity first = Fenrir::SpawnModel(test.app, test.ActiveScene(), model.handle);
+    const Entity second = Fenrir::SpawnModel(test.app, test.ActiveScene(), model.handle);
+
+    std::vector<std::uint64_t> firstIds;
+    std::vector<std::uint64_t> secondIds;
+    CollectIds(first, firstIds);
+    CollectIds(second, secondIds);
+    INFO("every entity below each root has an id, each different, the same in both spawns");
+    REQUIRE(firstIds == secondIds);
+    REQUIRE(firstIds.size() >= 4);
+    REQUIRE(std::ranges::find(firstIds, 0u) == firstIds.end());
+    REQUIRE(std::set<std::uint64_t>(firstIds.begin(), firstIds.end()).size() == firstIds.size());
+}

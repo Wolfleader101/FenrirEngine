@@ -14,6 +14,7 @@
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityId.hpp"
 #include "FenrirECS/EntityList.hpp"
+#include "FenrirECS/SceneComponents.hpp"
 #include "FenrirSerialisation/Bridge.hpp"
 #include "FenrirSerialisation/Diagnostic.hpp"
 #include "FenrirSerialisation/Value.hpp"
@@ -218,6 +219,9 @@ namespace Fenrir::Detail
 
     /** @brief The entity in the scope of the instance `root` tops whose `EntityId` is `id`, or the null entity. */
     [[nodiscard]] Entity FindInInstance(const Entity& root, EntityId id);
+
+    /** @brief An `Instance` naming the asset path `source`, or none when it is too long for one to hold (255 bytes). */
+    [[nodiscard]] std::optional<Instance> InstanceOf(std::string_view source);
 
     /** @brief Whether an ancestor of `entity` is an instance's root, so its id is scoped by that root. */
     [[nodiscard]] bool InsideInstance(const Entity& entity);
