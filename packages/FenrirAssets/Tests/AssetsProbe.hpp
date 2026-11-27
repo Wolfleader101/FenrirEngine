@@ -34,7 +34,7 @@ namespace Fenrir
          */
         static SceneLoadResult ReadSceneInto(AssetStore& store, Scene& scene, std::string_view path)
         {
-            return store.ReadSceneFile(path, [&]() -> Scene& { return scene; });
+            return store.ReadSceneFile(path, [&]() -> Scene& { return scene; }, {}, true);
         }
     };
 } // namespace Fenrir

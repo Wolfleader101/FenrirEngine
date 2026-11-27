@@ -1,4 +1,5 @@
-// The scene reader (ADR-0078): AssetStore::LoadScene, a scene envelope read into a new scene in two passes.
+// The scene reader (ADR-0078, ADR-0079): AssetStore::LoadScene, a scene envelope read into a new scene in two passes,
+// and AssetStore::LoadSceneInto, the same read merged into a scene that exists.
 
 #include <algorithm>
 #include <cstddef>
@@ -79,7 +80,8 @@ namespace Fenrir
         }
 
         // One load's work: the scene being filled, where its types are found, its file's path for diagnostics, how
-        // its asset handle fields are read, and the result being filled.
+        // its asset handle fields are read, and the result being filled; and for a merge, the entity the file's roots
+        // go under (none for the top) and whether the file's resources are skipped.
         struct SceneFiller
         {
             Scene& scene;
@@ -88,6 +90,8 @@ namespace Fenrir
             const std::function<Detail::ReferenceRead(std::string_view, const FieldInfo&)>& readReference;
             ILogger& logger;
             SceneLoadResult& result;
+            Entity parent;
+            bool applyResources = true;
 
             // Each block's entity by its id's value: the first block holding an id.
             std::unordered_map<std::uint64_t, std::uint32_t> ids;
@@ -203,7 +207,7 @@ namespace Fenrir
                 const Ser::Value* parent = block.Find("parent");
                 if (parent == nullptr)
                 {
-                    result.roots.push_back(handle);
+                    AddRoot(handle);
                     return;
                 }
                 const std::optional<EntityId> parentId =
@@ -215,10 +219,21 @@ namespace Fenrir
                            std::format("entity `{}`: expected `parent`, the id of a block before it, found {}; the "
                                        "entity loads at the top",
                                        spelled, Detail::Found(parent)));
-                    result.roots.push_back(handle);
+                    AddRoot(handle);
                     return;
                 }
                 entities.GetEntity(found->second).AddChild(handle);
+            }
+
+            // Records `root`, an entity of no block's, as a root of the file, appended under the merge's parent when
+            // there is one, so the file's roots follow its children in file order.
+            void AddRoot(Entity root)
+            {
+                if (parent.IsValid())
+                {
+                    parent.AddChild(root);
+                }
+                result.roots.push_back(root);
             }
 
             // Adds the component `member` holds to `entity`, or keeps it in `unknown` when the registry lacks its
@@ -265,9 +280,15 @@ namespace Fenrir
             }
 
             // Adds or fills each scene resource `resources` holds, after every entity, so an `entity` field in one
-            // names an entity of the file (ADR-0078 §7).
+            // names an entity of the file (ADR-0078 §7). A merge applies none: the target scene's resources stand, and
+            // each entry is counted as skipped, with no diagnostic (ADR-0079 §2).
             void FillResources(Ser::Value& resources)
             {
+                if (!applyResources)
+                {
+                    result.resourcesSkipped += resources.AsObject().members.size();
+                    return;
+                }
                 for (Ser::Member& member : resources.AsObject().members)
                 {
                     const EntryVersion version = TakeVersion(member.value);
@@ -419,10 +440,17 @@ namespace Fenrir
     SceneLoadResult AssetStore::LoadScene(App& app, std::string_view path, std::string_view name)
     {
         return ReadSceneFile(
-            path, [&]() -> Scene& { return app.CreateScene(name.empty() ? std::string(path) : std::string(name)); });
+            path, [&]() -> Scene& { return app.CreateScene(name.empty() ? std::string(path) : std::string(name)); }, {},
+            true);
     }
 
-    SceneLoadResult AssetStore::ReadSceneFile(std::string_view path, const std::function<Scene&()>& makeScene)
+    SceneLoadResult AssetStore::LoadSceneInto(Scene& scene, std::string_view path, Entity parent)
+    {
+        return ReadSceneFile(path, [&]() -> Scene& { return scene; }, parent, false);
+    }
+
+    SceneLoadResult AssetStore::ReadSceneFile(std::string_view path, const std::function<Scene&()>& makeScene,
+                                              Entity parent, bool applyResources)
     {
         SceneLoadResult result;
         std::string assetPath;
@@ -475,7 +503,19 @@ namespace Fenrir
             [&](std::string_view reference, const FieldInfo& field) {
                 return ReadFileReference(assetPath, owner, reference, field);
             };
-        SceneFiller filler{scene, *m_state->types, fileKey, readReference, *m_state->logger, result};
+        SceneFiller filler{scene, *m_state->types, fileKey, readReference, *m_state->logger, result,
+                           {},    applyResources};
+        if (parent.HasEntityList() && (!parent.IsValid() || parent != scene.GetEntityList().GetEntity(parent.GetId())))
+        {
+            // A parent of another scene, or one destroyed: the file's roots load at the top of this one.
+            filler.Report(Ser::DiagnosticSeverity::Error, nullptr, *data,
+                          "the parent given is no live entity of the scene loaded into; the file's roots load at the "
+                          "top");
+        }
+        else
+        {
+            filler.parent = parent;
+        }
         filler.FillScene(*data);
         result.status = result.diagnostics.empty() ? LoadStatus::Succeeded : LoadStatus::Partial;
         return result;
