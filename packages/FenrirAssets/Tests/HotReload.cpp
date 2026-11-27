@@ -1,18 +1,23 @@
-// Hot reload of data assets (ADR-0081): the store watches each data asset file it loaded and, between frames, replaces
+// Hot reload (ADR-0081): the store watches each file it loaded, data asset or imported, and, between frames, replaces
 // a changed one in place under the handles it already gave, bumping revisions and listing each swap in Reloaded(). A
 // broken edit keeps the old value and says why once; a deleted file keeps its data with one warning. Every test runs
 // on a temporary asset root of its own, with both reload intervals at zero, and rewrites files between RunFrame calls.
 
+#include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <format>
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include "DataAssetsTest.hpp"
+#include "FenrirAssets/ShaderContainer.hpp"
 
 using AssetsTest::CountContaining;
 using AssetsTest::DataApp;
@@ -363,4 +368,413 @@ TEST_CASE("An unloaded data asset's file is no longer watched", "[assets][data][
     INFO("a file the store holds nothing from is not warned about when it goes");
     REQUIRE(test.warnings->empty());
     REQUIRE(test.store.Reloaded().empty());
+}
+
+// Imported files (ADR-0081 §2): an image, cubemap, font or model file reloads through its importer, replacing its
+// assets under the handles they had.
+
+namespace
+{
+    constexpr std::string_view ImagePath = "images/icon.png";
+    constexpr std::string_view CubemapPath = "cubemap/sky.cubemap";
+    constexpr std::string_view FontPath = "fonts/tagged.ttf";
+    constexpr std::string_view ModelPath = "models/prop.gltf";
+    constexpr std::string_view ShaderPath = "shaders/strength.fshader";
+
+    // A one-variant shader container whose `strength` parameter defaults to `strength`, as FenrirShaderCompiler would
+    // write it.
+    std::vector<std::byte> StrengthShader(float strength)
+    {
+        Fenrir::ShaderContainer container;
+        container.name = "Strength";
+        Fenrir::ShaderVariant variant;
+        variant.stages.push_back({Fenrir::ShaderStage::Vertex, {0x07230203u, 1u, 2u}, {0x07230203u, 3u}});
+        variant.stages.push_back({Fenrir::ShaderStage::Fragment, {0x07230203u, 4u}, {0x07230203u, 5u, 6u}});
+        variant.bindings = {{2, 0, Fenrir::ShaderBindingKind::UniformBuffer, "MaterialParams", 16}};
+        variant.materialBlockBinding = 0;
+        variant.materialMembers = {{"strength", Fenrir::ShaderValueType::Float, 0, 4}};
+        variant.parameters = {{"strength", Fenrir::ShaderParameterType::Float, {strength}}};
+        variant.defaultBlock.assign(16, std::byte{0});
+        container.variants.push_back(std::move(variant));
+        return Fenrir::WriteShaderContainer(container);
+    }
+
+    // Writes the shader container `bytes` to the asset path `to` under `root`.
+    void WriteShader(const TempRoot& root, std::string_view to, const std::vector<std::byte>& bytes)
+    {
+        root.Write(to, std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+    }
+
+    // A cubemap file naming the fixture faces, `first` as its +X face and `second` as its -X face.
+    std::string CubemapText(std::string_view first, std::string_view second)
+    {
+        return std::format("+X {}\n-X {}\n+Y py.png\n-Y ny.png\n+Z pz.png\n-Z nz.png\n", first, second);
+    }
+
+    // The red, green, blue and alpha of the first pixel of the cubemap's +X face, its top left.
+    std::array<unsigned, 4> FirstPixel(const Fenrir::ImageData& image)
+    {
+        return {std::to_integer<unsigned>(image.pixels.at(0)), std::to_integer<unsigned>(image.pixels.at(1)),
+                std::to_integer<unsigned>(image.pixels.at(2)), std::to_integer<unsigned>(image.pixels.at(3))};
+    }
+
+    // A root holding the six cubemap fixture faces and a cubemap file naming them in order.
+    void CopyCubemap(const TempRoot& root)
+    {
+        for (const std::string_view face : {"px.png", "nx.png", "py.png", "ny.png", "pz.png", "nz.png"})
+        {
+            root.Copy(Fixtures() / "cubemap" / face, std::format("cubemap/{}", face));
+        }
+        root.Write(CubemapPath, CubemapText("px.png", "nx.png"));
+    }
+
+    // A root holding the three-mesh tangents glTF as the prop, and the buffers of it and of the two-mesh owners glTF
+    // it is rewritten as.
+    void CopyModel(const TempRoot& root)
+    {
+        root.Copy(Fixtures() / "models/tangents.gltf", ModelPath);
+        root.Copy(Fixtures() / "models/tangents.bin", "models/tangents.bin");
+        root.Copy(Fixtures() / "models/owners.bin", "models/owners.bin");
+    }
+
+    // Loads the copied prop for the app, and runs a frame so the watch has looked at it once.
+    Fenrir::AssetHandle<Fenrir::Model> LoadModel(DataApp& test)
+    {
+        const Fenrir::LoadResult<Fenrir::Model> loaded =
+            test.store.Load<Fenrir::Model>(ModelPath, Fenrir::AssetOwner::App());
+        INFO("the copied prop loads whole");
+        REQUIRE(loaded.Status() == Fenrir::LoadStatus::Succeeded);
+        RunFrames(test, 1);
+        return loaded.handle;
+    }
+} // namespace
+
+TEST_CASE("A rewritten image reloads under its handle within two frames", "[assets][images][reload]")
+{
+    TempRoot root;
+    root.Copy(Fixtures() / "fourbytwo.png", ImagePath);
+    DataApp test(Watching(root));
+    const Fenrir::LoadResult<Fenrir::Image> loaded =
+        test.store.Load<Fenrir::Image>(ImagePath, Fenrir::AssetOwner::App());
+    INFO("the copied 4 by 2 image loads");
+    REQUIRE(loaded.Ok());
+    RunFrames(test, 1);
+    const std::uint32_t revision = test.store.Revision(loaded.handle);
+
+    root.Copy(Fixtures() / "threebyfive.jpg", ImagePath);
+    RunFrames(test, 2);
+
+    const Fenrir::ImageData* image = test.store.TryGet(loaded.handle);
+    INFO("the handle the load gave reads the new file's 3 by 5 pixels");
+    REQUIRE(image != nullptr);
+    REQUIRE(image->width == 3);
+    REQUIRE(image->height == 5);
+    INFO("its revision moved, and Reloaded() names it once, by its asset path");
+    REQUIRE(test.store.Revision(loaded.handle) == revision + 1);
+    REQUIRE(test.store.Reloaded().size() == 1);
+    REQUIRE(TimesReloaded(test, loaded.handle) == 1);
+    REQUIRE(test.store.Reloaded().front().path == ImagePath);
+    REQUIRE(test.errors->empty());
+}
+
+TEST_CASE("A broken rewrite of an image keeps its pixels and says why once", "[assets][images][reload]")
+{
+    TempRoot root;
+    root.Copy(Fixtures() / "fourbytwo.png", ImagePath);
+    DataApp test(Watching(root));
+    const Fenrir::LoadResult<Fenrir::Image> loaded =
+        test.store.Load<Fenrir::Image>(ImagePath, Fenrir::AssetOwner::App());
+    INFO("the copied image loads");
+    REQUIRE(loaded.Ok());
+    RunFrames(test, 1);
+
+    root.Copy(Fixtures() / "corrupt.png", ImagePath);
+    RunFrames(test, 5);
+
+    INFO("the image keeps the 4 by 2 pixels it loaded, and nothing is listed as reloaded");
+    REQUIRE(test.store.TryGet(loaded.handle)->width == 4);
+    REQUIRE(test.store.Reloaded().empty());
+    INFO("one error over five frames names the file and keeps what it loaded");
+    REQUIRE(CountContaining(*test.errors, "Could not reload image 'images/icon.png'") == 1);
+    REQUIRE(test.errors->size() == 1);
+}
+
+TEST_CASE("A rewritten .cubemap file reloads its faces under its handle", "[assets][images][cubemaps][reload]")
+{
+    TempRoot root;
+    CopyCubemap(root);
+    DataApp test(Watching(root));
+    const Fenrir::LoadResult<Fenrir::Image> loaded =
+        test.store.Load<Fenrir::Image>(CubemapPath, Fenrir::AssetOwner::App());
+    INFO("the copied cubemap loads, its +X face red");
+    REQUIRE(loaded.Ok());
+    REQUIRE(FirstPixel(*test.store.TryGet(loaded.handle)) == std::array<unsigned, 4>{255, 0, 0, 255});
+    RunFrames(test, 1);
+
+    root.Write(CubemapPath, CubemapText("nx.png", "px.png"));
+    RunFrames(test, 2);
+
+    INFO("the handle reads the green face the file names for +X now, and Reloaded() names it once");
+    REQUIRE(FirstPixel(*test.store.TryGet(loaded.handle)) == std::array<unsigned, 4>{0, 255, 0, 255});
+    REQUIRE(TimesReloaded(test, loaded.handle) == 1);
+    REQUIRE(test.errors->empty());
+}
+
+TEST_CASE("A broken rewrite of a .cubemap file keeps its faces and says why once", "[assets][images][cubemaps][reload]")
+{
+    TempRoot root;
+    CopyCubemap(root);
+    DataApp test(Watching(root));
+    const Fenrir::LoadResult<Fenrir::Image> loaded =
+        test.store.Load<Fenrir::Image>(CubemapPath, Fenrir::AssetOwner::App());
+    INFO("the copied cubemap loads");
+    REQUIRE(loaded.Ok());
+    RunFrames(test, 1);
+
+    root.Write(CubemapPath, CubemapText("nx.png", "gone.png"));
+    RunFrames(test, 5);
+
+    INFO("the cubemap keeps its red +X face, and nothing is listed as reloaded");
+    REQUIRE(FirstPixel(*test.store.TryGet(loaded.handle)) == std::array<unsigned, 4>{255, 0, 0, 255});
+    REQUIRE(test.store.Reloaded().empty());
+    INFO("one error over five frames names the file and the face it could not find");
+    REQUIRE(CountContaining(*test.errors, "Could not reload image 'cubemap/sky.cubemap'") == 1);
+    REQUIRE(CountContaining(*test.errors, "gone.png") == 1);
+}
+
+TEST_CASE("A font file broken and then restored keeps its font, then reloads it", "[assets][fonts][reload]")
+{
+    TempRoot root;
+    root.Copy(Fixtures() / FontPath, FontPath);
+    DataApp test(Watching(root));
+    const Fenrir::LoadResult<Fenrir::Font> loaded = test.store.Load<Fenrir::Font>(FontPath, Fenrir::AssetOwner::App());
+    INFO("the copied font loads");
+    REQUIRE(loaded.Ok());
+    RunFrames(test, 1);
+    const std::size_t size = test.store.TryGet(loaded.handle)->bytes.size();
+
+    root.Write(FontPath, "not a font");
+    RunFrames(test, 3);
+    INFO("the broken rewrite keeps the font's bytes, with one error");
+    REQUIRE(test.store.TryGet(loaded.handle)->bytes.size() == size);
+    REQUIRE(CountContaining(*test.errors, "Could not reload font 'fonts/tagged.ttf'") == 1);
+
+    root.Copy(Fixtures() / FontPath, FontPath);
+    RunFrames(test, 2);
+    INFO("the restored file reloads under the same handle");
+    REQUIRE(TimesReloaded(test, loaded.handle) == 1);
+    REQUIRE(test.store.TryGet(loaded.handle)->bytes.size() == size);
+}
+
+TEST_CASE("A rewritten glTF replaces its model and its meshes under their labels", "[assets][models][reload]")
+{
+    TempRoot root;
+    CopyModel(root);
+    DataApp test(Watching(root));
+    const Fenrir::AssetHandle<Fenrir::Model> model = LoadModel(test);
+    const Fenrir::LoadResult<Fenrir::Mesh> second =
+        test.store.Load<Fenrir::Mesh>(std::string(ModelPath) + "#Mesh1", Fenrir::AssetOwner::App());
+    INFO("the prop has three meshes, its second of four vertices");
+    REQUIRE(test.store.TryGet(model)->meshes.size() == 3);
+    REQUIRE(test.store.TryGet(second.handle)->positions.size() == 4);
+    const std::uint32_t revision = test.store.Revision(second.handle);
+
+    root.Copy(Fixtures() / "models/owners.gltf", ModelPath);
+    RunFrames(test, 2);
+
+    INFO("the model's handle reads the new file's two meshes, the first still under the label it had");
+    REQUIRE(test.store.TryGet(model)->meshes.size() == 2);
+    REQUIRE(test.store.TryGet(model)->meshes.at(1) == second.handle);
+    INFO("the second mesh's handle reads the new file's three vertices, a revision on");
+    REQUIRE(test.store.TryGet(second.handle)->positions.size() == 3);
+    REQUIRE(test.store.Revision(second.handle) == revision + 1);
+    INFO("Reloaded() names the model and each mesh it replaced once, by asset path");
+    REQUIRE(TimesReloaded(test, model) == 1);
+    REQUIRE(TimesReloaded(test, second.handle) == 1);
+    REQUIRE(std::ranges::count(test.store.Reloaded(), std::string(ModelPath) + "#Mesh0",
+                               &Fenrir::ReloadedAsset::path) == 1);
+    REQUIRE(test.errors->empty());
+}
+
+TEST_CASE("A mesh the rewritten model file no longer has keeps its data, with one warning", "[assets][models][reload]")
+{
+    TempRoot root;
+    CopyModel(root);
+    DataApp test(Watching(root));
+    LoadModel(test);
+    const Fenrir::LoadResult<Fenrir::Mesh> third =
+        test.store.Load<Fenrir::Mesh>(std::string(ModelPath) + "#Mesh2", Fenrir::AssetOwner::App());
+    INFO("the prop's third mesh loads");
+    REQUIRE(third.Ok());
+    const std::uint32_t revision = test.store.Revision(third.handle);
+
+    root.Copy(Fixtures() / "models/owners.gltf", ModelPath);
+    RunFrames(test, 3);
+
+    INFO("the third mesh keeps its four vertices at the same revision, and is not listed as reloaded");
+    REQUIRE(test.store.TryGet(third.handle)->positions.size() == 4);
+    REQUIRE(test.store.Revision(third.handle) == revision);
+    REQUIRE(TimesReloaded(test, third.handle) == 0);
+    INFO("one warning names the file and the sub-asset it lost");
+    REQUIRE(CountContaining(*test.warnings, "'models/prop.gltf' no longer has its sub-asset 'Mesh2'") == 1);
+}
+
+TEST_CASE("A broken rewrite of a model file keeps the model and its meshes and says why once",
+          "[assets][models][reload]")
+{
+    TempRoot root;
+    CopyModel(root);
+    DataApp test(Watching(root));
+    const Fenrir::AssetHandle<Fenrir::Model> model = LoadModel(test);
+    const std::uint32_t revision = test.store.Revision(model);
+
+    root.Write(ModelPath, "{ \"asset\": { \"version\": ");
+    RunFrames(test, 5);
+
+    INFO("the model keeps its three meshes at the same revision, and nothing is listed as reloaded");
+    REQUIRE(test.store.TryGet(model)->meshes.size() == 3);
+    REQUIRE(test.store.Revision(model) == revision);
+    REQUIRE(test.store.Reloaded().empty());
+    INFO("one error over five frames names the file and keeps what it loaded");
+    REQUIRE(CountContaining(*test.errors, "Could not reload model 'models/prop.gltf'") == 1);
+    REQUIRE(test.errors->size() == 1);
+}
+
+TEST_CASE("An unloaded image's file is no longer watched", "[assets][images][reload]")
+{
+    TempRoot root;
+    root.Copy(Fixtures() / "fourbytwo.png", ImagePath);
+    DataApp test(Watching(root));
+    const Fenrir::LoadResult<Fenrir::Image> loaded =
+        test.store.Load<Fenrir::Image>(ImagePath, Fenrir::AssetOwner::App());
+    INFO("the copied image loads, then unloads");
+    REQUIRE(loaded.Ok());
+    RunFrames(test, 1);
+    REQUIRE(test.store.Unload(loaded.handle));
+
+    fs::remove(root.Path() / ImagePath);
+    RunFrames(test, 2);
+
+    INFO("a file the store holds nothing from is not warned about when it goes");
+    REQUIRE(test.warnings->empty());
+}
+
+TEST_CASE("A model file stays watched while a mesh outlives its model", "[assets][models][reload]")
+{
+    TempRoot root;
+    CopyModel(root);
+    DataApp test(Watching(root));
+    const Fenrir::AssetHandle<Fenrir::Model> model = LoadModel(test);
+    const Fenrir::LoadResult<Fenrir::Mesh> second =
+        test.store.Load<Fenrir::Mesh>(std::string(ModelPath) + "#Mesh1", Fenrir::AssetOwner::App());
+    INFO("the model unloads, its second mesh held on its own");
+    REQUIRE(test.store.Unload(model));
+    REQUIRE(test.store.IsValid(second.handle));
+
+    root.Copy(Fixtures() / "models/owners.gltf", ModelPath);
+    RunFrames(test, 2);
+
+    INFO("the mesh reloads under its handle; no model is stored again by it");
+    REQUIRE(test.store.TryGet(second.handle)->positions.size() == 3);
+    REQUIRE(TimesReloaded(test, second.handle) == 1);
+    REQUIRE_FALSE(test.store.IsValid(model));
+}
+
+TEST_CASE("A mesh a rewritten model file adds loads under its label for the model's owners",
+          "[assets][models][reload][owners]")
+{
+    TempRoot root;
+    root.Copy(Fixtures() / "models/owners.gltf", ModelPath);
+    root.Copy(Fixtures() / "models/owners.bin", "models/owners.bin");
+    root.Copy(Fixtures() / "models/tangents.bin", "models/tangents.bin");
+    DataApp test(Watching(root));
+    Fenrir::Scene& level = test.app.CreateScene("Level");
+    const Fenrir::LoadResult<Fenrir::Model> loaded = test.store.Load<Fenrir::Model>(ModelPath, level);
+    INFO("the two-mesh prop loads for the scene");
+    REQUIRE(loaded.Ok());
+    RunFrames(test, 1);
+
+    root.Copy(Fixtures() / "models/tangents.gltf", ModelPath);
+    RunFrames(test, 2);
+
+    INFO("the model reads three meshes, the third loadable by its label");
+    REQUIRE(test.store.TryGet(loaded.handle)->meshes.size() == 3);
+    const Fenrir::AssetHandle<Fenrir::Mesh> third = test.store.TryGet(loaded.handle)->meshes.at(2);
+    REQUIRE(test.store.PathOf(third) == std::string(ModelPath) + "#Mesh2");
+    INFO("an added mesh is no replacement, so Reloaded() does not list it");
+    REQUIRE(TimesReloaded(test, third) == 0);
+
+    test.app.DestroyScene("Level");
+    INFO("the scene was the model's only owner, so the added mesh goes with it");
+    REQUIRE_FALSE(test.store.IsValid(third));
+}
+
+TEST_CASE("A rewritten model file that imports only in part replaces nothing and says why once",
+          "[assets][models][reload]")
+{
+    TempRoot root;
+    CopyModel(root);
+    root.Copy(Fixtures() / "models/missing-texture.bin", "models/missing-texture.bin");
+    DataApp test(Watching(root));
+    const Fenrir::AssetHandle<Fenrir::Model> model = LoadModel(test);
+    const std::uint32_t revision = test.store.Revision(model);
+
+    // Its one mesh would import, but its texture names a file that is not there.
+    root.Copy(Fixtures() / "models/missing-texture.gltf", ModelPath);
+    RunFrames(test, 5);
+
+    INFO("the model keeps its three meshes at the same revision, and nothing is listed as reloaded");
+    REQUIRE(test.store.TryGet(model)->meshes.size() == 3);
+    REQUIRE(test.store.Revision(model) == revision);
+    REQUIRE(test.store.Reloaded().empty());
+    INFO("one error over five frames names the file and the texture it left out");
+    REQUIRE(CountContaining(*test.errors, "Could not reload model 'models/prop.gltf': it imported only in part") == 1);
+    REQUIRE(test.errors->size() == 1);
+}
+
+TEST_CASE("A rewritten shader container reloads under its handle with its new parameter table",
+          "[assets][shaders][reload]")
+{
+    TempRoot root;
+    WriteShader(root, ShaderPath, StrengthShader(1.0f));
+    DataApp test(Watching(root));
+    const Fenrir::LoadResult<Fenrir::Shader> loaded =
+        test.store.Load<Fenrir::Shader>(ShaderPath, Fenrir::AssetOwner::App());
+    INFO("the copied shader loads, its strength defaulting to 1");
+    REQUIRE(loaded.Ok());
+    REQUIRE(test.store.GetShaderParameters(loaded.handle)[0].value[0] == 1.0f);
+    RunFrames(test, 1);
+    const std::uint32_t revision = test.store.Revision(loaded.handle);
+
+    WriteShader(root, ShaderPath, StrengthShader(4.0f));
+    RunFrames(test, 2);
+
+    INFO("the same handle reads the new container's default, a revision on, and Reloaded() names it once");
+    REQUIRE(test.store.GetShaderParameters(loaded.handle)[0].value[0] == 4.0f);
+    REQUIRE(test.store.Revision(loaded.handle) == revision + 1);
+    REQUIRE(TimesReloaded(test, loaded.handle) == 1);
+    REQUIRE(test.store.Reloaded().front().path == ShaderPath);
+    REQUIRE(test.errors->empty());
+}
+
+TEST_CASE("A broken rewrite of a shader container keeps its data and says why once", "[assets][shaders][reload]")
+{
+    TempRoot root;
+    WriteShader(root, ShaderPath, StrengthShader(1.0f));
+    DataApp test(Watching(root));
+    const Fenrir::LoadResult<Fenrir::Shader> loaded =
+        test.store.Load<Fenrir::Shader>(ShaderPath, Fenrir::AssetOwner::App());
+    INFO("the copied shader loads");
+    REQUIRE(loaded.Ok());
+    RunFrames(test, 1);
+
+    root.Write(ShaderPath, "half a container");
+    RunFrames(test, 5);
+
+    INFO("the shader keeps its parameter table, and nothing is listed as reloaded");
+    REQUIRE(test.store.GetShaderParameters(loaded.handle)[0].value[0] == 1.0f);
+    REQUIRE(test.store.Reloaded().empty());
+    INFO("one error over five frames names the file and keeps what it loaded");
+    REQUIRE(CountContaining(*test.errors, "Could not reload shader 'shaders/strength.fshader'") == 1);
+    REQUIRE(test.errors->size() == 1);
 }
