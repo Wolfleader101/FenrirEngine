@@ -188,6 +188,16 @@ namespace Fenrir::Detail
                                                              std::filesystem::path& file);
 
     /**
+     * @brief The reader's path check for a file read whole, as a scene file is: why `path` is refused, or none. It is
+     * resolved against `root` (relative, or absolute under it), its normal absolute form put in `fileKey` either way,
+     * and its asset path, relative to the root, in `assetPath`. A path naming a sub-asset (`#`), or outside the root,
+     * is refused.
+     */
+    [[nodiscard]] std::optional<std::string> WholeFileLoadProblem(const std::filesystem::path& root,
+                                                                  std::string_view path, std::string& assetPath,
+                                                                  std::string& fileKey);
+
+    /**
      * @brief The engine kind a `reference` field's target names, as a description writes `AssetHandle<Image>`'s
      * (`Fenrir::Image`); none for any other name, which is a data asset type's.
      */

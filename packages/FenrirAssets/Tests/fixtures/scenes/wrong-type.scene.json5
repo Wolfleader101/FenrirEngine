@@ -1,0 +1,8 @@
+{
+  format: 1,
+  type: "AssetsTest::WeaponData",
+  version: 1,
+  data: {
+    entities: [],
+  },
+}
