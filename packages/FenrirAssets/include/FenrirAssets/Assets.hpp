@@ -53,18 +53,23 @@ namespace Fenrir
 
         /**
          * @brief Moves or renames the file at the asset path `from` to the asset path `to`, both under `root`, and
-         * rewrites every reference to it across the root's envelopes (ADR-0076 §5, ADR-0079 §6). It needs no running
-         * store, and `registry` holds the types of the files it scans.
+         * rewrites every reference to it across the root's envelopes and scene files (ADR-0076 §5, ADR-0079 §6). It
+         * needs no running store, and `registry` holds the types of the files it scans.
          *
          * `from` must name a file, and `to` must name nothing yet: a destination that exists is refused, and so is a
          * path that is absolute, climbs through `..`, names a sub-asset (`#`) or a `builtin:` asset, or leaves the
          * root. Every `.json5` file under the root is read with ReadText, and each string a `reference` field of its
-         * entries' types holds (the top level's and each `sub` entry's, as the registry describes them) that is `from`,
-         * or `from#name` for a sub-asset of it, is rewritten to `to` or `to#name`; the moved file's own references
-         * included. A changed file is written back atomically through WriteText from its edited tree, so its comments
-         * are kept and a file the engine wrote changes in those strings alone. A file that does not parse, is no
-         * envelope, or names a type `registry` lacks, in its top level or a sub-asset, is left as it was and listed in
-         * MoveResult::unscanned.
+         * entries' types holds that is `from`, or `from#name` for a sub-asset of it, is rewritten to `to` or `to#name`;
+         * the moved file's own references included. An envelope's entries are its top level's and each `sub` entry's.
+         * A `.scene.json5` file's are its `resources`, each block's `components` and each `overrides` entry's
+         * `components` (ADR-0078, ADR-0080), and each block's `instance` path is matched and rewritten too. The
+         * registry's descriptions find the fields. A changed file is written back atomically through WriteText from its
+         * edited tree, so its comments are kept and a file the engine wrote changes in those strings alone.
+         *
+         * MoveResult::unscanned lists each file left as it was: one that does not parse, is no envelope, or names a
+         * type `registry` lacks in its top level or a sub-asset; and a scene file that does not parse or is no scene
+         * envelope. It also lists a scene file with an entry of a type `registry` lacks; that file's other entries
+         * and its `instance` paths are still rewritten, so it can be in MoveResult::changed too.
          *
          * A reference is matched as Load resolves it, so `./from` and one spelled with backslashes are rewritten too,
          * and a rename that changes only the case is allowed where the disk ignores case. The file is moved first, so a

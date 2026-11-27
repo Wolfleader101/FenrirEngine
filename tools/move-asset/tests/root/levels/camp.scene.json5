@@ -1,0 +1,32 @@
+// A camp: a hut instanced, and a banner showing the sword.
+{
+  format: 1,
+  type: "Fenrir::Scene",
+  version: 1,
+  data: {
+    resources: {},
+    entities: [
+      {
+        id: "c4mp0",
+        components: {
+          "Fenrir::Name": {name: "Camp"},
+          "Fenrir::Transform": {},
+          "AssetsTest::Follower": {
+            icon: "weapons/sword.asset.json5", // the sword it flies
+            speed: 2,
+          },
+        },
+      },
+      {
+        id: "h1nst",
+        parent: "c4mp0",
+        instance: "prefabs/hut.scene.json5",
+        components: {
+          "Fenrir::Transform": {
+            pos: [4, 0, 0],
+          },
+        },
+      },
+    ],
+  },
+}

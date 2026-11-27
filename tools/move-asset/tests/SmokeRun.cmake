@@ -6,8 +6,9 @@
 #   WORK         a directory of the build tree to copy it into; emptied first
 #
 # A dry run lists the changes and writes nothing; the real move moves the sword and rewrites each reference to it but
-# the unscanned spear's; a move onto an existing file is refused, exits 1 and writes nothing; the engine's own copy lists
-# the fixtures' files as unscanned; bad arguments exit 2 with the usage.
+# the unscanned spear's, the camp scene's asset handle field among them; a move onto an existing file is refused, exits
+# 1 and writes nothing; the engine's own copy lists the fixtures' files as unscanned; bad arguments exit 2 with the
+# usage. A second move moves the hut prefab the camp instances, rewriting the camp's instance.
 
 foreach(variable GAME_TOOL ENGINE_TOOL FIXTURE WORK)
     if(NOT DEFINED ${variable})
@@ -17,7 +18,8 @@ endforeach()
 
 set(from "weapons/sword.asset.json5")
 set(to "arms/blade.asset.json5")
-set(files "weapons/sword.asset.json5" "weapons/axe.asset.json5" "shields/shield.asset.json5" "spear.asset.json5")
+set(files "weapons/sword.asset.json5" "weapons/axe.asset.json5" "shields/shield.asset.json5" "spear.asset.json5"
+    "levels/camp.scene.json5" "prefabs/hut.scene.json5")
 
 file(REMOVE_RECURSE "${WORK}")
 file(MAKE_DIRECTORY "${WORK}")
@@ -52,7 +54,8 @@ function(expect_untouched when)
     endif()
 endfunction()
 
-set(changed_lines "changed: arms/blade.asset.json5\nchanged: shields/shield.asset.json5\nchanged: weapons/axe.asset.json5\n")
+string(CONCAT changed_lines "changed: arms/blade.asset.json5\nchanged: levels/camp.scene.json5\n"
+    "changed: shields/shield.asset.json5\nchanged: weapons/axe.asset.json5\n")
 set(unscanned_line
     "unscanned: spear.asset.json5: the type registry has no `AssetsTest::Spear`, the type of its top level\n")
 
@@ -61,7 +64,7 @@ run("${GAME_TOOL}" "${WORK}" "${from}" "${to}" --dry-run)
 if(NOT code EQUAL 0)
     fail("the dry run exited ${code}:\n${out}${err}")
 endif()
-set(expected_dry "would move ${from} to ${to}, rewriting 3 references in 3 files\n${changed_lines}${unscanned_line}")
+set(expected_dry "would move ${from} to ${to}, rewriting 4 references in 4 files\n${changed_lines}${unscanned_line}")
 if(NOT out STREQUAL expected_dry)
     fail("the dry run printed\n${out}\nnot\n${expected_dry}")
 endif()
@@ -78,12 +81,13 @@ endif()
 expect_untouched("after the refused move")
 
 # The engine's own copy knows none of the fixtures' types, so scans none of them; the moved file is listed by its path
-# after the move.
+# after the move. The camp is listed for its entry of a test type, though its other entries are scanned.
 run("${ENGINE_TOOL}" "${WORK}" "${from}" "${to}" --dry-run)
 if(NOT code EQUAL 0)
     fail("the engine's dry run exited ${code}:\n${out}${err}")
 endif()
-foreach(file "${to}" "weapons/axe.asset.json5" "shields/shield.asset.json5" "spear.asset.json5")
+foreach(file "${to}" "weapons/axe.asset.json5" "shields/shield.asset.json5" "spear.asset.json5"
+        "levels/camp.scene.json5")
     string(FIND "${out}" "unscanned: ${file}: " at)
     if(at EQUAL -1)
         fail("the engine's dry run did not list ${file} as unscanned:\n${out}")
@@ -102,7 +106,7 @@ run("${GAME_TOOL}" "${WORK}" "${from}" "${to}")
 if(NOT code EQUAL 0)
     fail("the move exited ${code}:\n${out}${err}")
 endif()
-set(expected_move "moved ${from} to ${to}, rewriting 3 references in 3 files\n${changed_lines}${unscanned_line}")
+set(expected_move "moved ${from} to ${to}, rewriting 4 references in 4 files\n${changed_lines}${unscanned_line}")
 if(NOT out STREQUAL expected_move)
     fail("the move printed\n${out}\nnot\n${expected_move}")
 endif()
@@ -110,7 +114,7 @@ if(EXISTS "${WORK}/${from}")
     fail("${from} is still there after the move")
 endif()
 foreach(pair "weapons/sword.asset.json5|${to}" "weapons/axe.asset.json5|weapons/axe.asset.json5"
-             "shields/shield.asset.json5|shields/shield.asset.json5")
+             "shields/shield.asset.json5|shields/shield.asset.json5" "levels/camp.scene.json5|levels/camp.scene.json5")
     string(REPLACE "|" ";" pair "${pair}")
     list(GET pair 0 before)
     list(GET pair 1 after)
@@ -129,4 +133,32 @@ file(READ "${FIXTURE}/spear.asset.json5" expected)
 file(READ "${WORK}/spear.asset.json5" actual)
 if(NOT actual STREQUAL expected)
     fail("the unscanned spear changed:\n${actual}")
+endif()
+
+# The second move: the hut the camp instances. It rewrites the camp's instance, every other byte kept.
+set(hut "prefabs/hut.scene.json5")
+set(moved_hut "prefabs/huts/hut.scene.json5")
+run("${GAME_TOOL}" "${WORK}" "${hut}" "${moved_hut}")
+if(NOT code EQUAL 0)
+    fail("the hut's move exited ${code}:\n${out}${err}")
+endif()
+string(CONCAT expected_hut "moved ${hut} to ${moved_hut}, rewriting 1 references in 1 files\n"
+    "changed: levels/camp.scene.json5\n${unscanned_line}")
+if(NOT out STREQUAL expected_hut)
+    fail("the hut's move printed\n${out}\nnot\n${expected_hut}")
+endif()
+if(EXISTS "${WORK}/${hut}")
+    fail("${hut} is still there after its move")
+endif()
+file(READ "${FIXTURE}/${hut}" expected)
+file(READ "${WORK}/${moved_hut}" actual)
+if(NOT actual STREQUAL expected)
+    fail("the moved hut changed:\n${actual}")
+endif()
+file(READ "${FIXTURE}/levels/camp.scene.json5" expected)
+string(REPLACE "${from}" "${to}" expected "${expected}")
+string(REPLACE "${hut}" "${moved_hut}" expected "${expected}")
+file(READ "${WORK}/levels/camp.scene.json5" actual)
+if(NOT actual STREQUAL expected)
+    fail("the camp after the hut's move is\n${actual}\nnot\n${expected}")
 endif()
