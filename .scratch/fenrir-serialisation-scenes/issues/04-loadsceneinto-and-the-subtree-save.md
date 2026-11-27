@@ -9,8 +9,8 @@
 
 **Touches:** `packages/FenrirAssets/` (`include/FenrirAssets/AssetStore.hpp`, `src/SceneReader.cpp`, `src/SceneWriter.cpp`, `Tests/Scenes.cpp`, `fixtures/scenes/`)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Merging a file under a parent appends its roots under that parent in order, and counts its resources as skipped.
-- [ ] A subtree saved from a scene equals a committed golden file, with its out-of-subtree references written `null` and counted.
-- [ ] A subtree saved then merged back reproduces the subtree's components.
+- [x] Merging a file under a parent appends its roots under that parent in order, and counts its resources as skipped.
+- [x] A subtree saved from a scene equals a committed golden file, with its out-of-subtree references written `null` and counted.
+- [x] A subtree saved then merged back reproduces the subtree's components.
