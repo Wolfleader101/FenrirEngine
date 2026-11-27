@@ -16,9 +16,16 @@
 
 **Touches:** `packages/FenrirAssets/` (`src/Move.cpp`, `include/FenrirAssets/Assets.hpp`'s `Move` doc, `Tests/Move.cpp`, its fixtures), `tools/move-asset/tests/` (the smoke run's root and `SmokeRun.cmake`)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Moving a prefab that two hosts instance, and that a component's asset handle field names, rewrites all three. Every other byte in those files stays the same.
-- [ ] A dry run reports the same files and writes nothing.
-- [ ] After the move, each host loads with its instance expanded.
-- [ ] The move-asset smoke run passes with its scene fixture.
+- [x] Moving a prefab that two hosts instance, and that a component's asset handle field names, rewrites all three. Every other byte in those files stays the same.
+- [x] A dry run reports the same files and writes nothing.
+- [x] After the move, each host loads with its instance expanded.
+- [x] The move-asset smoke run passes with its scene fixture.
+
+## Comments
+
+- **Which files are scenes:** a file whose name ends in `.scene.json5` is scanned as a scene, as `Instantiate` tells a scene source from a model. One of those whose `type` is not `Fenrir::Scene` is unscanned as no scene envelope; every other `.json5` file is scanned as an envelope, as before.
+- **Entries the reader ignores:** a `Fenrir::Relationship`, `Fenrir::EntityId` or `Fenrir::Instance` entry inside `components` is skipped, as the reader skips it.
+- **A path in a handle field is matched by its string alone:** a handle field naming the moved file is rewritten whatever kind of asset the field holds, as for envelopes.
+- **The smoke run's scene fixture:** the smoke run's first move moves a data asset, which no scene can instance. So the camp scene names the sword in an asset handle field, which the first move rewrites. A second move then moves the hut prefab the camp instances, and checks that the camp's `instance` alone changed.
