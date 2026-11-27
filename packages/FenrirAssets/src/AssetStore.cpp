@@ -1440,8 +1440,7 @@ namespace Fenrir
         m_state->watcher->Poll(
             ReloadWatcher::Clock::now(), *m_state->logger,
             [this](const std::string& key, Detail::AssetKind kind) {
-                // A data asset file reloads through its envelope, an imported one through its
-                // importer (ADR-0081 §2).
+                // A data asset file reloads through its envelope, an imported one through its importer (ADR-0081 §2).
                 if (kind == Detail::AssetKind::Data)
                 {
                     ReloadDataFile(key);

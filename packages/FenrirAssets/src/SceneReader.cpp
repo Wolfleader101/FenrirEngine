@@ -814,6 +814,13 @@ namespace Fenrir
                             ++result.entitiesSkipped;
                             continue;
                         }
+                        if (read == Detail::SceneRead::Patch && (!id || ids.contains(id->value)))
+                        {
+                            // A block with no id of its own matches nothing: the entity the scene's load made for it
+                            // stays as it is, as an entity with no id does, rather than another being added each patch.
+                            ++result.entitiesSkipped;
+                            continue;
+                        }
                         bool expanded = false;
                         const std::optional<std::uint32_t> found = Matching(id, instance);
                         const std::uint32_t entity = found      ? *found
@@ -1157,6 +1164,15 @@ namespace Fenrir
         if (read == Detail::SceneRead::Patch)
         {
             filler.priorIds = fileIds;
+            // An id the file never held (a merge's) is the scene's own: a block of it that matches no entity, being of
+            // another kind, is re-minted, so no id repeats in the scene. One the file held goes with its entity.
+            for (const auto& [value, entity] : filler.live)
+            {
+                if (fileIds == nullptr || !fileIds->contains(value))
+                {
+                    filler.taken.insert(value);
+                }
+            }
         }
         if (parent.HasEntityList() && !Detail::LiveIn(entities, parent))
         {

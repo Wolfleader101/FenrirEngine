@@ -16,9 +16,9 @@
 
 **Touches:** `packages/FenrirAssets/` (`src/AssetWatcher.*`, `src/AssetStore.cpp`, `src/AssetStoreState.hpp`, a new `src/ScenePatch.cpp`, `Tests/` (a new `SceneReload.cpp`))
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A rewritten scene file, over a `TempRoot` with both reload intervals at zero, patches the running scene within two frames. A changed field is rewritten, a new entity is added, and a removed one is destroyed with its children.
-- [ ] A run-time entity with no `EntityId` survives the patch.
-- [ ] A broken rewrite changes nothing and logs once.
-- [ ] A destroyed scene is never patched, and its watch is dropped.
+- [x] A rewritten scene file, over a `TempRoot` with both reload intervals at zero, patches the running scene within two frames. A changed field is rewritten, a new entity is added, and a removed one is destroyed with its children.
+- [x] A run-time entity with no `EntityId` survives the patch.
+- [x] A broken rewrite changes nothing and logs once.
+- [x] A destroyed scene is never patched, and its watch is dropped.

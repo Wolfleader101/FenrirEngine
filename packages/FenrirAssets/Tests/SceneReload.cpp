@@ -323,7 +323,7 @@ TEST_CASE("A scene patch leaves an entity whose id the file never held alone", "
     REQUIRE(test.errors->empty());
 }
 
-TEST_CASE("A broken scene file rewrite changes nothing, says why once, and a fix patches", "[assets][scenes][reload]")
+TEST_CASE("A broken scene file rewrite changes nothing and says why once", "[assets][scenes][reload]")
 {
     TempRoot root;
     root.Write(LevelPath, Level());
@@ -340,12 +340,75 @@ TEST_CASE("A broken scene file rewrite changes nothing, says why once, and a fix
     REQUIRE(player.GetComponent<AssetsTest::Health>().current == 75.0f);
     INFO("one error names the file, once over five frames");
     REQUIRE(CountContaining(*test.errors, "Could not patch the scenes filled from 'levels/level.scene.json5'") == 1);
+}
+
+TEST_CASE("A scene file mended after a broken rewrite patches its scene", "[assets][scenes][reload]")
+{
+    TempRoot root;
+    root.Write(LevelPath, Level());
+    DataApp test(Watching(root));
+    Fenrir::Scene& scene = Load(test, LevelPath, "Level");
+    root.Write(LevelPath, "{ format: 1, type: \"Fenrir::Scene\", data: { entities: [");
+    RunFrames(test, 2);
 
     root.Write(LevelPath, SceneText(std::string(LevelBlock) + std::string(PlayerBlock)));
     RunFrames(test, 2);
-    INFO("the mended file patches the scene");
+
+    INFO("the broken file was taken as read, so the mended one is a change, and patches");
     REQUIRE(EntityCount(scene) == 2);
     REQUIRE(CountContaining(*test.errors, "Could not patch") == 1);
+}
+
+TEST_CASE("A scene file's block with no id is not added again by each patch", "[assets][scenes][reload]")
+{
+    constexpr std::string_view Unnamed = R"(      { components: { "Fenrir::Name": { name: "Rock" } } },
+)";
+    TempRoot root;
+    root.Write(LevelPath, SceneText(std::string(LevelBlock) + std::string(Unnamed)));
+    DataApp test(Watching(root));
+    const SceneLoadResult loaded = test.store.LoadScene(test.app, LevelPath, "Level");
+    REQUIRE(loaded.scene != nullptr);
+    Fenrir::Scene& scene = *loaded.scene;
+    RunFrames(test, 1);
+    REQUIRE(EntityCount(scene) == 2);
+
+    root.Write(LevelPath, SceneText(std::string(LevelBlock) + std::string(Unnamed) + std::string(PlayerBlock)));
+    RunFrames(test, 2);
+    root.Write(LevelPath, SceneText(std::string(LevelBlock) + std::string(Unnamed)));
+    RunFrames(test, 2);
+
+    INFO("the rock the load made is the only one: a block with no id matches nothing, so a patch skips it");
+    REQUIRE(EntityCount(scene) == 2);
+}
+
+TEST_CASE("A scene patch never gives a merged entity's id to a second entity", "[assets][scenes][reload]")
+{
+    TempRoot root;
+    root.Write(LevelPath, Level());
+    root.Write(RoomPath, SceneText(R"(      { id: "r00m1", components: { "Fenrir::Name": { name: "Room" } } },
+)"));
+    DataApp test(Watching(root));
+    Fenrir::Scene& scene = Load(test, LevelPath, "Level");
+    REQUIRE(test.store.LoadSceneInto(scene, RoomPath).status == LoadStatus::Succeeded);
+    const Entity room = WithId(scene, "r00m1");
+
+    // The level's file gains an instance block of the room's id: it matches no entity, the room being no instance.
+    root.Write(LevelPath, SceneText(std::string(LevelBlock) +
+                                    R"(      { id: "r00m1", instance: "levels/room.scene.json5" },
+)"));
+    RunFrames(test, 2);
+
+    INFO("the merged room keeps its id, and no other entity of the scene has it");
+    REQUIRE(Alive(scene, room));
+    std::size_t holding = 0;
+    const std::optional<Fenrir::EntityId> id = Fenrir::ParseEntityId("r00m1");
+    scene.GetEntityList().ForEachEntity([&](auto handle) {
+        const Entity entity = scene.GetEntityList().GetEntity(static_cast<std::uint32_t>(handle));
+        holding += entity.HasComponent<Fenrir::EntityId>() && entity.GetComponent<Fenrir::EntityId>().value == id->value
+                       ? 1
+                       : 0;
+    });
+    REQUIRE(holding == 1);
 }
 
 TEST_CASE("A scene file that is no scene envelope changes nothing and says why once", "[assets][scenes][reload]")
