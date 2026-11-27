@@ -241,6 +241,28 @@ TEST_CASE("An entity field naming an entity outside the file is written null, wa
     REQUIRE(written.find("target: \"d4e5f\"") == std::string::npos);
 }
 
+TEST_CASE("An empty entity field is its default: left out, with no warning and no count",
+          "[assets][scenes][references]")
+{
+    TempRoot root;
+    CopyImages(root);
+    DataApp test({root.Path()});
+    Fenrir::Scene& scene = test.app.CreateScene("Level");
+    const Level level = BuildLevel(test, scene);
+    Entity(level.sword).GetComponent<AssetsTest::Follower>().target = Entity();
+
+    const SceneSaveResult saved = test.store.SaveScene(scene, LevelPath);
+
+    INFO("an unset entity field is no broken reference: the save succeeds with nothing to report");
+    REQUIRE(saved.status == SaveStatus::Succeeded);
+    REQUIRE(saved.nullReferences == 0);
+    REQUIRE(saved.diagnostics.empty());
+    INFO("the follower is written without a `target`, its default");
+    const std::string written = ReadFile(root.Path() / LevelPath);
+    REQUIRE(written.find("target:") == std::string::npos);
+    REQUIRE(written.find("icon: \"icons/sword.png\"") != std::string::npos);
+}
+
 TEST_CASE("An entity field naming a Transient entity of the same scene is written null", "[assets][scenes][references]")
 {
     TempRoot root;

@@ -19,7 +19,7 @@
   - `@transient` types (a `@transient` field is left out by the bridge, uncounted);
   - `Transient` entities, with their children.
 - **References:**
-  - An `entity` field writes through `writeEntity` as the target's id string. An empty handle, or a target outside the file, is written `null`, with one diagnostic, and counted.
+  - An `entity` field writes through `writeEntity` as the target's id string. A target outside the file is written `null`, with one diagnostic, and counted. An empty handle is the field's default, left out with no diagnostic (ADR-0078 §3; the user, 2026-11-27).
   - An asset handle field writes through `PathOf`.
 - **`SceneSaveResult`:**
   - `status`;
