@@ -6,6 +6,9 @@ fenrir_add_catch2()
 add_executable(FenrirDemoScaffoldTests DemoTestApp.hpp SmokeRuns.cpp SceneList.cpp FreeFlyCamera.cpp DemoUIKit.cpp
     DemoPanel.cpp DemoSwitches.cpp DemoTutorials.cpp DemoSlots.cpp Helpers.cpp)
 target_link_libraries(FenrirDemoScaffoldTests PRIVATE FenrirDemoScaffold FenrirDebugDraw Catch2::Catch2WithMain)
+# The smoke run's round-trip comparison (src/DemoRoundTrip.hpp), a seam the tests need, kept out of the scaffold's
+# public header.
+target_include_directories(FenrirDemoScaffoldTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
 add_test(NAME FenrirDemoScaffold COMMAND FenrirDemoScaffoldTests)
 # With scripting built the scaffold links it, so the tests need what it loads at run time beside them.
 if(FENRIR_ENABLE_SCRIPTING)

@@ -54,9 +54,6 @@ every demo:
 - `ScreenQuad(width, height, repeat = 1)`: the `MeshData` of a quad of that size, centred in the XY plane and facing
   +Z, with normals, tangents and UV0 from (0, 0) at the top-left corner to (`repeat`, `repeat`) at the bottom-right,
   for screens, boards and other flat panels.
-- `RoundTripMismatch(scene, saved, reloaded)`: the error a smoke run logs when a scene did not load back whole from
-  its scene file. It takes the `SceneRoundTripCounts` (entities and live components written) of the two saves, and is
-  empty when they match.
 
 ## C# scenes
 
@@ -267,7 +264,7 @@ Environment variables, read when the scaffold is installed:
   and vsync is off. After each scene's frames, the scene is saved with `AssetStore::SaveScene` to a temporary scene
   file in a `.demo-smoke-<random>` folder of the asset root. It is loaded back into a second scene with `LoadScene`,
   and that scene is saved too. When the two saves' counts of entities and components differ, an error names the scene
-  (`RoundTripMismatch`), so the smoke run fails. The scene's spawn functions stay code; the free-fly camera carries
+  (`src/DemoRoundTrip.hpp`), so the smoke run fails. The scene's spawn functions stay code; the free-fly camera carries
   `Transient`, so no file holds it. The temporary files are removed afterwards.
 - `FENRIR_DEMO_BACKEND=null|opengl` picks the renderer's backend; `opengl` by default. `null` needs no window or GPU.
 

@@ -1,5 +1,7 @@
 #include "FenrirDemoScaffold/DemoScaffold.hpp"
 
+#include "DemoRoundTrip.hpp"
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -846,14 +848,14 @@ namespace FenrirDemo
                 const std::string reloadedName = demoScene.name + " (reloaded)";
 
                 const Fenrir::SceneSaveResult saved = store.SaveScene(app->GetScene(demoScene.name), savedPath);
-                std::optional<Fenrir::SceneSaveResult> again;
+                std::optional<Fenrir::SceneSaveResult> reloadedSave;
                 Fenrir::SceneLoadResult loaded;
                 if (saved.status != Fenrir::SaveStatus::Failed)
                 {
                     loaded = store.LoadScene(*app, savedPath, reloadedName);
                     if (loaded.scene != nullptr)
                     {
-                        again = store.SaveScene(*loaded.scene, reloadedPath);
+                        reloadedSave = store.SaveScene(*loaded.scene, reloadedPath);
                         app->DestroyScene(reloadedName);
                     }
                 }
@@ -865,19 +867,16 @@ namespace FenrirDemo
                     Log().Error("FENRIR_DEMO_SMOKE: the scene \"{}\" did not save to a scene file", demoScene.name);
                     return;
                 }
-                if (loaded.status == Fenrir::LoadStatus::Failed || !again ||
-                    again->status == Fenrir::SaveStatus::Failed)
+                if (loaded.status == Fenrir::LoadStatus::Failed || !reloadedSave ||
+                    reloadedSave->status == Fenrir::SaveStatus::Failed)
                 {
                     Log().Error("FENRIR_DEMO_SMOKE: the scene \"{}\" did not load back from its scene file",
                                 demoScene.name);
                     return;
                 }
-                const SceneRoundTripCounts savedCounts{saved.entitiesWritten, saved.componentsWritten};
-                // A component the load kept opaque is written back, but the scene lost it.
-                const std::size_t opaque = std::min(loaded.unknownComponentsKept, again->componentsWritten);
-                const SceneRoundTripCounts reloadedCounts{again->entitiesWritten, again->componentsWritten - opaque};
+                const SceneRoundTripCounts savedCounts = SceneRoundTripCounts::Of(saved);
                 if (const std::optional<std::string> mismatch =
-                        RoundTripMismatch(demoScene.name, savedCounts, reloadedCounts))
+                        RoundTripMismatch(demoScene.name, savedCounts, SceneRoundTripCounts::Of(*reloadedSave)))
                 {
                     Log().Error("{}", *mismatch);
                     return;

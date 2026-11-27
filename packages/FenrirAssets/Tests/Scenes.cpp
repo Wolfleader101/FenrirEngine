@@ -590,12 +590,12 @@ TEST_CASE("An entity saved without its Transform or its Name loads back without 
     REQUIRE(loaded.roots.size() == 1);
 
     INFO("the block listing no Transform loads as an entity with none, its Name kept");
-    const Entity root0 = loaded.roots[0];
-    REQUIRE_FALSE(root0.HasComponent<Fenrir::Transform>());
-    REQUIRE(std::string_view(root0.GetComponent<Fenrir::Name>().Get()) == "Unplaced");
+    const Entity unplacedLoaded = loaded.roots[0];
+    REQUIRE_FALSE(unplacedLoaded.HasComponent<Fenrir::Transform>());
+    REQUIRE(std::string_view(unplacedLoaded.GetComponent<Fenrir::Name>().Get()) == "Unplaced");
     INFO("the block listing no Name loads as an entity with none, its Transform kept");
     std::vector<Entity> children;
-    root0.ForEachChild([&](const Entity& child) { children.push_back(child); });
+    unplacedLoaded.ForEachChild([&](const Entity& child) { children.push_back(child); });
     REQUIRE(children.size() == 1);
     REQUIRE_FALSE(children[0].HasComponent<Fenrir::Name>());
     REQUIRE(children[0].GetComponent<Fenrir::Transform>().pos.y == 2.0f);

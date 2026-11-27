@@ -7,6 +7,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "DemoRoundTrip.hpp"
 #include "DemoTestApp.hpp"
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
@@ -15,6 +16,7 @@
 #include "FenrirScene/Scene.hpp"
 
 using namespace DemoScaffoldTests;
+namespace Detail = FenrirDemo::Detail;
 
 namespace
 {
@@ -116,7 +118,6 @@ TEST_CASE("A smoke run saves each scene and loads it back whole, without the fre
         debug.AddChild(entities.CreateEntity());
     };
     DemoTestApp test({EmptyScene("Empty"), built}, Smoke(3));
-    const std::filesystem::path root = test.app.GetResource<Fenrir::AssetStore>().Root();
 
     const int exitCode = test.demo.Run();
 
@@ -126,7 +127,18 @@ TEST_CASE("A smoke run saves each scene and loads it back whole, without the fre
     INFO("each scene is saved and loaded back, and the free-fly camera and the transient entities are in neither");
     REQUIRE(test.logged->InfoContains("Empty saved and loaded back whole: 0 entities"));
     REQUIRE(test.logged->InfoContains("Built saved and loaded back whole: 2 entities"));
-    INFO("the temporary scene files are gone");
+}
+
+TEST_CASE("A smoke run's round trip leaves no scene file in the asset root", "[demo][smoke]")
+{
+    FenrirDemo::DemoScene built = EmptyScene("Built");
+    built.spawn = [](Fenrir::App&, Fenrir::Scene& scene) { scene.GetEntityList().CreateEntity(); };
+    DemoTestApp test({built}, Smoke(3));
+    const std::filesystem::path root = test.app.GetResource<Fenrir::AssetStore>().Root();
+
+    REQUIRE(test.demo.Run() == 0);
+
+    INFO("the temporary folder of the round trip's scene files is gone");
     bool leftOver = false;
     std::error_code error;
     for (const auto& entry : std::filesystem::directory_iterator(root, error))
@@ -138,18 +150,21 @@ TEST_CASE("A smoke run saves each scene and loads it back whole, without the fre
 
 TEST_CASE("A component lost on the way back fails the round trip, naming the scene", "[demo][smoke]")
 {
-    const FenrirDemo::SceneRoundTripCounts saved{3, 7};
+    const Detail::SceneRoundTripCounts saved{3, 7};
 
     INFO("equal counts are no mismatch");
-    REQUIRE_FALSE(FenrirDemo::RoundTripMismatch("Courtyard", saved, {3, 7}));
+    REQUIRE_FALSE(Detail::RoundTripMismatch("Courtyard", saved, {3, 7}));
 
     INFO("a component dropped on load is a mismatch, and the error names the scene");
-    const std::optional<std::string> dropped = FenrirDemo::RoundTripMismatch("Courtyard", saved, {3, 6});
+    const std::optional<std::string> dropped = Detail::RoundTripMismatch("Courtyard", saved, {3, 6});
     REQUIRE(dropped);
     REQUIRE(dropped->find("\"Courtyard\"") != std::string::npos);
+}
 
-    INFO("so is an entity dropped on load");
-    REQUIRE(FenrirDemo::RoundTripMismatch("Courtyard", saved, {2, 7}));
+TEST_CASE("An entity lost on the way back fails the round trip", "[demo][smoke]")
+{
+    INFO("one entity fewer loaded back is a mismatch");
+    REQUIRE(Detail::RoundTripMismatch("Courtyard", {3, 7}, {2, 7}));
 }
 
 TEST_CASE("A smoke run naming a scene the app does not have fails", "[demo][smoke]")

@@ -202,10 +202,15 @@ namespace Fenrir::Detail
     inline constexpr std::string_view SpelledApart[] = {"Fenrir::Relationship", "Fenrir::EntityId", "Fenrir::Instance"};
 
     /**
-     * @brief The described components every new entity has, which a block's `components` lists first, each as `{}` at
-     * its defaults, so the file says the entity has it. A block listing neither loads without it (ADR-0078 §5).
+     * @brief `Fenrir::Name`, which every new entity has: a block's `components` lists it first, `{}` at its defaults,
+     * whenever the entity has it, so a block not listing it loads without it (ADR-0078 §5).
      */
     inline constexpr std::string_view NameType = "Fenrir::Name";
+
+    /**
+     * @brief `Fenrir::Transform`, which every new entity has: a block's `components` lists it after Name, `{}` at its
+     * defaults, whenever the entity has it, so a block not listing it loads without it (ADR-0078 §5).
+     */
     inline constexpr std::string_view TransformType = "Fenrir::Transform";
 
     /**

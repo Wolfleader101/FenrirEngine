@@ -1,7 +1,5 @@
 #include "FenrirDemoScaffold/DemoScaffold.hpp"
 
-#include <format>
-
 namespace FenrirDemo
 {
     using Fenrir::Math::Vec3;
@@ -26,17 +24,5 @@ namespace FenrirDemo
         mesh.uv0 = {{0.0f, repeat}, {repeat, repeat}, {repeat, 0.0f}, {0.0f, 0.0f}};
         mesh.indices = {0, 1, 2, 0, 2, 3};
         return mesh;
-    }
-
-    std::optional<std::string> RoundTripMismatch(std::string_view scene, const SceneRoundTripCounts& saved,
-                                                 const SceneRoundTripCounts& reloaded)
-    {
-        if (saved.entities == reloaded.entities && saved.components == reloaded.components)
-        {
-            return std::nullopt;
-        }
-        return std::format("FENRIR_DEMO_SMOKE: the scene \"{}\" did not load back whole from its scene file: {} "
-                           "entities and {} components saved, {} entities and {} components loaded back",
-                           scene, saved.entities, saved.components, reloaded.entities, reloaded.components);
     }
 } // namespace FenrirDemo
