@@ -250,6 +250,24 @@ TEST_CASE("A path matching its file's case exactly warns nothing", "[assets][pat
     REQUIRE(loaded.Ok());
     REQUIRE(test.warnings->empty());
 }
+
+TEST_CASE("A path matching a file only when case is ignored is the one asset its exact spelling is",
+          "[assets][paths][case]")
+{
+    DataApp test;
+    INFO("the test package's data asset types register");
+    REQUIRE(test.registered);
+
+    const Fenrir::LoadResult<Sword> exact = test.store.Load<Sword>("data/sword.asset.json5", Fenrir::AssetOwner::App());
+    const Fenrir::LoadResult<Sword> folded =
+        test.store.Load<Sword>("data/SWORD.asset.json5", Fenrir::AssetOwner::App());
+
+    INFO("both spellings give one handle, and PathOf names the file as the disk spells it");
+    REQUIRE(exact.Ok());
+    REQUIRE(folded.Ok());
+    REQUIRE(folded.handle == exact.handle);
+    REQUIRE(test.store.PathOf(folded.handle) == "data/sword.asset.json5");
+}
 #else
 TEST_CASE("A path matching a file only when case is ignored finds nothing in a release build", "[assets][paths][case]")
 {

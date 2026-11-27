@@ -813,8 +813,13 @@ namespace Fenrir
          * for every owner of the asset, as is a sub-asset a model file adds. A file that fails to read or import keeps
          * what it loaded, its located diagnostics or its importer's message logged once per change of the file; a
          * sub-asset the new file no longer has keeps its data, with one warning; a deleted file keeps it too, with one
-         * warning, and reloads when it comes back. A reload makes a new instance, so a pointer TryGet gave before it no
-         * longer points at the asset.
+         * warning, and reloads when it comes back.
+         *
+         * A data asset reloads as Replace replaces it: its new value is assigned to its one instance, which keeps its
+         * address, so a pointer TryGet or Edit gave before it still points at the asset. A file whose top level or
+         * sub-asset is a different type now, even one extending it, does not reload, and logs why. An imported asset
+         * (a model and its sub-assets, an image, cubemap, font or shader container) reloads as a new instance, so a
+         * pointer TryGet gave before it no longer points at the asset.
          */
         [[nodiscard]] std::span<const ReloadedAsset> Reloaded() const noexcept;
 

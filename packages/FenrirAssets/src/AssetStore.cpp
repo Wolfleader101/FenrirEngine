@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cctype>
+#include <charconv>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -40,9 +41,11 @@
 #include "FenrirAssets/ShaderData.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirScene/Scene.hpp"
+#include "FenrirSerialisation/Bridge.hpp"
 #include "FenrirSerialisation/Text.hpp"
 #include "FenrirTypes/FieldInfo.hpp"
 #include "FenrirTypes/TypeRegistry.hpp"
+#include "FenrirTypes/ValueRef.hpp"
 #include "Importers/ImageImporter.hpp"
 #include "Importers/ModelImporter.hpp"
 
@@ -271,6 +274,38 @@ namespace Fenrir
             return {};
         }
 
+        // Gives the instance `into` holds the value `from` holds, both of one type, at `into`'s own address, so a
+        // pointer TryGet or Edit gave keeps pointing at the asset (ADR-0081 §2). A description has no assignment of its
+        // own, so the value crosses as a tree, each reference as its slot rather than a path, which no file ever sees.
+        void AssignInPlace(Detail::DataValue& into, const Detail::DataValue& from, const TypeRegistry& registry,
+                           ILogger& logger)
+        {
+            assert(into.type == from.type && "a reload in place keeps the asset's type");
+            Serialisation::Resolvers slots;
+            slots.writeReference = [](ReferenceValue reference, const FieldInfo&) {
+                return std::format("{}:{}", reference.index, reference.generation);
+            };
+            slots.readReference = [](std::string_view text, const FieldInfo&) -> std::optional<ReferenceValue> {
+                ReferenceValue reference;
+                const std::size_t colon = text.find(':');
+                const char* end = text.data() + text.size();
+                if (colon == std::string_view::npos ||
+                    std::from_chars(text.data(), text.data() + colon, reference.index).ec != std::errc() ||
+                    std::from_chars(text.data() + colon + 1, end, reference.generation).ec != std::errc())
+                {
+                    return std::nullopt;
+                }
+                return reference;
+            };
+            const Serialisation::Value tree = Serialisation::ToTree(from.value, *from.type, registry, slots);
+            into.type->Destroy(into.value);
+            into.type->Construct(into.value);
+            [[maybe_unused]] const Serialisation::BridgeResult copied =
+                Serialisation::FromTree(tree, *into.type, registry, slots, into.value, "", logger);
+            assert(copied.status == Serialisation::BridgeStatus::Succeeded && copied.diagnostics.empty() &&
+                   "a value's own tree reads back whole");
+        }
+
         // Logs that the changed file `path` did not reload as a `kind`, and why: its assets keep what they loaded.
         void LogKept(ILogger& logger, Detail::AssetKind kind, std::string_view path, std::string_view problem)
         {
@@ -463,7 +498,6 @@ namespace Fenrir
                 record.key.clear();
             }
             record.typeName = {};
-            record.firstTypeName = {};
             record.loadDiagnostics.clear();
             record.loadIncomplete = false;
             record.references.clear();
@@ -749,7 +783,7 @@ namespace Fenrir
                                                std::vector<Serialisation::Diagnostic>& diagnostics, bool& incomplete)
     {
         const bool quiet = std::exchange(m_state->quietNextLoad, false);
-        const AssetPath resolved = Resolve(m_state->root, path);
+        AssetPath resolved = Resolve(m_state->root, path);
         const auto fail = [&](LoadFailure reason, std::string message) -> Detail::AssetSlot {
             if (!quiet)
             {
@@ -766,11 +800,19 @@ namespace Fenrir
             return fail(LoadFailure::NotADataAsset, UnregisteredType(type));
         }
         // A data asset's identity is its path under the root (ADR-0076), so one outside it has none.
-        const std::optional<std::string> assetPath = RootRelative(m_state->root, resolved.file);
+        std::optional<std::string> assetPath = RootRelative(m_state->root, resolved.file);
         if (!assetPath)
         {
             return fail(LoadFailure::OutsideRoot,
                         std::format("a data asset loads from under the asset root '{}'", Utf8Text(m_state->root)));
+        }
+        // A development build's source finds a file spelled in another case, with a warning: held by the file's own
+        // spelling, both spellings are the one asset, with one handle and one watch.
+        if (std::optional<std::string> spelled = m_state->source->Spelled(*assetPath);
+            spelled && *spelled != *assetPath)
+        {
+            resolved = Resolve(m_state->root, resolved.labelled ? *spelled + '#' + resolved.label : *spelled);
+            assetPath = std::move(spelled);
         }
 
         Detail::AssetTable& table = TableOf(*m_state, Detail::AssetKind::Data);
@@ -858,7 +900,6 @@ namespace Fenrir
                 slot = Detail::InsertAsset(table, std::move(stored.value), owner, std::move(key));
                 Detail::AssetRecord& record = *m_state->Find(Detail::AssetKind::Data, slot);
                 record.typeName = stored.type->name;
-                record.firstTypeName = stored.type->name;
                 record.loadDiagnostics = diagnostics;
                 record.loadIncomplete = incomplete;
                 record.references = std::move(stored.references);
@@ -970,7 +1011,6 @@ namespace Fenrir
                 table, Detail::AssetBox(nullptr, &Detail::DestroyAssetData<Detail::DataValue>), owner, std::move(key));
             Detail::AssetRecord& reserved = *m_state->Find(Detail::AssetKind::Data, slot);
             reserved.typeName = entryType.name;
-            reserved.firstTypeName = entryType.name;
         };
         hooks.readReference = readReference;
         return Detail::ReadDataEnvelope(bytes, fileKey, label, type, registry, hooks, *m_state->logger);
@@ -1044,7 +1084,6 @@ namespace Fenrir
                                 Detail::OwnerIdOf(m_state, owner), std::move(key));
         Detail::AssetRecord& added = *m_state->Find(Detail::AssetKind::Data, slot);
         added.typeName = registered->name;
-        added.firstTypeName = registered->name;
         return instance;
     }
 
@@ -1448,10 +1487,10 @@ namespace Fenrir
             LogKept(*m_state->logger, Detail::AssetKind::Data, assetPath, problem);
         };
 
-        // The file is read as the type its first entry the store has first held, so each handle to it reads the new
-        // value as the type it was loaded as.
+        // The file is read as the type its first entry holds, which a reload keeps: each entry must be exactly the type
+        // it holds, so its new value can land at its old one's address.
         const std::string askedLabel = held.front().first;
-        const TypeDescription* asked = registry.Find(table.records[held.front().second].firstTypeName);
+        const TypeDescription* asked = registry.Find(table.records[held.front().second].typeName);
         const std::optional<std::vector<std::byte>> bytes = m_state->source->Read(assetPath);
         if (asked == nullptr || !bytes)
         {
@@ -1493,7 +1532,8 @@ namespace Fenrir
             for (const auto& [label, index] : held)
             {
                 const auto entry = entryOf(label);
-                const std::string_view was = table.records[index].firstTypeName;
+                // Exactly the type it holds, as Replace asks: the new value lands at the old one's address.
+                const std::string_view was = table.records[index].typeName;
                 if (entry == read.entries.end())
                 {
                     if (label.empty() || fileHas(label))
@@ -1502,9 +1542,9 @@ namespace Fenrir
                         break;
                     }
                 }
-                else if (!registry.IsA(entry->type->name, was))
+                else if (entry->type->name != was)
                 {
-                    problem = std::format("{} is a `{}` now, which is not the `{}` its handles read",
+                    problem = std::format("{} is a `{}` now, and a reload keeps the `{}` it holds",
                                           label.empty() ? std::string("its top level")
                                                         : std::format("its sub-asset '{}'", label),
                                           entry->type->name, was);
@@ -1539,8 +1579,16 @@ namespace Fenrir
             Detail::AssetRecord& record = table.records[found->second];
             // A sub-asset the file did not have before was reserved by the read, with no data: added, not replaced.
             const bool replacing = record.data != nullptr;
-            record.data = std::move(entry.value);
-            record.typeName = entry.type->name;
+            if (replacing)
+            {
+                AssignInPlace(*static_cast<Detail::DataValue*>(record.data.get()),
+                              *static_cast<const Detail::DataValue*>(entry.value.get()), registry, *m_state->logger);
+            }
+            else
+            {
+                record.data = std::move(entry.value);
+                record.typeName = entry.type->name;
+            }
             record.loadDiagnostics = read.diagnostics;
             record.loadIncomplete = read.incomplete;
             record.references = std::move(entry.references);

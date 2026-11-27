@@ -54,6 +54,12 @@ namespace Fenrir::Detail
                 return bytes;
             }
 
+            std::optional<std::string> Spelled(std::string_view path) override
+            {
+                const std::optional<std::filesystem::path> file = Locate(path);
+                return file ? RootRelative(m_root, *file) : std::nullopt;
+            }
+
           private:
             // The file `path` names, or none. Each name of the path is matched against its directory's entries as
             // spelled, so the comparison is case-sensitive whatever the file system's is. In a development build, a

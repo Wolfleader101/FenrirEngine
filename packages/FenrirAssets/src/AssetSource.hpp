@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -32,6 +33,16 @@ namespace Fenrir::Detail
 
         /** @brief The bytes of the file at `path`; none when there is no file there or it could not be read. */
         [[nodiscard]] virtual std::optional<std::vector<std::byte>> Read(std::string_view path) = 0;
+
+        /**
+         * @brief The asset path of the file at `path`, as the file's names are spelled: the one key the store holds
+         * it by, however a load spelled it. None when there is no file there. A source that matches names only as
+         * spelled gives `path` back, as this default does.
+         */
+        [[nodiscard]] virtual std::optional<std::string> Spelled(std::string_view path)
+        {
+            return Exists(path) ? std::optional<std::string>(path) : std::nullopt;
+        }
     };
 
     /**

@@ -162,7 +162,27 @@ TEST_CASE("A rewrite with a value that does not read keeps the whole old value",
     REQUIRE(CountContaining(*test.errors, "edge") == 1);
 }
 
-TEST_CASE("A reload may move a data asset to a type extending the one it first held, and back",
+TEST_CASE("A data asset reloads into its one instance, so a pointer Edit gave still points at it",
+          "[assets][data][reload]")
+{
+    TempRoot root;
+    root.Copy(Fixtures() / SwordPath, SwordPath);
+    DataApp test(Watching(root));
+    const Fenrir::AssetHandle<Sword> sword = LoadSword(test);
+    Sword* edited = test.store.Edit(sword, "hold a sword");
+    INFO("the sword is editable");
+    REQUIRE(edited != nullptr);
+
+    root.Write(SwordPath, SwordText("Reloaded longsword"));
+    RunFrames(test, 2);
+
+    INFO("the reload lands at the address Edit and TryGet gave");
+    REQUIRE(TimesReloaded(test, sword) == 1);
+    REQUIRE(test.store.TryGet(sword) == edited);
+    REQUIRE(edited->displayName == "Reloaded longsword");
+}
+
+TEST_CASE("A reload that would change a data asset's type is refused, even to a type extending it",
           "[assets][data][reload][types]")
 {
     TempRoot root;
@@ -172,29 +192,23 @@ TEST_CASE("A reload may move a data asset to a type extending the one it first h
         test.store.Load<AssetsTest::WeaponData>("data/weapon.asset.json5", Fenrir::AssetOwner::App());
     INFO("the weapon loads whole");
     REQUIRE(loaded.Status() == Fenrir::LoadStatus::Succeeded);
+    const std::string before = test.store.TryGet(loaded.handle)->displayName;
     RunFrames(test, 1);
 
     root.Write("data/weapon.asset.json5", SwordText("Weapon made sword"));
     RunFrames(test, 2);
-    INFO("a sword is a weapon, so the weapon's handle reads it");
-    REQUIRE(test.store.TryGet(loaded.handle)->displayName == "Weapon made sword");
+    INFO("a sword extends a weapon, but its value cannot land in the weapon's instance: the weapon is kept");
+    REQUIRE(test.store.TryGet(loaded.handle)->displayName == before);
+    REQUIRE(TimesReloaded(test, loaded.handle) == 0);
+    REQUIRE(CountContaining(*test.errors, "a reload keeps the `AssetsTest::WeaponData` it holds") == 1);
 
     root.Write("data/weapon.asset.json5",
                R"({ format: 1, type: "AssetsTest::WeaponData", version: 1, data: { displayName: "A weapon again" } }
 )");
     RunFrames(test, 2);
-    INFO("back to the type it first held reloads too, with nothing logged");
+    INFO("the same type again reloads");
     REQUIRE(test.store.TryGet(loaded.handle)->displayName == "A weapon again");
     REQUIRE(TimesReloaded(test, loaded.handle) == 1);
-    REQUIRE(test.errors->empty());
-
-    root.Write("data/weapon.asset.json5",
-               R"({ format: 1, type: "AssetsTest::ShieldData", version: 1, data: { block: 0.5 } }
-)");
-    RunFrames(test, 2);
-    INFO("a shield is no weapon: the reload is refused and the weapon kept");
-    REQUIRE(test.store.TryGet(loaded.handle)->displayName == "A weapon again");
-    REQUIRE(CountContaining(*test.errors, "Could not reload data asset") == 1);
 }
 
 TEST_CASE("A deleted data asset file keeps its data with one warning, and reloads when it comes back",

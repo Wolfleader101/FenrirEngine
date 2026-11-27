@@ -48,11 +48,11 @@ namespace Fenrir
         /** @brief What the watcher makes of the file at one moment. */
         enum class Watch
         {
-            /** The file is the one that is loaded, or cannot be looked at, or it is not time to look. */
+            /** @brief The file is the one that is loaded, or cannot be looked at, or it is not time to look. */
             Idle,
-            /** It changed, and something may still be writing it. */
+            /** @brief It changed, and something may still be writing it. */
             Settling,
-            /** It changed, has stayed the same for the debounce, and can be opened. */
+            /** @brief It changed, has stayed the same for the debounce, and can be opened. */
             Ready,
         };
 
