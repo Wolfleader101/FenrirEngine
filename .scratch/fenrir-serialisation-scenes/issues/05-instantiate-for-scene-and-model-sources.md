@@ -18,9 +18,9 @@
 
 **Touches:** `packages/FenrirAssets/` (`include/FenrirAssets/AssetStore.hpp`, a new `include/FenrirAssets/ModelSpawner.hpp`, `src/SpawnNodes.cpp`, `src/SceneReader.cpp`, `src/SceneWriter.cpp`, `Tests/` (`Scenes.cpp`, `SpawnNodes.cpp`, `fixtures/scenes/`)), `packages/FenrirRenderer/src/` (`SpawnModel`'s registration)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Instancing a scene fixture and `fixtures/models/scene.gltf` puts each under its parent, marked with `Instance`, and each saves as one block.
-- [ ] Spawning `scene.gltf` twice gives the same `EntityId`s, nodes and mesh children included.
-- [ ] A host field pointing into an instance round-trips as a slash path.
-- [ ] A file that instances itself, directly or through another file, is refused with a diagnostic and counted.
+- [x] Instancing a scene fixture and `fixtures/models/scene.gltf` puts each under its parent, marked with `Instance`, and each saves as one block.
+- [x] Spawning `scene.gltf` twice gives the same `EntityId`s, nodes and mesh children included.
+- [x] A host field pointing into an instance round-trips as a slash path.
+- [x] A file that instances itself, directly or through another file, is refused with a diagnostic and counted.
