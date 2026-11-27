@@ -253,6 +253,19 @@ namespace Fenrir
                         FillComponent(member, *components, entity, spelled, unknown);
                     }
                 }
+                // The block lists every described component its entity has, Name and Transform at their defaults as
+                // `{}`, so one it leaves out the entity had not: CompleteEntity's goes (ADR-0078 §5).
+                const auto lists = [&](std::string_view type) {
+                    return components != nullptr && components->AsObject().Find(type) != nullptr;
+                };
+                if (!lists(Detail::NameType))
+                {
+                    handle.RemoveComponent<Name>();
+                }
+                if (!lists(Detail::TransformType))
+                {
+                    handle.RemoveComponent<Transform>();
+                }
                 if (!unknown.components.empty())
                 {
                     handle.AddComponent<UnknownComponents>(std::move(unknown));

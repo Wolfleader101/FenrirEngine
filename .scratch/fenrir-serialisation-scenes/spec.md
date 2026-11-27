@@ -167,7 +167,7 @@ The doors are members of `AssetStore`, beside `Load<T>` and `Save<T>`.
   - Pass one reserves every block's entity (`ReserveEntity`) and builds the id map.
   - Pass two walks the blocks in file order. For each block it:
     - completes the entity;
-    - adds and fills its components through the bridge;
+    - adds and fills its components through the bridge, and removes a `Name` or `Transform` the block does not list, since the writer lists both, `{}` at their defaults, whenever the entity has them (ADR-0078 §5, amended 2026-11-27);
     - resolves `entity` fields through the map with `readEntity` (an unknown id leaves the handle empty, with one diagnostic, and is counted);
     - appends the entity to its parent with `AddChild`, so sibling order is the file's.
   - Watches see one add per component, and there is no event.

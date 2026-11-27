@@ -43,8 +43,8 @@ namespace Fenrir
     {
         namespace Ser = Serialisation;
 
-        constexpr std::string_view NameType = "Fenrir::Name";
-        constexpr std::string_view TransformType = "Fenrir::Transform";
+        using Detail::NameType;
+        using Detail::TransformType;
 
         // One described component type a block writes when its entity has one.
         struct WrittenType

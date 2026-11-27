@@ -572,6 +572,39 @@ TEST_CASE("A component type the registry lacks is kept with one warning, and wri
             ReadFile(Fixtures() / "scenes" / "unknown-components.scene.json5"));
 }
 
+TEST_CASE("An entity saved without its Transform or its Name loads back without it", "[assets][scenes]")
+{
+    TempRoot root;
+    DataApp test({root.Path()});
+    Fenrir::Scene& scene = test.app.CreateScene("Built");
+    Entity unplaced = Spawn(scene, "Unplaced");
+    unplaced.RemoveComponent<Fenrir::Transform>();
+    Entity nameless = Spawn(scene, "Nameless", unplaced);
+    nameless.GetComponent<Fenrir::Transform>().pos = Fenrir::Math::Vec3(1.0f, 2.0f, 3.0f);
+    nameless.RemoveComponent<Fenrir::Name>();
+
+    const SceneSaveResult saved = test.store.SaveScene(scene, LevelPath);
+    REQUIRE(saved.status == SaveStatus::Succeeded);
+    const SceneLoadResult loaded = test.store.LoadScene(test.app, LevelPath, "Loaded");
+    REQUIRE(loaded.status == LoadStatus::Succeeded);
+    REQUIRE(loaded.roots.size() == 1);
+
+    INFO("the block listing no Transform loads as an entity with none, its Name kept");
+    const Entity root0 = loaded.roots[0];
+    REQUIRE_FALSE(root0.HasComponent<Fenrir::Transform>());
+    REQUIRE(std::string_view(root0.GetComponent<Fenrir::Name>().Get()) == "Unplaced");
+    INFO("the block listing no Name loads as an entity with none, its Transform kept");
+    std::vector<Entity> children;
+    root0.ForEachChild([&](const Entity& child) { children.push_back(child); });
+    REQUIRE(children.size() == 1);
+    REQUIRE_FALSE(children[0].HasComponent<Fenrir::Name>());
+    REQUIRE(children[0].GetComponent<Fenrir::Transform>().pos.y == 2.0f);
+    INFO("so a save of the loaded scene writes the same bytes");
+    const std::string first = ReadFile(root.Path() / LevelPath);
+    REQUIRE(test.store.SaveScene(*loaded.scene, LevelPath).status == SaveStatus::Succeeded);
+    REQUIRE(ReadFile(root.Path() / LevelPath) == first);
+}
+
 TEST_CASE("An entity field naming an id no block has is left empty, with one located error, and counted",
           "[assets][scenes][references]")
 {
