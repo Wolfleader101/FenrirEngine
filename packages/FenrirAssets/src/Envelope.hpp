@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <span>
@@ -104,6 +105,34 @@ namespace Fenrir::Detail
          */
         std::function<void(std::string_view label, const TypeDescription& type)> reading;
     };
+
+    /** @brief The envelope's file format version (ADR-0077 §2): the one this reader reads and the writers write. */
+    inline constexpr std::uint64_t EnvelopeFormat = 1;
+
+    /**
+     * @brief Why `format`, the envelope's `format` member (null when it has none), is not EnvelopeFormat, as a located
+     * error's message; none when it is. The data asset and scene envelopes' readers share it.
+     */
+    [[nodiscard]] std::optional<std::string> FormatProblem(const Serialisation::Value* format);
+
+    /**
+     * @brief The `type` a scene envelope names (ADR-0078). No package registers it: a scene's layout is the scene
+     * writer's and reader's own, not a described type's.
+     */
+    inline constexpr std::string_view SceneTypeName = "Fenrir::Scene";
+
+    /** @brief The scene layout's version, a scene envelope's `version`: ADR-0078's layout is 1. */
+    inline constexpr std::uint32_t SceneVersion = 1;
+
+    /**
+     * @brief A `writeReference` that writes what `inner` names a reference by, unless it names no path or one a file
+     * cannot hold (FilePathProblem): then it writes `null`, with one warning naming the field after `where`, logged and
+     * appended to `diagnostics` with `path` as its file, and counts it in `written`. The data asset and scene writers
+     * write asset handle fields through it; every argument is read when it is called, so each must outlive it.
+     */
+    [[nodiscard]] std::function<std::string(ReferenceValue, const FieldInfo&)> CheckedReferenceWriter(
+        const Serialisation::Resolvers& inner, const std::string& where, std::string_view path, ILogger& logger,
+        std::vector<Serialisation::Diagnostic>& diagnostics, std::size_t& written);
 
     /**
      * @brief Why `path`, an asset path written in a file, is refused, or none when it is not (ADR-0076 §1, ADR-0085

@@ -1,4 +1,5 @@
-# FenrirAssets' data asset test package's selection: the header to read, relative to this file, and each type's role.
+# FenrirAssets' test package's selection: the header to read, relative to this file, and each type's role. Its data
+# asset types are the data asset tests'; its components and scene resource are the scene tests'.
 headers = ["DataAssetsTestPackage.hpp"]
 
 [types]
@@ -7,10 +8,16 @@ headers = ["DataAssetsTestPackage.hpp"]
 "AssetsTest::ShieldData" = "data-asset"
 "MyGame::Sword" = "data-asset"
 "MyGame::ParticleEffect" = "data-asset"
+"AssetsTest::Follower" = "component"
+"AssetsTest::Health" = "component"
+"AssetsTest::FrameCounter" = "component"
+"AssetsTest::Sky" = "scene-resource"
 
-# What tools/generate-type-registry writes for the package: FenrirAssets' tests compile it and register it.
+# What tools/generate-type-registry writes for the package: FenrirAssets' tests compile it and register it. Its
+# components and scene resource are reached by name through the attachments FenrirECS's and FenrirScene's role hooks
+# hang on them.
 [registration]
 header = "Generated/DataAssetsTestPackageTypes.hpp"
 source = "Generated/DataAssetsTestPackageTypes.cpp"
 function = "Fenrir::Generated::RegisterDataAssetsTestPackageTypes"
-includes = ["DataAssetsTestPackage.hpp"]
+includes = ["DataAssetsTestPackage.hpp", "FenrirECS/TypeAttachments.hpp", "FenrirScene/Scene.hpp"]

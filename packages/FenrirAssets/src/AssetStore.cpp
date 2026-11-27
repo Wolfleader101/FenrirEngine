@@ -372,6 +372,27 @@ namespace Fenrir
             return std::nullopt;
         }
 
+        std::optional<std::string> SavePathProblem(const std::filesystem::path& root, std::string_view path,
+                                                   std::filesystem::path& file)
+        {
+            const std::filesystem::path given = Utf8Path(path);
+            if (given.is_absolute() || given.has_root_name() || given.has_root_directory())
+            {
+                return "the path is absolute: an asset path is relative to the asset root";
+            }
+            if (path.find('#') != std::string_view::npos)
+            {
+                return "the path names a sub-asset: a save writes a whole file";
+            }
+            file = Resolve(root, path).file;
+            const std::optional<std::string> relative = RootRelative(root, file);
+            if (!relative || *relative == ".")
+            {
+                return std::format("the path is outside the asset root '{}'", Utf8Text(root));
+            }
+            return std::nullopt;
+        }
+
         bool ReadAssetFile(const std::filesystem::path& file, std::vector<std::byte>& bytes)
         {
             std::ifstream stream(file, std::ios::binary);
@@ -1291,24 +1312,11 @@ namespace Fenrir
             {
                 return fail("it is a sub-asset, which is saved with its whole file, to that file's own path");
             }
-            // The writer's path check (ADR-0085 §1): an asset path is relative, under the root, and names a file.
-            const std::filesystem::path given = Utf8Path(*path);
-            if (given.is_absolute() || given.has_root_name() || given.has_root_directory())
+            if (std::optional<std::string> problem = Detail::SavePathProblem(m_state->root, *path, target))
             {
-                return fail("the path is absolute: an asset path is relative to the asset root");
+                return fail(std::move(*problem));
             }
-            if (path->find('#') != std::string_view::npos)
-            {
-                return fail("the path names a sub-asset: a save writes a whole file");
-            }
-            const AssetPath resolved = Resolve(m_state->root, *path);
-            const std::optional<std::string> relative = RootRelative(m_state->root, resolved.file);
-            if (!relative || *relative == ".")
-            {
-                return fail(std::format("the path is outside the asset root '{}'", Utf8Text(m_state->root)));
-            }
-            target = resolved.file;
-            targetKey = resolved.key;
+            targetKey = Utf8Text(target);
             named = targetKey;
             // Another asset's file is the store's to save from that asset, not this one's to write over.
             if (targetKey != fileKey && FileInUse(table, targetKey))

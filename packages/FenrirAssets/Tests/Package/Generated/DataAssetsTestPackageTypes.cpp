@@ -14,6 +14,65 @@
 
 namespace Fenrir::Generated::DataAssetsTestPackageTypes
 {
+    // AssetsTest::Follower
+    static_assert(sizeof(AssetsTest::Follower) == 32 && alignof(AssetsTest::Follower) == 8,
+                  "AssetsTest::Follower is not the layout DataAssetsTestPackage.api.json describes: regenerate the description, then this registration");
+    constexpr Fenrir::FieldInfo AssetsTest_Follower_Fields[] = {
+        {.name = "target", .type = {.kind = Fenrir::Kind::Entity}, .offset = 0, .doc = "The entity followed."},
+        {.name = "icon", .type = {.kind = Fenrir::Kind::Reference, .target = "Fenrir::Image"}, .offset = 16, .doc = "The icon shown over the follower."},
+        {.name = "speed", .type = {.kind = Fenrir::Kind::F32}, .offset = 24},
+    };
+    constexpr Fenrir::TypeDescription AssetsTest_Follower{
+        .name = "AssetsTest::Follower",
+        .package = "DataAssetsTestPackage",
+        .role = Fenrir::Role::Component,
+        .size = sizeof(AssetsTest::Follower),
+        .alignment = alignof(AssetsTest::Follower),
+        .construct = &Fenrir::ConstructValue<AssetsTest::Follower>,
+        .destroy = &Fenrir::DestroyValue<AssetsTest::Follower>,
+        .doc = "A component a scene file writes an entity id and an asset path for: it follows another entity, showing an icon.",
+        .fields = AssetsTest_Follower_Fields,
+    };
+
+    // AssetsTest::FrameCounter
+    static_assert(sizeof(AssetsTest::FrameCounter) == 4 && alignof(AssetsTest::FrameCounter) == 4,
+                  "AssetsTest::FrameCounter is not the layout DataAssetsTestPackage.api.json describes: regenerate the description, then this registration");
+    constexpr Fenrir::FieldInfo AssetsTest_FrameCounter_Fields[] = {
+        {.name = "frames", .type = {.kind = Fenrir::Kind::U32}, .offset = 0},
+    };
+    constexpr Fenrir::TypeDescription AssetsTest_FrameCounter{
+        .name = "AssetsTest::FrameCounter",
+        .package = "DataAssetsTestPackage",
+        .role = Fenrir::Role::Component,
+        .transient = true,
+        .size = sizeof(AssetsTest::FrameCounter),
+        .alignment = alignof(AssetsTest::FrameCounter),
+        .construct = &Fenrir::ConstructValue<AssetsTest::FrameCounter>,
+        .destroy = &Fenrir::DestroyValue<AssetsTest::FrameCounter>,
+        .doc = "Run-time bookkeeping a scene file never holds.",
+        .fields = AssetsTest_FrameCounter_Fields,
+    };
+
+    // AssetsTest::Health
+    static_assert(sizeof(AssetsTest::Health) == 8 && alignof(AssetsTest::Health) == 4,
+                  "AssetsTest::Health is not the layout DataAssetsTestPackage.api.json describes: regenerate the description, then this registration");
+    constexpr Fenrir::FieldInfo AssetsTest_Health_Fields[] = {
+        {.name = "current", .type = {.kind = Fenrir::Kind::F32}, .offset = 0},
+        {.name = "maximum", .type = {.kind = Fenrir::Kind::F32}, .offset = 4},
+    };
+    constexpr Fenrir::TypeDescription AssetsTest_Health{
+        .name = "AssetsTest::Health",
+        .package = "DataAssetsTestPackage",
+        .role = Fenrir::Role::Component,
+        .version = 2,
+        .size = sizeof(AssetsTest::Health),
+        .alignment = alignof(AssetsTest::Health),
+        .construct = &Fenrir::ConstructValue<AssetsTest::Health>,
+        .destroy = &Fenrir::DestroyValue<AssetsTest::Health>,
+        .doc = "A component at a version above 1, which a scene file's entry spells before its fields.",
+        .fields = AssetsTest_Health_Fields,
+    };
+
     // AssetsTest::ShieldData
     constexpr Fenrir::FieldInfo AssetsTest_ShieldData_Fields[] = {
         {.name = "block", .type = {.kind = Fenrir::Kind::F32}},
@@ -36,6 +95,25 @@ namespace Fenrir::Generated::DataAssetsTestPackageTypes
         .doc = "A data asset of its own, extending nothing: not a weapon.",
         .fields = AssetsTest_ShieldData_Fields,
         .visit = &AssetsTest_ShieldData_Visit,
+    };
+
+    // AssetsTest::Sky
+    static_assert(sizeof(AssetsTest::Sky) == 12 && alignof(AssetsTest::Sky) == 4,
+                  "AssetsTest::Sky is not the layout DataAssetsTestPackage.api.json describes: regenerate the description, then this registration");
+    constexpr Fenrir::FieldInfo AssetsTest_Sky_Fields[] = {
+        {.name = "cubemap", .type = {.kind = Fenrir::Kind::Reference, .target = "Fenrir::Image"}, .offset = 0, .doc = "The cubemap the sky shows."},
+        {.name = "exposure", .type = {.kind = Fenrir::Kind::F32}, .offset = 8},
+    };
+    constexpr Fenrir::TypeDescription AssetsTest_Sky{
+        .name = "AssetsTest::Sky",
+        .package = "DataAssetsTestPackage",
+        .role = Fenrir::Role::SceneResource,
+        .size = sizeof(AssetsTest::Sky),
+        .alignment = alignof(AssetsTest::Sky),
+        .construct = &Fenrir::ConstructValue<AssetsTest::Sky>,
+        .destroy = &Fenrir::DestroyValue<AssetsTest::Sky>,
+        .doc = "A described scene resource: a sky's settings, as FenrirRenderer's `Fenrir::Sky` holds its own, which a scene file writes under `resources`.",
+        .fields = AssetsTest_Sky_Fields,
     };
 
     // AssetsTest::WeaponStats
@@ -200,9 +278,29 @@ namespace Fenrir::Generated::DataAssetsTestPackageTypes
     };
 } // namespace Fenrir::Generated::DataAssetsTestPackageTypes
 
+const Fenrir::TypeDescription& Fenrir::Describe<AssetsTest::Follower>::Description() noexcept
+{
+    return Fenrir::Generated::DataAssetsTestPackageTypes::AssetsTest_Follower;
+}
+
+const Fenrir::TypeDescription& Fenrir::Describe<AssetsTest::FrameCounter>::Description() noexcept
+{
+    return Fenrir::Generated::DataAssetsTestPackageTypes::AssetsTest_FrameCounter;
+}
+
+const Fenrir::TypeDescription& Fenrir::Describe<AssetsTest::Health>::Description() noexcept
+{
+    return Fenrir::Generated::DataAssetsTestPackageTypes::AssetsTest_Health;
+}
+
 const Fenrir::TypeDescription& Fenrir::Describe<AssetsTest::ShieldData>::Description() noexcept
 {
     return Fenrir::Generated::DataAssetsTestPackageTypes::AssetsTest_ShieldData;
+}
+
+const Fenrir::TypeDescription& Fenrir::Describe<AssetsTest::Sky>::Description() noexcept
+{
+    return Fenrir::Generated::DataAssetsTestPackageTypes::AssetsTest_Sky;
 }
 
 const Fenrir::TypeDescription& Fenrir::Describe<AssetsTest::WeaponStats>::Description() noexcept
@@ -241,8 +339,16 @@ bool Fenrir::Generated::RegisterDataAssetsTestPackageTypes(Fenrir::TypeRegistry&
     // As the description lists them: a type after every type its fields name and the data asset it
     // extends. A type registered as this same description already is left alone, so a second run
     // registers nothing; one that registers goes to its role's hook, which hangs its attachments.
+    if (registry.Find(DataAssetsTestPackageTypes::AssetsTest_Follower.name) != &DataAssetsTestPackageTypes::AssetsTest_Follower)
+        registered = registry.Register(DataAssetsTestPackageTypes::AssetsTest_Follower) && Fenrir::AttachComponent<AssetsTest::Follower>(registry, DataAssetsTestPackageTypes::AssetsTest_Follower) && registered;
+    if (registry.Find(DataAssetsTestPackageTypes::AssetsTest_FrameCounter.name) != &DataAssetsTestPackageTypes::AssetsTest_FrameCounter)
+        registered = registry.Register(DataAssetsTestPackageTypes::AssetsTest_FrameCounter) && Fenrir::AttachComponent<AssetsTest::FrameCounter>(registry, DataAssetsTestPackageTypes::AssetsTest_FrameCounter) && registered;
+    if (registry.Find(DataAssetsTestPackageTypes::AssetsTest_Health.name) != &DataAssetsTestPackageTypes::AssetsTest_Health)
+        registered = registry.Register(DataAssetsTestPackageTypes::AssetsTest_Health) && Fenrir::AttachComponent<AssetsTest::Health>(registry, DataAssetsTestPackageTypes::AssetsTest_Health) && registered;
     if (registry.Find(DataAssetsTestPackageTypes::AssetsTest_ShieldData.name) != &DataAssetsTestPackageTypes::AssetsTest_ShieldData)
         registered = registry.Register(DataAssetsTestPackageTypes::AssetsTest_ShieldData) && registered;
+    if (registry.Find(DataAssetsTestPackageTypes::AssetsTest_Sky.name) != &DataAssetsTestPackageTypes::AssetsTest_Sky)
+        registered = registry.Register(DataAssetsTestPackageTypes::AssetsTest_Sky) && Fenrir::AttachSceneResource<AssetsTest::Sky>(registry, DataAssetsTestPackageTypes::AssetsTest_Sky) && registered;
     if (registry.Find(DataAssetsTestPackageTypes::AssetsTest_WeaponStats.name) != &DataAssetsTestPackageTypes::AssetsTest_WeaponStats)
         registered = registry.Register(DataAssetsTestPackageTypes::AssetsTest_WeaponStats) && registered;
     if (registry.Find(DataAssetsTestPackageTypes::AssetsTest_WeaponData.name) != &DataAssetsTestPackageTypes::AssetsTest_WeaponData)

@@ -4,6 +4,77 @@
   "alignment": "natural",
   "types": [
     {
+      "name": "AssetsTest::Follower",
+      "category": "struct",
+      "role": "component",
+      "size": 32,
+      "alignment": 8,
+      "doc": "A component a scene file writes an entity id and an asset path for: it follows another entity, showing an icon.",
+      "fields": [
+        {
+          "name": "target",
+          "offset": 0,
+          "kind": "entity",
+          "default": null,
+          "doc": "The entity followed."
+        },
+        {
+          "name": "icon",
+          "offset": 16,
+          "kind": "reference",
+          "target": "Fenrir::Image",
+          "default": null,
+          "doc": "The icon shown over the follower."
+        },
+        {
+          "name": "speed",
+          "offset": 24,
+          "kind": "f32",
+          "default": 1
+        }
+      ]
+    },
+    {
+      "name": "AssetsTest::FrameCounter",
+      "category": "struct",
+      "role": "component",
+      "size": 4,
+      "alignment": 4,
+      "doc": "Run-time bookkeeping a scene file never holds.",
+      "transient": true,
+      "fields": [
+        {
+          "name": "frames",
+          "offset": 0,
+          "kind": "u32",
+          "default": 0
+        }
+      ]
+    },
+    {
+      "name": "AssetsTest::Health",
+      "category": "struct",
+      "role": "component",
+      "size": 8,
+      "alignment": 4,
+      "doc": "A component at a version above 1, which a scene file's entry spells before its fields.",
+      "version": 2,
+      "fields": [
+        {
+          "name": "current",
+          "offset": 0,
+          "kind": "f32",
+          "default": 100
+        },
+        {
+          "name": "maximum",
+          "offset": 4,
+          "kind": "f32",
+          "default": 100
+        }
+      ]
+    },
+    {
       "name": "AssetsTest::ShieldData",
       "category": "struct",
       "role": "data-asset",
@@ -20,6 +91,30 @@
           "target": "AssetsTest::Sword",
           "default": null,
           "doc": "The sword the shield is made to parry: a sword, not any weapon."
+        }
+      ]
+    },
+    {
+      "name": "AssetsTest::Sky",
+      "category": "struct",
+      "role": "scene-resource",
+      "size": 12,
+      "alignment": 4,
+      "doc": "A described scene resource: a sky's settings, as FenrirRenderer's `Fenrir::Sky` holds its own, which a scene file writes under `resources`.",
+      "fields": [
+        {
+          "name": "cubemap",
+          "offset": 0,
+          "kind": "reference",
+          "target": "Fenrir::Image",
+          "default": null,
+          "doc": "The cubemap the sky shows."
+        },
+        {
+          "name": "exposure",
+          "offset": 8,
+          "kind": "f32",
+          "default": 1
         }
       ]
     },

@@ -29,11 +29,11 @@
 
 **Blocked by:** 01.
 
-**Touches:** `packages/FenrirAssets/` (`include/FenrirAssets/AssetStore.hpp`, a new `src/SceneWriter.cpp` and shared envelope code in `src/Envelope.*`, `Tests/` (a new `Scenes.cpp`, `fixtures/scenes/`, `Package/` and its regenerated outputs))
+**Touches:** `packages/FenrirAssets/` (`include/FenrirAssets/AssetStore.hpp`, a new `src/SceneWriter.cpp` and shared envelope code in `src/Envelope.*`, `Tests/` (a new `Scenes.cpp`, `fixtures/scenes/`, `Package/` and its regenerated outputs)); `packages/FenrirECS/` (`EntityList::ComponentCountOf`, which counts an entity's components of every type, so the writer counts the undescribed ones it skips)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A code-built scene with names, transforms, a test component with an `entity` field, an asset handle field and a `Fenrir::Sky` saves byte for byte equal to a committed golden file.
-- [ ] Saving it twice gives identical bytes, and ids minted the first time are kept the second.
-- [ ] A `Transient` entity and its children, `Relationship`, and an undescribed component are skipped and counted.
-- [ ] An `entity` field pointing outside the scene is written `null`, with one diagnostic, and counted.
+- [x] A code-built scene with names, transforms, a test component with an `entity` field, an asset handle field and a `Fenrir::Sky` saves byte for byte equal to a committed golden file.
+- [x] Saving it twice gives identical bytes, and ids minted the first time are kept the second.
+- [x] A `Transient` entity and its children, `Relationship`, and an undescribed component are skipped and counted.
+- [x] An `entity` field pointing outside the scene is written `null`, with one diagnostic, and counted.

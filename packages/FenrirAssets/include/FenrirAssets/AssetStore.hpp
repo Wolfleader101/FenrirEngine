@@ -315,6 +315,41 @@ namespace Fenrir
     };
 
     /**
+     * @brief What AssetStore::SaveScene gives back (ADR-0078, ADR-0079): how it went, what it wrote, what it left out,
+     * and the diagnostics. Named apart from a data asset's SaveResult, whose file holds no entities.
+     */
+    struct SceneSaveResult
+    {
+        /**
+         * @brief Succeeded when the file was written with every reference naming its target; Partial when it was
+         * written with references written `null` (`nullReferences`); Failed when nothing was written. Leaving out what
+         * a scene file never holds makes no save Partial.
+         */
+        SaveStatus status = SaveStatus::Succeeded;
+        /** @brief The entities written, one block apiece. */
+        std::size_t entitiesWritten = 0;
+        /** @brief The components written, an entry apiece under their entities' `components`. */
+        std::size_t componentsWritten = 0;
+        /** @brief The entities left out: each tagged `Transient`, and every entity below one. */
+        std::size_t entitiesSkipped = 0;
+        /**
+         * @brief The components of written entities left out of `components`: undescribed ones, `Relationship`, those
+         * of a `@transient` type, and `EntityId` and `Instance`, which a block spells as its `id` and `instance`.
+         */
+        std::size_t componentsSkipped = 0;
+        /**
+         * @brief The references written `null` for want of a target the file can name: an `entity` field naming an
+         * entity outside the file, and an asset handle field naming an asset with no asset path a file can hold.
+         */
+        std::size_t nullReferences = 0;
+        /**
+         * @brief Each diagnostic of the save, already logged once, naming the file: why it was refused, or each
+         * reference written `null`. Each is at line 1, column 1, as SaveResult's are.
+         */
+        std::vector<Serialisation::Diagnostic> diagnostics;
+    };
+
+    /**
      * @brief The asset store: every asset the app holds, as plain CPU-side data behind asset handles (ADR-0021). An app
      * resource, made by Assets::Install and reached with `app.GetResource<AssetStore>()`.
      *
@@ -616,6 +651,38 @@ namespace Fenrir
         {
             return SaveData({handle.index, handle.generation}, Describe<T>::Description(), path);
         }
+
+        /**
+         * @brief Writes `scene` to the scene file `path`, an asset path relative to the asset root
+         * (`level1.scene.json5`), in ADR-0078's layout, so the same scene writes the same bytes. The scene envelope is
+         * `format` (1), `type`
+         * (`Fenrir::Scene`), `version` (the scene layout's, 1) and `data`, which holds `resources` then `entities`.
+         *
+         * - `resources` holds each described scene resource type the scene has, keyed by canonical name in name order.
+         * - `entities` holds one block per entity, depth-first: the roots in the order of their entity ids, each
+         *   entity's children directly after it in their sibling order. A block is `id`, then `parent` (absent on a
+         *   root), then `components`.
+         * - `components` holds each described component the entity has, keyed by canonical name: `Fenrir::Name` and
+         *   `Fenrir::Transform` first, then the rest in name order. Name and Transform, which every entity gets, are
+         *   left out when they hold their defaults; any other component is written, as `{}` when it holds its defaults.
+         * - An entry, in `resources` or `components`, is its type's fields in declaration order with its defaults left
+         *   out, preceded by `version` only when its type's version is above 1.
+         *
+         * Each written entity without an `EntityId`, and each whose id another entity written before it already has,
+         * is given a newly minted one, so the save changes the scene and a later save keeps its ids. Left out, and
+         * counted with no diagnostic: entities tagged `Transient` and every entity below them; `Relationship`, which
+         * `parent` and the order spell; `EntityId` and `Instance`, which `id` and `instance` spell; undescribed
+         * components; and components of a `@transient` type. A `@transient` field is left out by the bridge, uncounted.
+         *
+         * An `entity` field names its target by its id. One naming an entity the file does not hold (a left-out entity
+         * or one of another scene) is written `null`, with a warning, and counted; a null entity is its default, left
+         * out. An asset handle field is written as its asset's path (PathOf), or `null`, with a warning, and counted,
+         * as Save writes it.
+         *
+         * The write is atomic, as Save's is. Refused with a logged error, and nothing written, for `path` absolute,
+         * climbing out of the root, or naming a sub-asset (`#`).
+         */
+        SceneSaveResult SaveScene(Scene& scene, std::string_view path);
 
         /** @brief Whether `handle` names a live asset: false for an empty or stale handle. */
         template <typename T>

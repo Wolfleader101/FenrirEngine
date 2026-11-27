@@ -31,9 +31,6 @@ namespace Fenrir::Detail
     {
         namespace Ser = Serialisation;
 
-        // The envelope's file format version (ADR-0077 §2): the one this reader reads.
-        constexpr std::uint64_t EnvelopeFormat = 1;
-
         // How a diagnostic names what it found: the node's kind, with a string's or number's text.
         std::string Found(const Ser::Value* node)
         {
@@ -161,6 +158,48 @@ namespace Fenrir::Detail
             return part.size() == 2 && part[1] == ':' && std::isalpha(static_cast<unsigned char>(part[0])) != 0;
         }
     } // namespace
+
+    std::optional<std::string> FormatProblem(const Ser::Value* format)
+    {
+        if (PositiveWhole(format, EnvelopeFormat) == EnvelopeFormat)
+        {
+            return std::nullopt;
+        }
+        return std::format("expected `format` {}, found {}", EnvelopeFormat, Found(format));
+    }
+
+    std::function<std::string(ReferenceValue, const FieldInfo&)> CheckedReferenceWriter(
+        const Ser::Resolvers& inner, const std::string& where, std::string_view path, ILogger& logger,
+        std::vector<Ser::Diagnostic>& diagnostics, std::size_t& written)
+    {
+        return [&inner, &where, path, &logger, &diagnostics, &written](ReferenceValue reference,
+                                                                       const FieldInfo& field) -> std::string {
+            std::string named = inner.writeReference ? inner.writeReference(reference, field) : std::string();
+            std::optional<std::string> problem;
+            if (named.empty())
+            {
+                problem = std::format("{}`{}` names an asset with no asset path (one added with no name, or freed); it "
+                                      "is written null",
+                                      where, field.name);
+            }
+            else if (std::optional<std::string> refused = FilePathProblem(named))
+            {
+                problem = std::format("{}`{}` names \"{}\", which {}; it is written null", where, field.name, named,
+                                      *refused);
+            }
+            if (!problem)
+            {
+                return named;
+            }
+            Ser::Diagnostic warning{.severity = Ser::DiagnosticSeverity::Warning,
+                                    .path = std::string(path),
+                                    .message = std::move(*problem)};
+            logger.Warn("{}", Ser::FormatDiagnostic(warning));
+            diagnostics.push_back(std::move(warning));
+            ++written;
+            return {};
+        };
+    }
 
     std::optional<std::string> FilePathProblem(std::string_view path)
     {
@@ -409,11 +448,10 @@ namespace Fenrir::Detail
         Ser::Object& envelope = tree.tree->AsObject();
 
         const Ser::Value* format = envelope.Find("format");
-        if (PositiveWhole(format, EnvelopeFormat) != EnvelopeFormat)
+        if (std::optional<std::string> problem = FormatProblem(format))
         {
             return fail(LoadFailure::ImportFailed,
-                        LocatedAt(Ser::DiagnosticSeverity::Error, path, format, root,
-                                  std::format("expected `format` {}, found {}", EnvelopeFormat, Found(format))));
+                        LocatedAt(Ser::DiagnosticSeverity::Error, path, format, root, std::move(*problem)));
         }
 
         // `sub` maps each sub-asset's name, unique within the file (the parser keeps a repeated key's first), to its
@@ -583,32 +621,8 @@ namespace Fenrir::Detail
         // A reference is written as the path the store names it by, unless it has none a file can hold: then it is
         // `null`, with one warning, and counted (ADR-0079).
         Ser::Resolvers counting = resolvers;
-        counting.writeReference = [&](ReferenceValue reference, const FieldInfo& field) -> std::string {
-            std::string written = resolvers.writeReference ? resolvers.writeReference(reference, field) : std::string();
-            std::optional<std::string> problem;
-            if (written.empty())
-            {
-                problem = std::format("{}`{}` names an asset with no asset path (one added with no name, or freed); it "
-                                      "is written null",
-                                      where, field.name);
-            }
-            else if (std::optional<std::string> refused = FilePathProblem(written))
-            {
-                problem = std::format("{}`{}` names \"{}\", which {}; it is written null", where, field.name, written,
-                                      *refused);
-            }
-            if (!problem)
-            {
-                return written;
-            }
-            Ser::Diagnostic warning{.severity = Ser::DiagnosticSeverity::Warning,
-                                    .path = std::string(path),
-                                    .message = std::move(*problem)};
-            logger.Warn("{}", Ser::FormatDiagnostic(warning));
-            write.diagnostics.push_back(std::move(warning));
-            ++write.emptyReferences;
-            return {};
-        };
+        counting.writeReference =
+            CheckedReferenceWriter(resolvers, where, path, logger, write.diagnostics, write.emptyReferences);
 
         Ser::Object envelope;
         if (top != nullptr)

@@ -180,6 +180,14 @@ namespace Fenrir::Detail
     [[nodiscard]] std::optional<std::string> WriteAtomically(const std::filesystem::path& file, std::string_view text);
 
     /**
+     * @brief The writer's path check (ADR-0085 §1), which a save to a path given makes: why `path` is refused, or none,
+     * with the file it names, resolved against `root` and normal, in `file`. An asset path is relative, names a whole
+     * file rather than a sub-asset (`#`), and stays under the root.
+     */
+    [[nodiscard]] std::optional<std::string> SavePathProblem(const std::filesystem::path& root, std::string_view path,
+                                                             std::filesystem::path& file);
+
+    /**
      * @brief The engine kind a `reference` field's target names, as a description writes `AssetHandle<Image>`'s
      * (`Fenrir::Image`); none for any other name, which is a data asset type's.
      */

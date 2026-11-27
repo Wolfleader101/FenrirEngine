@@ -23,3 +23,35 @@ TEST_CASE("entities with the same id in different lists are different entities",
     REQUIRE(first.HandleOf(a.GetId()) == a);
     REQUIRE(second.HandleOf(a.GetId()) != a);
 }
+
+namespace
+{
+    struct Speed
+    {
+        float value = 0.0f;
+    };
+
+    struct Tag
+    {
+    };
+} // namespace
+
+// A scene writer counts the components it does not write by comparing this with those it reached by type.
+TEST_CASE("an entity's component count covers every component it has, empty tags included", "[entity]")
+{
+    EntityList entities;
+    Entity entity = entities.CreateEntity();
+    INFO("a new entity has the three every entity gets: Transform, Name and Relationship");
+    REQUIRE(entities.ComponentCountOf(entity.GetId()) == 3);
+
+    entity.AddComponent<Speed>();
+    entity.AddComponent<Tag>();
+    const Entity other = entities.CreateEntity();
+    INFO("a component and an empty tag count, and another entity's components do not");
+    REQUIRE(entities.ComponentCountOf(entity.GetId()) == 5);
+    REQUIRE(entities.ComponentCountOf(other.GetId()) == 3);
+
+    entities.DestroyEntity(entity);
+    INFO("a destroyed entity has none");
+    REQUIRE(entities.ComponentCountOf(entity.GetId()) == 0);
+}
