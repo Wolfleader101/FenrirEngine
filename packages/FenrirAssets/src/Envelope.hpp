@@ -111,7 +111,7 @@ namespace Fenrir::Detail
 
     /**
      * @brief Why `format`, the envelope's `format` member (null when it has none), is not EnvelopeFormat, as a located
-     * error's message; none when it is. The data asset and scene envelopes' readers share it.
+     * error's message; none when it is: the check every envelope's reader makes first.
      */
     [[nodiscard]] std::optional<std::string> FormatProblem(const Serialisation::Value* format);
 
@@ -127,12 +127,19 @@ namespace Fenrir::Detail
     /**
      * @brief A `writeReference` that writes what `inner` names a reference by, unless it names no path or one a file
      * cannot hold (FilePathProblem): then it writes `null`, with one warning naming the field after `where`, logged and
-     * appended to `diagnostics` with `path` as its file, and counts it in `written`. The data asset and scene writers
+     * appended to `diagnostics` with `path` as its file, and counts it in `nulled`. The data asset and scene writers
      * write asset handle fields through it; every argument is read when it is called, so each must outlive it.
      */
     [[nodiscard]] std::function<std::string(ReferenceValue, const FieldInfo&)> CheckedReferenceWriter(
         const Serialisation::Resolvers& inner, const std::string& where, std::string_view path, ILogger& logger,
-        std::vector<Serialisation::Diagnostic>& diagnostics, std::size_t& written);
+        std::vector<Serialisation::Diagnostic>& diagnostics, std::size_t& nulled);
+
+    /**
+     * @brief Records a reference written `null`: a warning of `message` naming the file `path`, logged once and
+     * appended to `diagnostics`, and one more in `nulled`. Every writer's `null` for want of a target goes through it.
+     */
+    void WarnWrittenNull(std::string message, std::string_view path, ILogger& logger,
+                         std::vector<Serialisation::Diagnostic>& diagnostics, std::size_t& nulled);
 
     /**
      * @brief Why `path`, an asset path written in a file, is refused, or none when it is not (ADR-0076 §1, ADR-0085

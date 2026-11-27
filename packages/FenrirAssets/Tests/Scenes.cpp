@@ -127,11 +127,12 @@ TEST_CASE("A scene built in code saves byte for byte as the golden scene file", 
     INFO("the save succeeds with nothing to report");
     REQUIRE(saved.status == SaveStatus::Succeeded);
     REQUIRE(saved.diagnostics.empty());
-    INFO("the file is the golden file: the sky under resources, then each entity depth-first with its id, parent and "
-         "components, Name and Transform first, defaults left out, and Health's version 2 before its fields");
+    INFO(
+        "the file is the golden file: the sky under resources, then each entity depth-first with its id, parent and "
+        "components, Name and Transform first, each entry's defaults left out (a Transform at its defaults as {}), and "
+        "Health's version 2 before its fields");
     REQUIRE(ReadFile(root.Path() / LevelPath) == Golden());
-    INFO("four entities are written, with Name, Transform and their own components: ten components, Name and "
-         "Transform at their defaults counted though the file leaves them out");
+    INFO("four entities are written, with Name, Transform and their own components: ten components");
     REQUIRE(saved.entitiesWritten == 4);
     REQUIRE(saved.componentsWritten == 10);
     INFO("each entity's Relationship and EntityId are spelled as its parent and id, and counted as left out");

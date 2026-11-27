@@ -51,8 +51,6 @@ namespace Fenrir
         {
             const TypeDescription* type = nullptr;
             ComponentType component;
-            // Name and Transform, which every entity gets, are left out at their defaults: the entity has them anyway.
-            bool leftOutAtDefault = false;
         };
 
         // Where an entry goes among `components`: Name, then Transform, then the rest by canonical name, so the same
@@ -76,7 +74,7 @@ namespace Fenrir
                 // never found there to write.
                 if (std::optional<ComponentType> component = ComponentType::ForName(registry, type->name))
                 {
-                    written.push_back({type, *component, type->name == NameType || type->name == TransformType});
+                    written.push_back({type, *component});
                 }
             }
             std::ranges::sort(written, [](const WrittenType& a, const WrittenType& b) {
@@ -200,7 +198,8 @@ namespace Fenrir
         }
 
         // An asset handle field is written as its asset's path, as a data asset's is; an `entity` field as its
-        // target's id, or `null` when the file holds no such entity. Each `null` is warned of, naming `where`.
+        // target's id, or `null` when the file holds no such entity, since a load could resolve nothing else. Each
+        // `null` is warned of, naming `where`, the entry being written.
         std::string where;
         const Ser::Resolvers assetPaths = Detail::WritingResolvers(*m_state);
         Ser::Resolvers resolvers;
@@ -214,19 +213,16 @@ namespace Fenrir
                     return found->second;
                 }
             }
-            Ser::Diagnostic warning{
-                .severity = Ser::DiagnosticSeverity::Warning,
-                .path = named,
-                .message = std::format("{}`{}` names an entity the file does not hold (one tagged Transient or below "
-                                       "one, one destroyed, or one of another scene); it is written null",
-                                       where, field.name)};
-            m_state->logger->Warn("{}", Ser::FormatDiagnostic(warning));
-            result.diagnostics.push_back(std::move(warning));
-            ++result.nullReferences;
+            Detail::WarnWrittenNull(
+                std::format("{}`{}` names an entity the file does not hold (one tagged Transient or "
+                            "below one, one destroyed, or one of another scene); it is written null",
+                            where, field.name),
+                named, *m_state->logger, result.diagnostics, result.nullReferences);
             return {};
         };
 
-        // `resources`: each described scene resource type the scene has, by canonical name in name order.
+        // Resources come before entities in the file but are applied after them on load, so an `entity` field in one
+        // resolves (ADR-0078 §7); name order keeps the bytes stable.
         Ser::Object resources;
         std::vector<const TypeDescription*> resourceTypes = registry.Types(Role::SceneResource);
         std::ranges::sort(resourceTypes, {}, &TypeDescription::name);
@@ -241,7 +237,6 @@ namespace Fenrir
             resources.Add(std::string(type->name), Entry(*type, Ser::ToTree(resource, *type, registry, resolvers)));
         }
 
-        // `entities`: a block per written entity, in file order.
         const std::vector<WrittenType> types = WrittenTypes(registry);
         Ser::Array blocks;
         for (const Entity& entity : written)
@@ -264,12 +259,9 @@ namespace Fenrir
                 }
                 ++reached;
                 where = std::format("entity `{}`, `{}`: ", ids.at(id), entry.type->name);
-                Ser::Value fields = Ser::ToTree(component, *entry.type, registry, resolvers);
-                if (entry.leftOutAtDefault && fields.AsObject().members.empty())
-                {
-                    continue;
-                }
-                components.Add(std::string(entry.type->name), Entry(*entry.type, std::move(fields)));
+                // An entry at its type's defaults is `{}`, never left out: the file says the entity has it.
+                components.Add(std::string(entry.type->name),
+                               Entry(*entry.type, Ser::ToTree(component, *entry.type, registry, resolvers)));
             }
             block.Add("components", std::move(components));
             blocks.Add(std::move(block));

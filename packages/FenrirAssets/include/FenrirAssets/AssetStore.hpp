@@ -655,16 +655,16 @@ namespace Fenrir
         /**
          * @brief Writes `scene` to the scene file `path`, an asset path relative to the asset root
          * (`level1.scene.json5`), in ADR-0078's layout, so the same scene writes the same bytes. The scene envelope is
-         * `format` (1), `type`
-         * (`Fenrir::Scene`), `version` (the scene layout's, 1) and `data`, which holds `resources` then `entities`.
+         * `format` (1), `type` (`Fenrir::Scene`), `version` (the scene layout's, 1) and `data`, which holds `resources`
+         * then `entities`.
          *
          * - `resources` holds each described scene resource type the scene has, keyed by canonical name in name order.
          * - `entities` holds one block per entity, depth-first: the roots in the order of their entity ids, each
          *   entity's children directly after it in their sibling order. A block is `id`, then `parent` (absent on a
          *   root), then `components`.
          * - `components` holds each described component the entity has, keyed by canonical name: `Fenrir::Name` and
-         *   `Fenrir::Transform` first, then the rest in name order. Name and Transform, which every entity gets, are
-         *   left out when they hold their defaults; any other component is written, as `{}` when it holds its defaults.
+         *   `Fenrir::Transform` first, then the rest in name order. One holding its type's defaults is written as
+         *   `{}`, so the file still says the entity has it.
          * - An entry, in `resources` or `components`, is its type's fields in declaration order with its defaults left
          *   out, preceded by `version` only when its type's version is above 1.
          *

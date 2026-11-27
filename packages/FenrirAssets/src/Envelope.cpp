@@ -170,10 +170,10 @@ namespace Fenrir::Detail
 
     std::function<std::string(ReferenceValue, const FieldInfo&)> CheckedReferenceWriter(
         const Ser::Resolvers& inner, const std::string& where, std::string_view path, ILogger& logger,
-        std::vector<Ser::Diagnostic>& diagnostics, std::size_t& written)
+        std::vector<Ser::Diagnostic>& diagnostics, std::size_t& nulled)
     {
-        return [&inner, &where, path, &logger, &diagnostics, &written](ReferenceValue reference,
-                                                                       const FieldInfo& field) -> std::string {
+        return [&inner, &where, path, &logger, &diagnostics, &nulled](ReferenceValue reference,
+                                                                      const FieldInfo& field) -> std::string {
             std::string named = inner.writeReference ? inner.writeReference(reference, field) : std::string();
             std::optional<std::string> problem;
             if (named.empty())
@@ -191,14 +191,19 @@ namespace Fenrir::Detail
             {
                 return named;
             }
-            Ser::Diagnostic warning{.severity = Ser::DiagnosticSeverity::Warning,
-                                    .path = std::string(path),
-                                    .message = std::move(*problem)};
-            logger.Warn("{}", Ser::FormatDiagnostic(warning));
-            diagnostics.push_back(std::move(warning));
-            ++written;
+            WarnWrittenNull(std::move(*problem), path, logger, diagnostics, nulled);
             return {};
         };
+    }
+
+    void WarnWrittenNull(std::string message, std::string_view path, ILogger& logger,
+                         std::vector<Ser::Diagnostic>& diagnostics, std::size_t& nulled)
+    {
+        Ser::Diagnostic warning{
+            .severity = Ser::DiagnosticSeverity::Warning, .path = std::string(path), .message = std::move(message)};
+        logger.Warn("{}", Ser::FormatDiagnostic(warning));
+        diagnostics.push_back(std::move(warning));
+        ++nulled;
     }
 
     std::optional<std::string> FilePathProblem(std::string_view path)

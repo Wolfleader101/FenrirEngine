@@ -14,6 +14,7 @@
         id: "a7k2q",
         components: {
           "Fenrir::Name": {name: "Level"},
+          "Fenrir::Transform": {},
         },
       },
       {
@@ -35,6 +36,7 @@
         parent: "d4e5f",
         components: {
           "Fenrir::Name": {name: "Sword"},
+          "Fenrir::Transform": {},
           "AssetsTest::Follower": {
             target: "d4e5f",
             icon: "icons/sword.png",
