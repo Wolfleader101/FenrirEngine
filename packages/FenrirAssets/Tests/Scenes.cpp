@@ -822,6 +822,7 @@ TEST_CASE("A merge of a file that is no scene fails, adding nothing", "[assets][
 
     const SceneLoadResult merged = test.store.LoadSceneInto(host, LevelPath, mount);
 
+    INFO("the merge fails as LoadScene would, naming no scene, and the mount gains no child");
     REQUIRE(merged.status == LoadStatus::Failed);
     REQUIRE(merged.scene == nullptr);
     REQUIRE(merged.roots.empty());
@@ -910,8 +911,7 @@ TEST_CASE("A subtree saved then merged back reproduces the subtree's components"
     REQUIRE(ReadFile(root.Path() / "prefabs/again.scene.json5") == expected);
 }
 
-TEST_CASE("A subtree save of an entity no live one of the scene is refused, writing nothing",
-          "[assets][scenes][subtree]")
+TEST_CASE("A subtree save of an entity not live in the scene is refused, writing nothing", "[assets][scenes][subtree]")
 {
     TempRoot root;
     CopyImages(root);
@@ -925,15 +925,16 @@ TEST_CASE("A subtree save of an entity no live one of the scene is refused, writ
     {
         test.errors->clear();
         const SceneSaveResult saved = test.store.SaveScene(scene, subtree, PlayerPath);
+        INFO("an empty root, and one of another scene, each fail with one logged error");
         REQUIRE(saved.status == SaveStatus::Failed);
         REQUIRE(saved.diagnostics.size() == 1);
         REQUIRE(test.errors->size() == 1);
     }
+    INFO("no file is written");
     REQUIRE_FALSE(fs::exists(root.Path() / PlayerPath));
 }
 
-TEST_CASE("A subtree save of a Transient root writes no block, counting the subtree as skipped",
-          "[assets][scenes][subtree]")
+TEST_CASE("A subtree save of a Transient root is refused, writing nothing", "[assets][scenes][subtree]")
 {
     TempRoot root;
     CopyImages(root);
@@ -944,8 +945,41 @@ TEST_CASE("A subtree save of a Transient root writes no block, counting the subt
 
     const SceneSaveResult saved = test.store.SaveScene(scene, level.player, PlayerPath);
 
-    REQUIRE(saved.status == SaveStatus::Succeeded);
+    INFO("a scene file never holds a Transient entity: the save fails with one error and writes no file");
+    REQUIRE(saved.status == SaveStatus::Failed);
+    REQUIRE(saved.diagnostics.size() == 1);
     REQUIRE(saved.entitiesWritten == 0);
-    REQUIRE(saved.entitiesSkipped == 2);
-    REQUIRE(ReadFile(root.Path() / PlayerPath).find("entities: [],") != std::string::npos);
+    REQUIRE_FALSE(fs::exists(root.Path() / PlayerPath));
+}
+
+TEST_CASE("A subtree merged back into its own scene is given fresh ids, its references naming the copies",
+          "[assets][scenes][subtree][merge]")
+{
+    TempRoot root;
+    CopyImages(root);
+    DataApp test({root.Path()});
+    Fenrir::Scene& scene = test.app.CreateScene("Level");
+    const Level level = BuildLevel(test, scene);
+    REQUIRE(test.store.SaveScene(scene, level.player, PlayerPath).status == SaveStatus::Succeeded);
+
+    const SceneLoadResult merged = test.store.LoadSceneInto(scene, PlayerPath, level.level);
+
+    INFO("the merge succeeds with nothing to report, the copy going under the level after the sun");
+    REQUIRE(merged.status == LoadStatus::Succeeded);
+    REQUIRE(merged.diagnostics.empty());
+    REQUIRE(ChildNames(level.level) == std::vector<std::string>{"Player", "Sun", "Player"});
+    const Entity copy = merged.roots.at(0);
+    INFO("the originals keep their ids, and the copies, whose ids the scene had, are each minted another");
+    REQUIRE(IdOf(level.player) == "d4e5f");
+    REQUIRE(IdOf(level.sword) == "m9x1p");
+    REQUIRE_FALSE(IdOf(copy).empty());
+    REQUIRE(IdOf(copy) != "d4e5f");
+    Entity copiedSword;
+    copy.ForEachChild([&](const Entity& child) { copiedSword = child; });
+    REQUIRE(copiedSword.IsValid());
+    REQUIRE_FALSE(IdOf(copiedSword).empty());
+    REQUIRE(IdOf(copiedSword) != "m9x1p");
+    INFO("the copied sword follows the copied player, as the file's ids named it");
+    REQUIRE(copiedSword.GetComponent<AssetsTest::Follower>().target == copy);
+    REQUIRE(level.sword.GetComponent<AssetsTest::Follower>().target == level.player);
 }

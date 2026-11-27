@@ -154,9 +154,13 @@ namespace Fenrir
 
         const TypeRegistry& registry = *m_state->types;
         EntityList& entities = scene.GetEntityList();
-        if (root && (!root->IsValid() || *root != entities.GetEntity(root->GetId())))
+        if (root && !Detail::LiveIn(entities, *root))
         {
             return fail("the subtree's root is no live entity of the scene");
+        }
+        if (root && root->HasComponent<Transient>())
+        {
+            return fail("the subtree's root is tagged Transient, which a scene file never holds");
         }
 
         // The entities the file holds: the subtree's, or every root's in the order of their entity ids, so a scene

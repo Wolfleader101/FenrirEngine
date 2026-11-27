@@ -11,6 +11,8 @@
 #include <vector>
 
 #include "FenrirAssets/AssetStore.hpp"
+#include "FenrirECS/Entity.hpp"
+#include "FenrirECS/EntityList.hpp"
 #include "FenrirSerialisation/Bridge.hpp"
 #include "FenrirSerialisation/Diagnostic.hpp"
 #include "FenrirSerialisation/Value.hpp"
@@ -196,6 +198,15 @@ namespace Fenrir::Detail
      * writes them as entries, and the reader ignores an entry naming one.
      */
     inline constexpr std::string_view SpelledApart[] = {"Fenrir::Relationship", "Fenrir::EntityId", "Fenrir::Instance"};
+
+    /**
+     * @brief Whether `entity` is a live entity of `entities`: false for an empty entity, a destroyed one, or one of
+     * another scene. A merge's parent and a subtree's root must be.
+     */
+    [[nodiscard]] inline bool LiveIn(EntityList& entities, const Entity& entity)
+    {
+        return entity.IsValid() && entity == entities.GetEntity(entity.GetId());
+    }
 
     /**
      * @brief A `writeReference` that writes what `inner` names a reference by, unless it names no path or one a file

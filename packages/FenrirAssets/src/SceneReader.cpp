@@ -91,10 +91,13 @@ namespace Fenrir
             ILogger& logger;
             SceneLoadResult& result;
             Entity parent;
-            bool applyResources = true;
+            Detail::SceneResources fileResources = Detail::SceneResources::Apply;
 
             // Each block's entity by its id's value: the first block holding an id.
             std::unordered_map<std::uint64_t, std::uint32_t> ids;
+            // The ids the scene's entities hold, from before the load and as it gives them: a block's id one of them
+            // has already is re-minted, so a merge never repeats an id in its scene.
+            std::unordered_set<std::uint64_t> taken;
             // The unknown component types already warned of in this load.
             std::unordered_set<std::string> unknownWarned;
 
@@ -179,7 +182,15 @@ namespace Fenrir
                 const std::string spelled = id ? SpellEntityId(*id) : std::string("?");
                 if (holdsId)
                 {
-                    handle.AddComponent<EntityId>(*id);
+                    // The id map keeps the file's id, so the file's `entity` fields and `parent`s still name this
+                    // block; only the entity's own id is fresh.
+                    EntityId held = *id;
+                    while (taken.contains(held.value) || (held.value != id->value && ids.contains(held.value)))
+                    {
+                        held = MintEntityId();
+                    }
+                    taken.insert(held.value);
+                    handle.AddComponent<EntityId>(held);
                 }
 
                 UnknownComponents unknown;
@@ -284,7 +295,7 @@ namespace Fenrir
             // each entry is counted as skipped, with no diagnostic (ADR-0079 §2).
             void FillResources(Ser::Value& resources)
             {
-                if (!applyResources)
+                if (fileResources == Detail::SceneResources::Skip)
                 {
                     result.resourcesSkipped += resources.AsObject().members.size();
                     return;
@@ -441,16 +452,16 @@ namespace Fenrir
     {
         return ReadSceneFile(
             path, [&]() -> Scene& { return app.CreateScene(name.empty() ? std::string(path) : std::string(name)); }, {},
-            true);
+            Detail::SceneResources::Apply);
     }
 
     SceneLoadResult AssetStore::LoadSceneInto(Scene& scene, std::string_view path, Entity parent)
     {
-        return ReadSceneFile(path, [&]() -> Scene& { return scene; }, parent, false);
+        return ReadSceneFile(path, [&]() -> Scene& { return scene; }, parent, Detail::SceneResources::Skip);
     }
 
     SceneLoadResult AssetStore::ReadSceneFile(std::string_view path, const std::function<Scene&()>& makeScene,
-                                              Entity parent, bool applyResources)
+                                              Entity parent, Detail::SceneResources resources)
     {
         SceneLoadResult result;
         std::string assetPath;
@@ -503,9 +514,16 @@ namespace Fenrir
             [&](std::string_view reference, const FieldInfo& field) {
                 return ReadFileReference(assetPath, owner, reference, field);
             };
-        SceneFiller filler{scene, *m_state->types, fileKey, readReference, *m_state->logger, result,
-                           {},    applyResources};
-        if (parent.HasEntityList() && (!parent.IsValid() || parent != scene.GetEntityList().GetEntity(parent.GetId())))
+        SceneFiller filler{scene, *m_state->types, fileKey, readReference, *m_state->logger, result, {}, resources};
+        EntityList& entities = scene.GetEntityList();
+        entities.ForEachEntity([&](auto handle) {
+            const Entity entity = entities.GetEntity(static_cast<std::uint32_t>(handle));
+            if (entity.HasComponent<EntityId>())
+            {
+                filler.taken.insert(entity.GetComponent<EntityId>().value);
+            }
+        });
+        if (parent.HasEntityList() && !Detail::LiveIn(entities, parent))
         {
             // A parent of another scene, or one destroyed: the file's roots load at the top of this one.
             filler.Report(Ser::DiagnosticSeverity::Error, nullptr, *data,
