@@ -541,6 +541,7 @@ TEST_CASE("Moving a prefab rewrites its two hosts' instances and the asset handl
 {
     SceneRoot test;
     DataApp app({test.root.Path()});
+    INFO("the test package's types register into the app's registry, beside the engine's");
     REQUIRE(app.registered);
 
     const Fenrir::MoveResult result =
@@ -655,8 +656,13 @@ TEST_CASE("A scene file that does not parse, or is no scene envelope, is named a
         "{ format: 1, type: \"Fenrir::Scene\", data: { entities: [\n  \"prefabs/tower.scene.json5\"";
     const std::string wrong =
         ReplacedAll(SceneRoot::Fixture("keep.scene.json5"), "\"Fenrir::Scene\"", "\"Fenrir::Level\"");
+    // A scene at a layout version the reader does not know, which a load refuses.
+    constexpr std::string_view LaterScene = "levels/later.scene.json5";
+    const std::string later =
+        ReplacedAll(SceneRoot::Fixture("keep.scene.json5"), "version: 1,\n  data", "version: 9,\n  data");
     test.root.Write(BrokenScene, broken);
     test.root.Write(WrongScene, wrong);
+    test.root.Write(LaterScene, later);
     DataApp app({test.root.Path()});
 
     const Fenrir::MoveResult result =
@@ -664,17 +670,24 @@ TEST_CASE("A scene file that does not parse, or is no scene envelope, is named a
 
     INFO(result.problem);
     REQUIRE(result.status == Fenrir::MoveStatus::Succeeded);
-    INFO("the file with a syntax error and the one of another type are unscanned, in path order");
-    REQUIRE(UnscannedPaths(result) == std::vector<std::string>{std::string(BrokenScene), std::string(WrongScene)});
+    INFO("the file with a syntax error, the later layout and the one of another type are unscanned, in path order");
+    REQUIRE(UnscannedPaths(result) ==
+            std::vector<std::string>{std::string(BrokenScene), std::string(LaterScene), std::string(WrongScene)});
     INFO(result.unscanned[0].reason);
     INFO("the broken file's reason is its located syntax error");
     REQUIRE(result.unscanned[0].reason.find("levels/broken.scene.json5:") != std::string::npos);
     INFO(result.unscanned[1].reason);
+    INFO("the later layout's reason is its version");
+    REQUIRE(result.unscanned[1].reason.find("`version`") != std::string::npos);
+    INFO(result.unscanned[2].reason);
     INFO("the other's reason is that it is no scene envelope");
-    REQUIRE(result.unscanned[1].reason.find("no scene envelope") != std::string::npos);
-    INFO("both are as they were, so each still names the old path");
+    REQUIRE(result.unscanned[2].reason.find("no scene envelope") != std::string::npos);
+    INFO("each is as it was, so each still names the old path");
     REQUIRE(test.Read(BrokenScene) == broken);
     REQUIRE(test.Read(WrongScene) == wrong);
+    REQUIRE(test.Read(LaterScene) == later);
+    INFO("the later layout's file differs from the keep's in its version");
+    REQUIRE(later != SceneRoot::Fixture("keep.scene.json5"));
     INFO("the hosts are rewritten as before");
     REQUIRE(result.changed == Sorted(ChangedByTheFortMove));
 }
