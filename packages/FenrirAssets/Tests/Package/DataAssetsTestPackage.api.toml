@@ -6,11 +6,13 @@ headers = ["DataAssetsTestPackage.hpp"]
 "AssetsTest::WeaponData" = "data-asset"
 "AssetsTest::Sword" = "data-asset"
 "AssetsTest::ShieldData" = "data-asset"
+"AssetsTest::BannerData" = "data-asset"
 "MyGame::Sword" = "data-asset"
 "MyGame::ParticleEffect" = "data-asset"
 "AssetsTest::Follower" = "component"
 "AssetsTest::Health" = "component"
 "AssetsTest::FrameCounter" = "component"
+"AssetsTest::Decal" = "component"
 "AssetsTest::Sky" = "scene-resource"
 
 # What tools/generate-type-registry writes for the package: FenrirAssets' tests compile it and register it. Its

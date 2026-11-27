@@ -52,6 +52,12 @@ namespace Fenrir::Generated
 // 'uses') points its fields at them rather than describing the types again.
 namespace Fenrir::Generated::DataAssetsTestPackageTypes
 {
+    extern const Fenrir::TypeDescription AssetsTest_LookType;
+    extern const Fenrir::TypeDescription AssetsTest_PaintedLook;
+    extern const Fenrir::TypeDescription AssetsTest_PlainLook;
+    extern const Fenrir::TypeDescription AssetsTest_Look;
+    extern const Fenrir::TypeDescription AssetsTest_BannerData;
+    extern const Fenrir::TypeDescription AssetsTest_Decal;
     extern const Fenrir::TypeDescription AssetsTest_Follower;
     extern const Fenrir::TypeDescription AssetsTest_FrameCounter;
     extern const Fenrir::TypeDescription AssetsTest_Health;
@@ -64,6 +70,54 @@ namespace Fenrir::Generated::DataAssetsTestPackageTypes
     extern const Fenrir::TypeDescription MyGame_Upgrade;
     extern const Fenrir::TypeDescription MyGame_Sword;
 } // namespace Fenrir::Generated::DataAssetsTestPackageTypes
+
+/** @brief The description of AssetsTest::LookType that RegisterDataAssetsTestPackageTypes adds. */
+template <>
+struct Fenrir::Describe<AssetsTest::LookType>
+{
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of AssetsTest::PaintedLook that RegisterDataAssetsTestPackageTypes adds. */
+template <>
+struct Fenrir::Describe<AssetsTest::PaintedLook>
+{
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of AssetsTest::PlainLook that RegisterDataAssetsTestPackageTypes adds. */
+template <>
+struct Fenrir::Describe<AssetsTest::PlainLook>
+{
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of AssetsTest::Look that RegisterDataAssetsTestPackageTypes adds. */
+template <>
+struct Fenrir::Describe<AssetsTest::Look>
+{
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of AssetsTest::BannerData that RegisterDataAssetsTestPackageTypes adds. */
+template <>
+struct Fenrir::Describe<AssetsTest::BannerData>
+{
+    static constexpr Fenrir::Role role = Fenrir::Role::DataAsset;
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of AssetsTest::Decal that RegisterDataAssetsTestPackageTypes adds. */
+template <>
+struct Fenrir::Describe<AssetsTest::Decal>
+{
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
 
 /** @brief The description of AssetsTest::Follower that RegisterDataAssetsTestPackageTypes adds. */
 template <>

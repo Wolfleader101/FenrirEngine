@@ -20,6 +20,7 @@
 #include "Envelope.hpp"
 #include "FenrirAssets/Assets.hpp"
 #include "FenrirLogger/ILogger.hpp"
+#include "FenrirSerialisation/Bridge.hpp"
 #include "FenrirSerialisation/Text.hpp"
 #include "FenrirSerialisation/Value.hpp"
 #include "FenrirTypes/FieldInfo.hpp"
@@ -235,10 +236,11 @@ namespace Fenrir
                 WalkFields(node.AsObject(), FieldsOf(target), {});
             }
 
-            // `kind` selects the live alternative, whose fields sit beside it in the union's object.
+            // `kind` (Ser::UnionTagKey, never the tag field's own name) selects the live alternative, whose fields sit
+            // beside it in the union's object.
             void WalkUnion(Ser::Object& object, ValueRef target, const TypeDescription& type)
             {
-                const Ser::Value* kind = object.Find(type.tag.name);
+                const Ser::Value* kind = object.Find(Ser::UnionTagKey);
                 const TypeDescription* tagType = type.tag.type.type;
                 if (kind == nullptr || kind->Kind() != Ser::ValueKind::String || tagType == nullptr)
                 {
@@ -260,10 +262,10 @@ namespace Fenrir
                 if (live.info->type.kind == Kind::Struct && alternative != nullptr &&
                     alternative->role != Role::BoundType && !alternative->IsTaggedUnion())
                 {
-                    WalkFields(object, FieldsOf(live.value), type.tag.name);
+                    WalkFields(object, FieldsOf(live.value), Ser::UnionTagKey);
                     return;
                 }
-                WalkFields(object, {live}, type.tag.name);
+                WalkFields(object, {live}, Ser::UnionTagKey);
             }
 
             // Each field from the member of its name, or else of the first of its former names present, as FromTree

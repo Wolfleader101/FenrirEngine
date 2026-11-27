@@ -4,6 +4,126 @@
   "alignment": "natural",
   "types": [
     {
+      "name": "AssetsTest::LookType",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "Which kind of look a Look holds.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Plain",
+          "value": 0
+        },
+        {
+          "name": "Painted",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "AssetsTest::PaintedLook",
+      "category": "struct",
+      "role": "nested",
+      "size": 12,
+      "alignment": 4,
+      "doc": "A painted look: an image, scaled.",
+      "fields": [
+        {
+          "name": "image",
+          "offset": 0,
+          "kind": "reference",
+          "target": "Fenrir::Image",
+          "default": null,
+          "doc": "The image painted on."
+        },
+        {
+          "name": "scale",
+          "offset": 8,
+          "kind": "f32",
+          "default": 1
+        }
+      ]
+    },
+    {
+      "name": "AssetsTest::PlainLook",
+      "category": "struct",
+      "role": "nested",
+      "size": 4,
+      "alignment": 4,
+      "doc": "A plain look: a flat tint.",
+      "fields": [
+        {
+          "name": "tint",
+          "offset": 0,
+          "kind": "f32",
+          "default": 1
+        }
+      ]
+    },
+    {
+      "name": "AssetsTest::Look",
+      "category": "tagged-union",
+      "role": "nested",
+      "size": 16,
+      "alignment": 4,
+      "doc": "A tagged union, as the engine's are (`Fenrir::CollisionShape`, `Fenrir::Sky`): its tag is the field `m_type`, which a file writes as `kind`, so an asset path held by its painted look sits beside that `kind`.",
+      "tag": {
+        "name": "m_type",
+        "offset": 0,
+        "kind": "enum",
+        "type": "AssetsTest::LookType",
+        "default": "Plain"
+      },
+      "unionOffset": 4,
+      "kinds": [
+        {
+          "name": "m_plain",
+          "tag": "Plain",
+          "kind": "struct",
+          "type": "AssetsTest::PlainLook"
+        },
+        {
+          "name": "m_painted",
+          "tag": "Painted",
+          "kind": "struct",
+          "type": "AssetsTest::PaintedLook"
+        }
+      ],
+      "defaultKind": "m_plain"
+    },
+    {
+      "name": "AssetsTest::BannerData",
+      "category": "struct",
+      "role": "data-asset",
+      "doc": "A data asset holding a tagged union: a banner, with its look.",
+      "fields": [
+        {
+          "name": "look",
+          "kind": "struct",
+          "type": "AssetsTest::Look",
+          "default": {}
+        }
+      ]
+    },
+    {
+      "name": "AssetsTest::Decal",
+      "category": "struct",
+      "role": "component",
+      "size": 16,
+      "alignment": 4,
+      "doc": "A component holding a tagged union: a decal on an entity, with its look.",
+      "fields": [
+        {
+          "name": "look",
+          "offset": 0,
+          "kind": "struct",
+          "type": "AssetsTest::Look",
+          "default": {}
+        }
+      ]
+    },
+    {
       "name": "AssetsTest::Follower",
       "category": "struct",
       "role": "component",
