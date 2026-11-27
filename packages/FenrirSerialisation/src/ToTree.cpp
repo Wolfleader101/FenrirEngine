@@ -211,7 +211,7 @@ namespace Fenrir::Serialisation
             const TypeDescription& type = *value.Description();
             const std::vector<VisitedField> fields = FieldsOf(value);
             Object object;
-            object.Add("kind", EnumToValue(fields.front().value));
+            object.Add(std::string(Detail::UnionTagKey), EnumToValue(fields.front().value));
             if (fields.size() < 2)
                 return object;
             const VisitedField& live = fields[1];

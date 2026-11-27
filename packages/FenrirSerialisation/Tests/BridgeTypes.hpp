@@ -264,6 +264,24 @@ namespace BridgeTest
         .defaultAlternative = 0,
     };
 
+    // Shape's layout under a tag field named as the engine's generated unions name theirs (`m_type`), which a file
+    // still spells `kind`.
+    inline const TypeDescription PrivateTagShapeDescription{
+        .name = "BridgeTest::PrivateTagShape",
+        .package = "FenrirSerialisationTests",
+        .role = Role::Nested,
+        .size = sizeof(Shape),
+        .alignment = alignof(Shape),
+        .construct = Fenrir::ConstructValue<Shape>,
+        .destroy = Fenrir::DestroyValue<Shape>,
+        .tag = {.name = "m_type",
+                .type = {.kind = Kind::Enum, .type = &ShapeKindDescription, .unionTag = true},
+                .offset = offsetof(Shape, kind)},
+        .unionOffset = offsetof(Shape, box),
+        .alternatives = ShapeAlternatives,
+        .defaultAlternative = 0,
+    };
+
     inline constexpr ValueType FixedLayersType{.kind = Kind::Array, .element = &U32, .count = 3};
     inline constexpr ValueType FixedMasksType{.kind = Kind::Array, .element = &U32, .count = 2};
 
@@ -512,8 +530,9 @@ namespace BridgeTest
         bool registered = true;
         for (const TypeDescription* description :
              {&MobilityDescription, &Vec3Description, &RangeDescription, &ShapeKindDescription, &BoxShapeDescription,
-              &SphereShapeDescription, &ShapeDescription, &FixedDescription, &OwnedDescription, &RenamedDescription,
-              &LinkedDescription, &RosterDescription, &SensedDescription, &SensorDescription})
+              &SphereShapeDescription, &ShapeDescription, &PrivateTagShapeDescription, &FixedDescription,
+              &OwnedDescription, &RenamedDescription, &LinkedDescription, &RosterDescription, &SensedDescription,
+              &SensorDescription})
             registered = registry.Register(*description) && registered;
         return registered;
     }

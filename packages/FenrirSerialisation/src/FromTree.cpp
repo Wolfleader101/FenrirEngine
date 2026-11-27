@@ -452,11 +452,12 @@ namespace Fenrir::Serialisation
             {
                 const Object& object = node.AsObject();
                 const TypeDescription& type = *target.Description();
-                const std::string kindName = Below(where, type.tag.name);
-                const Value* kind = object.Find(type.tag.name);
+                // The key is the format's, not the tag field's name, which may be anything (`m_type`).
+                const std::string kindName = Below(where, Detail::UnionTagKey);
+                const Value* kind = object.Find(Detail::UnionTagKey);
                 if (kind == nullptr)
                     return Reject(node, std::format("`{}` has no `{}`, so it keeps its default alternative", where,
-                                                    type.tag.name));
+                                                    Detail::UnionTagKey));
                 const TypeDescription* tagType = type.tag.type.type;
                 const Enumerator* selected = kind->Kind() == ValueKind::String && tagType != nullptr
                                                  ? FindEnumerator(*tagType, kind->AsString())
@@ -475,11 +476,11 @@ namespace Fenrir::Serialisation
                     alternative->role != Role::BoundType && !alternative->IsTaggedUnion())
                 {
                     // Spread into the union's own object beside `kind`, as `ToTree` writes it.
-                    ReadFields(object, alternative, FieldsOf(live.value), where, type.tag.name);
+                    ReadFields(object, alternative, FieldsOf(live.value), where, Detail::UnionTagKey);
                     return true;
                 }
                 std::vector<VisitedField> member{live};
-                ReadFields(object, &type, member, where, type.tag.name);
+                ReadFields(object, &type, member, where, Detail::UnionTagKey);
                 return true;
             }
 
