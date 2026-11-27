@@ -1,14 +1,18 @@
 #include "FenrirAssets/AssetStore.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <cctype>
+#include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <format>
 #include <fstream>
 #include <iterator>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -28,6 +32,7 @@
 #endif
 
 #include "AssetStoreState.hpp"
+#include "AssetWatcher.hpp"
 #include "CubemapLoading.hpp"
 #include "Envelope.hpp"
 #include "FenrirAssets/ImageData.hpp"
@@ -347,6 +352,9 @@ namespace Fenrir
             return record.revision != 0 && record.generation == slot.generation ? &record : nullptr;
         }
 
+        AssetStoreState::AssetStoreState() = default;
+        AssetStoreState::~AssetStoreState() = default;
+
         void AssetStoreState::Free(AssetKind kind, std::uint32_t index)
         {
             AssetTable& table = TableOf(*this, kind);
@@ -358,18 +366,24 @@ namespace Fenrir
             if (!record.key.empty())
             {
                 table.byKey.erase(record.key);
-                // A data asset file's tree goes with the last record from the file, its top level's or a sub-asset's.
+                // A data asset file's tree, and its watch, go with the last record from the file, its top level's or a
+                // sub-asset's.
                 if (kind == AssetKind::Data)
                 {
                     const std::string file = record.key.substr(0, record.key.find('#'));
                     if (!FileInUse(table, file))
                     {
                         fileTrees.erase(file);
+                        if (watcher)
+                        {
+                            watcher->Forget(file);
+                        }
                     }
                 }
                 record.key.clear();
             }
             record.typeName = {};
+            record.firstTypeName = {};
             record.loadDiagnostics.clear();
             record.loadIncomplete = false;
             record.references.clear();
@@ -460,6 +474,13 @@ namespace Fenrir
             config.root.empty() ? ExecutableDirectory() / "assets" : std::filesystem::absolute(config.root);
         m_state->root = root.lexically_normal();
         m_state->source = Detail::MakeDirectorySource(m_state->root, logger);
+        if (config.hotReload)
+        {
+            using std::chrono::milliseconds;
+            m_state->watcher = std::make_unique<Detail::AssetWatcher>(
+                ReloadWatcher::Settings{true, milliseconds(std::max<std::int64_t>(config.reloadInterval, 0)),
+                                        milliseconds(std::max<std::int64_t>(config.reloadDebounce, 0))});
+        }
     }
 
     AssetStore::~AssetStore() = default;
@@ -474,7 +495,12 @@ namespace Fenrir
         return *m_state->logger;
     }
 
-    Detail::AssetSlot AssetStore::LoadSlot(Detail::AssetKind kind, std::string_view path, AssetOwner owner,
+    std::uint32_t AssetStore::OwnerOf(AssetOwner owner)
+    {
+        return Detail::OwnerIdOf(m_state, owner);
+    }
+
+    Detail::AssetSlot AssetStore::LoadSlot(Detail::AssetKind kind, std::string_view path, std::uint32_t owner,
                                            std::optional<LoadDiagnostic>& diagnostic,
                                            std::vector<std::string>& failedUnits)
     {
@@ -493,11 +519,10 @@ namespace Fenrir
             loaded != table.byKey.end() && table.records[loaded->second].data != nullptr)
         {
             Detail::AssetRecord& record = table.records[loaded->second];
-            const Detail::OwnerId ownerId = Detail::OwnerIdOf(m_state, owner);
-            Detail::AddOwner(record, ownerId);
+            Detail::AddOwner(record, owner);
             if (kind == Detail::AssetKind::Model)
             {
-                ShareModel(*static_cast<const Model*>(record.data.get()), ownerId);
+                ShareModel(*static_cast<const Model*>(record.data.get()), owner);
             }
             return {loaded->second, record.generation};
         }
@@ -572,7 +597,7 @@ namespace Fenrir
                             std::format("the model has no {} labelled '{}'", KindName(kind), resolved.label));
             }
             Detail::AssetRecord& record = table.records[found->second];
-            Detail::AddOwner(record, Detail::OwnerIdOf(m_state, owner));
+            Detail::AddOwner(record, owner);
             return {found->second, record.generation};
         }
         if (kind == Detail::AssetKind::Font)
@@ -597,7 +622,7 @@ namespace Fenrir
                 return fail(LoadFailure::ImportFailed, std::move(problem));
             }
             Detail::AssetBox data(new FontData(std::move(font)), &Detail::DestroyAssetData<FontData>);
-            return Detail::InsertAsset(table, std::move(data), Detail::OwnerIdOf(m_state, owner), resolved.key);
+            return Detail::InsertAsset(table, std::move(data), owner, resolved.key);
         }
         if (kind != Detail::AssetKind::Image)
         {
@@ -627,10 +652,10 @@ namespace Fenrir
             return fail(LoadFailure::ImportFailed, std::move(problem));
         }
         Detail::AssetBox data(new ImageData(std::move(*imported.image)), &Detail::DestroyAssetData<ImageData>);
-        return Detail::InsertAsset(table, std::move(data), Detail::OwnerIdOf(m_state, owner), resolved.key);
+        return Detail::InsertAsset(table, std::move(data), owner, resolved.key);
     }
 
-    Detail::AssetSlot AssetStore::LoadDataSlot(std::string_view path, AssetOwner owner, const TypeDescription& type,
+    Detail::AssetSlot AssetStore::LoadDataSlot(std::string_view path, std::uint32_t owner, const TypeDescription& type,
                                                std::optional<LoadDiagnostic>& diagnostic,
                                                std::vector<Serialisation::Diagnostic>& diagnostics, bool& incomplete)
     {
@@ -668,8 +693,7 @@ namespace Fenrir
                 return fail(LoadFailure::WrongType, std::format("it is loaded already as a `{}`, which is not a `{}`",
                                                                 record.typeName, type.name));
             }
-            const Detail::OwnerId ownerId = Detail::OwnerIdOf(m_state, owner);
-            ShareData(loaded->second, ownerId);
+            ShareData(loaded->second, owner);
             // Loading a file's top level loads its sub-assets for the same owner, as a model's are (ADR-0076).
             if (!resolved.labelled)
             {
@@ -678,7 +702,7 @@ namespace Fenrir
                 {
                     if (key.starts_with(prefix))
                     {
-                        ShareData(index, ownerId);
+                        ShareData(index, owner);
                     }
                 }
             }
@@ -687,6 +711,9 @@ namespace Fenrir
             return {loaded->second, record.generation};
         }
 
+        // Looked at before the read, so a write during it is a change the watcher sees.
+        const std::optional<ReloadWatcher::Stamp> stamp =
+            m_state->watcher ? Detail::StampOf(resolved.file) : std::nullopt;
         Detail::AssetSource& source = *m_state->source;
         const std::optional<std::vector<std::byte>> bytes = source.Read(*assetPath);
         if (!bytes)
@@ -695,12 +722,78 @@ namespace Fenrir
                                              : fail(LoadFailure::FileNotFound, "there is no file at this path");
         }
 
+        const std::string fileKey = Utf8Text(resolved.file);
+        Detail::EnvelopeRead read = ReadDataFile(
+            fileKey, *assetPath, resolved.labelled ? std::optional<std::string_view>(resolved.label) : std::nullopt,
+            type, owner, *bytes);
+        diagnostics = std::move(read.diagnostics);
+        if (read.failure)
+        {
+            return fail(*read.failure, std::move(read.failureMessage));
+        }
+        incomplete = read.incomplete;
+        // Kept so a save of the file keeps its comments (ADR-0077 §1).
+        m_state->fileTrees.insert_or_assign(fileKey, std::move(*read.tree));
+        if (m_state->watcher)
+        {
+            m_state->watcher->Track(fileKey, *assetPath, Detail::AssetKind::Data, stamp, ReloadWatcher::Clock::now());
+        }
+
+        // One read gives the file's top level and every sub-asset, each stored under the file's key and its label for
+        // the one owner, as a model's sub-assets are, in the slot reserved for it. Each repeats the whole file's
+        // diagnostics to a later load, as a model's left-out units are.
+        Detail::AssetSlot requested;
+        for (std::size_t entry = 0; entry < read.entries.size(); ++entry)
+        {
+            Detail::EnvelopeEntry& stored = read.entries[entry];
+            std::string key = stored.label.empty() ? fileKey : fileKey + '#' + stored.label;
+            Detail::AssetSlot slot;
+            if (const auto found = table.byKey.find(key); found != table.byKey.end())
+            {
+                Detail::AssetRecord& record = table.records[found->second];
+                slot = {found->second, record.generation};
+                if (record.data == nullptr)
+                {
+                    record.data = std::move(stored.value);
+                    record.loadDiagnostics = diagnostics;
+                    record.loadIncomplete = incomplete;
+                    record.references = std::move(stored.references);
+                }
+                else
+                {
+                    ShareData(found->second, owner);
+                }
+            }
+            else
+            {
+                slot = Detail::InsertAsset(table, std::move(stored.value), owner, std::move(key));
+                Detail::AssetRecord& record = *m_state->Find(Detail::AssetKind::Data, slot);
+                record.typeName = stored.type->name;
+                record.firstTypeName = stored.type->name;
+                record.loadDiagnostics = diagnostics;
+                record.loadIncomplete = incomplete;
+                record.references = std::move(stored.references);
+            }
+            if (entry == read.requested)
+            {
+                requested = slot;
+            }
+        }
+        return requested;
+    }
+
+    Detail::EnvelopeRead AssetStore::ReadDataFile(const std::string& fileKey, const std::string& assetPath,
+                                                  std::optional<std::string_view> label, const TypeDescription& type,
+                                                  std::uint32_t owner, std::span<const std::byte> bytes)
+    {
+        const TypeRegistry& registry = *m_state->types;
+        Detail::AssetTable& table = TableOf(*m_state, Detail::AssetKind::Data);
         // What a reference in this file names (ADR-0076 §2, §3): its target, loaded first with this load's owner, of
         // the kind the field holds and, for a data asset, of a type extending the field's; or why it names none.
         const auto readReference = [&](std::string_view reference, const FieldInfo& field) -> Detail::ReferenceRead {
             // A bare `#name` is a sub-asset of the file that names it (ADR-0076).
             const std::string target =
-                reference.starts_with('#') ? *assetPath + std::string(reference) : std::string(reference);
+                reference.starts_with('#') ? assetPath + std::string(reference) : std::string(reference);
             const std::string_view targetFile = std::string_view(target).substr(0, target.rfind('#'));
             const auto refuse = [](std::string problem) {
                 return Detail::ReferenceRead{Detail::AssetKind::Data, {}, std::move(problem)};
@@ -773,8 +866,6 @@ namespace Fenrir
                                       ReasonText(failure->reason), failure->importerMessage));
         };
 
-        const std::string fileKey = Utf8Text(resolved.file);
-        const Detail::OwnerId ownerId = Detail::OwnerIdOf(m_state, owner);
         Detail::EnvelopeHooks hooks;
         // Each entry's slot is reserved under its key, typed but with no data, before any of the file's references
         // load, as ReserveBuiltin reserves a built-in's: a reference back to this file, or to a sub-asset of it, finds
@@ -786,64 +877,14 @@ namespace Fenrir
             {
                 return;
             }
-            const Detail::AssetSlot slot =
-                Detail::InsertAsset(table, Detail::AssetBox(nullptr, &Detail::DestroyAssetData<Detail::DataValue>),
-                                    ownerId, std::move(key));
-            m_state->Find(Detail::AssetKind::Data, slot)->typeName = entryType.name;
+            const Detail::AssetSlot slot = Detail::InsertAsset(
+                table, Detail::AssetBox(nullptr, &Detail::DestroyAssetData<Detail::DataValue>), owner, std::move(key));
+            Detail::AssetRecord& reserved = *m_state->Find(Detail::AssetKind::Data, slot);
+            reserved.typeName = entryType.name;
+            reserved.firstTypeName = entryType.name;
         };
         hooks.readReference = readReference;
-        Detail::EnvelopeRead read = Detail::ReadDataEnvelope(
-            *bytes, fileKey, resolved.labelled ? std::optional<std::string_view>(resolved.label) : std::nullopt, type,
-            registry, hooks, *m_state->logger);
-        diagnostics = std::move(read.diagnostics);
-        if (read.failure)
-        {
-            return fail(*read.failure, std::move(read.failureMessage));
-        }
-        incomplete = read.incomplete;
-        // Kept so a save of the file keeps its comments (ADR-0077 §1).
-        m_state->fileTrees.insert_or_assign(fileKey, std::move(*read.tree));
-
-        // One read gives the file's top level and every sub-asset, each stored under the file's key and its label for
-        // the one owner, as a model's sub-assets are, in the slot reserved for it. Each repeats the whole file's
-        // diagnostics to a later load, as a model's left-out units are.
-        Detail::AssetSlot requested;
-        for (std::size_t entry = 0; entry < read.entries.size(); ++entry)
-        {
-            Detail::EnvelopeEntry& stored = read.entries[entry];
-            std::string key = stored.label.empty() ? fileKey : fileKey + '#' + stored.label;
-            Detail::AssetSlot slot;
-            if (const auto found = table.byKey.find(key); found != table.byKey.end())
-            {
-                Detail::AssetRecord& record = table.records[found->second];
-                slot = {found->second, record.generation};
-                if (record.data == nullptr)
-                {
-                    record.data = std::move(stored.value);
-                    record.loadDiagnostics = diagnostics;
-                    record.loadIncomplete = incomplete;
-                    record.references = std::move(stored.references);
-                }
-                else
-                {
-                    ShareData(found->second, ownerId);
-                }
-            }
-            else
-            {
-                slot = Detail::InsertAsset(table, std::move(stored.value), ownerId, std::move(key));
-                Detail::AssetRecord& record = *m_state->Find(Detail::AssetKind::Data, slot);
-                record.typeName = stored.type->name;
-                record.loadDiagnostics = diagnostics;
-                record.loadIncomplete = incomplete;
-                record.references = std::move(stored.references);
-            }
-            if (entry == read.requested)
-            {
-                requested = slot;
-            }
-        }
-        return requested;
+        return Detail::ReadDataEnvelope(bytes, fileKey, label, type, registry, hooks, *m_state->logger);
     }
 
     void AssetStore::ShareData(std::uint32_t index, std::uint32_t owner)
@@ -912,7 +953,9 @@ namespace Fenrir
         slot =
             Detail::InsertAsset(table, Detail::AssetBox(value.release(), &Detail::DestroyAssetData<Detail::DataValue>),
                                 Detail::OwnerIdOf(m_state, owner), std::move(key));
-        m_state->Find(Detail::AssetKind::Data, slot)->typeName = registered->name;
+        Detail::AssetRecord& added = *m_state->Find(Detail::AssetKind::Data, slot);
+        added.typeName = registered->name;
+        added.firstTypeName = registered->name;
         return instance;
     }
 
@@ -1213,9 +1256,194 @@ namespace Fenrir
         if (record->key == targetKey || targetKey == fileKey)
         {
             m_state->fileTrees.insert_or_assign(targetKey, std::move(written.tree));
+            // The store's own write is no change to reload; a file an added asset was first saved to is watched now.
+            if (m_state->watcher)
+            {
+                m_state->watcher->Track(targetKey, RootRelative(m_state->root, target).value_or(targetKey),
+                                        Detail::AssetKind::Data, Detail::StampOf(target), ReloadWatcher::Clock::now());
+            }
         }
         result.status = result.emptyReferences > 0 ? SaveStatus::Partial : SaveStatus::Succeeded;
         return result;
+    }
+
+    std::span<const ReloadedAsset> AssetStore::Reloaded() const noexcept
+    {
+        return m_state->reloaded;
+    }
+
+    void AssetStore::PollForReload()
+    {
+        m_state->reloaded.clear();
+        if (!m_state->watcher)
+        {
+            return;
+        }
+        m_state->watcher->Poll(ReloadWatcher::Clock::now(), *m_state->logger,
+                               [this](const std::string& key, Detail::AssetKind kind) {
+                                   // Only data asset files are watched so far; an imported file reloads through its
+                                   // importer (ADR-0081 §2) once it is watched too.
+                                   if (kind == Detail::AssetKind::Data)
+                                   {
+                                       ReloadDataFile(key);
+                                   }
+                               });
+    }
+
+    void AssetStore::ReloadDataFile(const std::string& fileKey)
+    {
+        Detail::AssetTable& table = TableOf(*m_state, Detail::AssetKind::Data);
+        const TypeRegistry& registry = *m_state->types;
+        const std::string prefix = fileKey + '#';
+        // What the store holds from the file, by label: its top level (the empty label, sorted first) and each
+        // sub-asset.
+        std::vector<std::pair<std::string, std::uint32_t>> held;
+        for (const auto& [key, index] : table.byKey)
+        {
+            if (key == fileKey)
+            {
+                held.emplace_back(std::string(), index);
+            }
+            else if (key.starts_with(prefix))
+            {
+                held.emplace_back(key.substr(prefix.size()), index);
+            }
+        }
+        if (held.empty())
+        {
+            return;
+        }
+        std::ranges::sort(held);
+        const std::string assetPath = RootRelative(m_state->root, Utf8Path(fileKey)).value_or(fileKey);
+        const auto keep = [&](std::string_view problem) {
+            m_state->logger->Error("Could not reload {} '{}': {}; what it loaded is kept",
+                                   KindName(Detail::AssetKind::Data), assetPath, problem);
+        };
+
+        // The file is read as the type its first entry the store has first held, so each handle to it reads the new
+        // value as the type it was loaded as.
+        const std::string askedLabel = held.front().first;
+        const TypeDescription* asked = registry.Find(table.records[held.front().second].firstTypeName);
+        const std::optional<std::vector<std::byte>> bytes = m_state->source->Read(assetPath);
+        if (asked == nullptr || !bytes)
+        {
+            keep(asked == nullptr ? "its type is no longer in the type registry" : "the file could not be read");
+            return;
+        }
+        Detail::EnvelopeRead read = ReadDataFile(
+            fileKey, assetPath, askedLabel.empty() ? std::nullopt : std::optional<std::string_view>(askedLabel), *asked,
+            Detail::ReloadOwnerId, *bytes);
+
+        // All or nothing (ADR-0081 §2): a read that failed, or read any value in part, or left out a sub-asset the
+        // store holds, or made one a type its handles cannot read, replaces nothing. The reader logged each located
+        // diagnostic but the one that failed it, which is logged here.
+        const auto entryOf = [&](std::string_view label) {
+            return std::ranges::find(read.entries, label, &Detail::EnvelopeEntry::label);
+        };
+        const auto fileHas = [&](std::string_view label) {
+            if (!read.tree || read.tree->Kind() != Serialisation::ValueKind::Object)
+            {
+                return false;
+            }
+            const Serialisation::Value* sub = read.tree->AsObject().Find("sub");
+            return sub != nullptr && sub->Kind() == Serialisation::ValueKind::Object &&
+                   sub->AsObject().Find(label) != nullptr;
+        };
+        std::string problem;
+        if (read.failure)
+        {
+            problem = read.failureMessage.empty() ? std::string(ReasonText(*read.failure)) : read.failureMessage;
+        }
+        else if (read.incomplete || std::ranges::any_of(read.diagnostics, [](const Serialisation::Diagnostic& found) {
+                     return found.severity == Serialisation::DiagnosticSeverity::Error;
+                 }))
+        {
+            problem = "the file has values that did not read, logged above";
+        }
+        else
+        {
+            for (const auto& [label, index] : held)
+            {
+                const auto entry = entryOf(label);
+                const std::string_view was = table.records[index].firstTypeName;
+                if (entry == read.entries.end())
+                {
+                    if (label.empty() || fileHas(label))
+                    {
+                        problem = std::format("its sub-asset '{}' did not read, as logged above", label);
+                        break;
+                    }
+                }
+                else if (!registry.IsA(entry->type->name, was))
+                {
+                    problem = std::format("{} is a `{}` now, which is not the `{}` its handles read",
+                                          label.empty() ? std::string("its top level")
+                                                        : std::format("its sub-asset '{}'", label),
+                                          entry->type->name, was);
+                    break;
+                }
+            }
+        }
+        if (!problem.empty())
+        {
+            keep(problem);
+            m_state->ReleaseOwner(Detail::ReloadOwnerId);
+            return;
+        }
+
+        // Every owner of what the file loaded owns what it holds now, the targets of the references it adds included.
+        std::vector<Detail::OwnerId> owners;
+        for (const auto& [label, index] : held)
+        {
+            for (const Detail::OwnerId owner : table.records[index].owners)
+            {
+                if (owner != Detail::ReloadOwnerId && std::ranges::find(owners, owner) == owners.end())
+                {
+                    owners.push_back(owner);
+                }
+            }
+        }
+        std::vector<std::uint32_t> stored;
+        for (Detail::EnvelopeEntry& entry : read.entries)
+        {
+            const auto found = table.byKey.find(entry.label.empty() ? fileKey : prefix + entry.label);
+            assert(found != table.byKey.end() && "a reload's entry is held already or was reserved by its read");
+            Detail::AssetRecord& record = table.records[found->second];
+            // A sub-asset the file did not have before was reserved by the read, with no data: added, not replaced.
+            const bool replacing = record.data != nullptr;
+            record.data = std::move(entry.value);
+            record.typeName = entry.type->name;
+            record.loadDiagnostics = read.diagnostics;
+            record.loadIncomplete = read.incomplete;
+            record.references = std::move(entry.references);
+            stored.push_back(found->second);
+            if (replacing)
+            {
+                ++record.revision;
+                const Detail::AssetSlot slot{found->second, record.generation};
+                m_state->reloaded.push_back(
+                    {Detail::PathOf(*m_state, Detail::AssetKind::Data, slot).value_or(record.key),
+                     Detail::AssetKind::Data, slot});
+            }
+        }
+        for (const auto& [label, index] : held)
+        {
+            if (entryOf(label) == read.entries.end())
+            {
+                m_state->logger->Warn("The {} file '{}' no longer has its sub-asset '{}': what it loaded is kept",
+                                      KindName(Detail::AssetKind::Data), assetPath, label);
+            }
+        }
+        for (const Detail::OwnerId owner : owners)
+        {
+            for (const std::uint32_t index : stored)
+            {
+                ShareData(index, owner);
+            }
+        }
+        // Kept so a later save keeps the new file's comments (ADR-0077 §1).
+        m_state->fileTrees.insert_or_assign(fileKey, std::move(*read.tree));
+        m_state->ReleaseOwner(Detail::ReloadOwnerId);
     }
 
     bool AssetStore::SameFileOf(Detail::AssetKind kindA, Detail::AssetSlot a, Detail::AssetKind kindB,

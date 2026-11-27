@@ -41,6 +41,7 @@ namespace Fenrir
         /** @brief What the store set up. Defined in FenrirAssets's private headers; nothing else can use it. */
         struct AssetStoreState;
         struct AssetRecord;
+        struct EnvelopeRead;
 
         /** @brief An asset handle without its type: what the store's untyped core works with. */
         struct AssetSlot
@@ -104,6 +105,47 @@ namespace Fenrir
          * executable. A relative root is taken relative to the working directory when the store is made.
          */
         std::filesystem::path root;
+
+        /**
+         * @brief Whether the store watches every file it loaded and reloads one in place, between frames, when it
+         * changes on disk (ADR-0081). Off, Assets::Install adds no system and nothing is watched; a cooked build turns
+         * it off.
+         */
+        bool hotReload = true;
+
+        /**
+         * @brief How often each watched file is looked at, in milliseconds. Zero looks every frame.
+         * @units ms
+         */
+        std::int64_t reloadInterval = 250;
+
+        /**
+         * @brief How long a changed file must stay unchanged, and openable, before it is reloaded, in milliseconds.
+         * @units ms
+         */
+        std::int64_t reloadDebounce = 400;
+    };
+
+    /**
+     * @brief One asset the store replaced this frame because its file changed on disk (AssetStore::Reloaded): which
+     * file it is from, and the handle it was replaced under.
+     */
+    struct ReloadedAsset
+    {
+        /** @brief Its asset path: root-relative, then `#` and its label for a sub-asset. */
+        std::string path;
+        /** @brief Its kind: which of the store's tables its slot is in. */
+        Detail::AssetKind kind = Detail::AssetKind::Data;
+        /** @brief Its slot: the handle it was replaced under, without its type. */
+        Detail::AssetSlot slot;
+
+        /** @brief Whether this is the asset `handle` names. */
+        template <typename T>
+        [[nodiscard]] bool Is(AssetHandle<T> handle) const noexcept
+        {
+            return kind == Detail::AssetTraits<T>::kind && slot.index == handle.index &&
+                   slot.generation == handle.generation;
+        }
     };
 
     /**
@@ -353,12 +395,13 @@ namespace Fenrir
             Detail::AssetSlot slot;
             if constexpr (Detail::AssetTraits<T>::kind == Detail::AssetKind::Data)
             {
-                slot = LoadDataSlot(path, owner, Describe<T>::Description(), result.diagnostic, result.diagnostics,
-                                    result.incomplete);
+                slot = LoadDataSlot(path, OwnerOf(owner), Describe<T>::Description(), result.diagnostic,
+                                    result.diagnostics, result.incomplete);
             }
             else
             {
-                slot = LoadSlot(Detail::AssetTraits<T>::kind, path, owner, result.diagnostic, result.failedUnits);
+                slot =
+                    LoadSlot(Detail::AssetTraits<T>::kind, path, OwnerOf(owner), result.diagnostic, result.failedUnits);
             }
             result.handle = {slot.index, slot.generation};
             return result;
@@ -756,6 +799,19 @@ namespace Fenrir
          */
         SpawnedNodes SpawnNodes(Scene& scene, AssetHandle<Model> model, Entity parent = {});
 
+        /**
+         * @brief The assets the store replaced at this frame's reload poll because their files changed on disk
+         * (ADR-0081), in the order it replaced them, each once: a game or an editor reacts to a reload here. A data
+         * asset file's top level and each of its sub-assets that the store holds are listed apiece. Cleared at the
+         * next poll; empty with AssetsConfig::hotReload off.
+         *
+         * Each is replaced under the handle it had, its revision bumped, and a reference the new file adds is loaded
+         * for every owner of the asset. A file that fails to read keeps what it loaded, its located diagnostics
+         * logged once per change of the file; a deleted file keeps it too, with one warning, and reloads when it comes
+         * back. A reload makes a new instance, so a pointer TryGet gave before it no longer points at the asset.
+         */
+        [[nodiscard]] std::span<const ReloadedAsset> Reloaded() const noexcept;
+
         /** @brief The asset root relative paths resolve against, absolute. */
         [[nodiscard]] const std::filesystem::path& Root() const noexcept;
 
@@ -805,11 +861,29 @@ namespace Fenrir
             return ReplaceSlot(Detail::AssetTraits<T>::kind, {handle.index, handle.generation}, std::move(box));
         }
 
-        Detail::AssetSlot LoadSlot(Detail::AssetKind kind, std::string_view path, AssetOwner owner,
+        /** @brief The store's number for `owner`, which its untyped core records owners by. */
+        [[nodiscard]] std::uint32_t OwnerOf(AssetOwner owner);
+        Detail::AssetSlot LoadSlot(Detail::AssetKind kind, std::string_view path, std::uint32_t owner,
                                    std::optional<LoadDiagnostic>& diagnostic, std::vector<std::string>& failedUnits);
-        Detail::AssetSlot LoadDataSlot(std::string_view path, AssetOwner owner, const TypeDescription& type,
+        Detail::AssetSlot LoadDataSlot(std::string_view path, std::uint32_t owner, const TypeDescription& type,
                                        std::optional<LoadDiagnostic>& diagnostic,
                                        std::vector<Serialisation::Diagnostic>& diagnostics, bool& incomplete);
+        /**
+         * @brief Reads the envelope `bytes` of the data asset file `fileKey` (its asset path `assetPath`), asking for
+         * the entry `label` names (the top level when none) as `type`: each entry's slot is reserved for `owner`
+         * before the file's references load, for `owner` too, as LoadDataSlot and a reload both read a file.
+         */
+        [[nodiscard]] Detail::EnvelopeRead ReadDataFile(const std::string& fileKey, const std::string& assetPath,
+                                                        std::optional<std::string_view> label,
+                                                        const TypeDescription& type, std::uint32_t owner,
+                                                        std::span<const std::byte> bytes);
+        /**
+         * @brief The between-frames step Assets::Install adds with AssetsConfig::hotReload on: clears Reloaded(), then
+         * reloads each watched file that changed and settled.
+         */
+        void PollForReload();
+        /** @brief Reloads the data asset file `fileKey` in place under its handles, or keeps it whole and says why. */
+        void ReloadDataFile(const std::string& fileKey);
         Detail::AssetSlot AddSlot(Detail::AssetKind kind, Detail::AssetBox data, AssetOwner owner);
         /**
          * @brief Stores a value-initialised instance of `type` for `owner`, keyed by `name` when there is one, and
@@ -820,7 +894,7 @@ namespace Fenrir
         Detail::AssetSlot AddBuiltinSlot(Detail::AssetKind kind, std::string_view name, Detail::AssetBox data);
         Detail::AssetSlot ReserveBuiltin(Detail::AssetKind kind, std::string_view name);
         [[nodiscard]] std::string ImportModelFile(const std::filesystem::path& file, const std::string& fileKey,
-                                                  AssetOwner owner);
+                                                  std::uint32_t owner);
         void ShareModel(const Model& model, std::uint32_t owner);
         /** @brief Adds `owner` to the data asset in slot `index`, and to every asset its references loaded, in turn. */
         void ShareData(std::uint32_t index, std::uint32_t owner);
@@ -861,6 +935,8 @@ namespace Fenrir
         void WarnOverridesShaderLacks(AssetHandle<Shader> shader);
 
         friend struct AssetsProbe;
+        // Install adds PollForReload as its system.
+        friend class Assets;
 
         // Shared with the scenes that own assets, which hold it weakly: a scene that ends after the store frees
         // nothing.

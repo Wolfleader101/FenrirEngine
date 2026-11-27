@@ -188,11 +188,17 @@ namespace Fenrir::Generated::FenrirAssetsTypes
     // Fenrir::AssetsConfig
     constexpr Fenrir::FieldInfo Fenrir_AssetsConfig_Fields[] = {
         {.name = "root", .type = {.kind = Fenrir::Kind::Path}, .doc = "The asset root: the directory relative asset paths resolve against. Empty means `assets/` beside the executable. A relative root is taken relative to the working directory when the store is made."},
+        {.name = "hotReload", .type = {.kind = Fenrir::Kind::Bool}, .doc = "Whether the store watches every file it loaded and reloads one in place, between frames, when it changes on disk (ADR-0081). Off, Assets::Install adds no system and nothing is watched; a cooked build turns it off."},
+        {.name = "reloadInterval", .type = {.kind = Fenrir::Kind::I64}, .doc = "How often each watched file is looked at, in milliseconds. Zero looks every frame.", .metadata = {.units = "ms"}},
+        {.name = "reloadDebounce", .type = {.kind = Fenrir::Kind::I64}, .doc = "How long a changed file must stay unchanged, and openable, before it is reloaded, in milliseconds.", .metadata = {.units = "ms"}},
     };
     void Fenrir_AssetsConfig_Visit(void* instance, Fenrir::FieldVisitor& visitor)
     {
         auto& value = *static_cast<Fenrir::AssetsConfig*>(instance);
         visitor.Field(Fenrir_AssetsConfig_Fields[0], Fenrir::ValueRef(&value.root, Fenrir_AssetsConfig_Fields[0].type));
+        visitor.Field(Fenrir_AssetsConfig_Fields[1], Fenrir::ValueRef(&value.hotReload, Fenrir_AssetsConfig_Fields[1].type));
+        visitor.Field(Fenrir_AssetsConfig_Fields[2], Fenrir::ValueRef(&value.reloadInterval, Fenrir_AssetsConfig_Fields[2].type));
+        visitor.Field(Fenrir_AssetsConfig_Fields[3], Fenrir::ValueRef(&value.reloadDebounce, Fenrir_AssetsConfig_Fields[3].type));
     }
     constexpr Fenrir::TypeDescription Fenrir_AssetsConfig{
         .name = "Fenrir::AssetsConfig",
