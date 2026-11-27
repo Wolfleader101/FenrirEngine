@@ -925,7 +925,8 @@ namespace Fenrir
          *
          * No file is written, and the scene is not read from the store's source; an instance's source still is, as
          * any expansion reads one. Nothing is recorded for hot reload: the copy is no file's scene. What the write and
-         * read report is logged, under `scene`'s name as the path. Synchronous, on the main thread.
+         * read report is logged, under `scene`'s name as the path. As LoadScene, a `name` another scene has already
+         * makes a second scene of that name. Synchronous, on the main thread.
          */
         Scene& CopyScene(App& app, Scene& scene, std::string_view name);
 
@@ -1280,6 +1281,8 @@ namespace Fenrir
         SceneLoadResult ReadSceneTree(Serialisation::Value& tree, std::string_view named, const std::string& assetPath,
                                       const std::string& fileKey, const std::function<Scene&()>& makeScene,
                                       Entity parent, Detail::SceneRead read, SceneLoadResult result);
+        /** @brief Logs that loading the scene `named` failed for `diagnostic`, and records it in `result` as Failed. */
+        void FailSceneRead(std::string_view named, Serialisation::Diagnostic diagnostic, SceneLoadResult& result);
         /**
          * @brief What the reference `reference` in the file `assetPath` names (ADR-0076 §2, §3): its target, loaded
          * first for `owner`, of the kind `field` holds and, for a data asset, of a type extending the field's; or why

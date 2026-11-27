@@ -20,6 +20,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "AssetsProbe.hpp"
+#include "CountingSource.hpp"
 #include "DataAssetsTest.hpp"
 #include "FenrirECS/ComponentType.hpp"
 #include "FenrirECS/ComponentWatch.hpp"
@@ -28,6 +29,7 @@
 #include "FenrirECS/SceneComponents.hpp"
 #include "FenrirScene/Scene.hpp"
 
+using AssetsTest::CountingSource;
 using AssetsTest::DataApp;
 using AssetsTest::Fixtures;
 using AssetsTest::ReadFile;
@@ -195,31 +197,6 @@ namespace
         return entity.HasComponent<Fenrir::EntityId>() ? Fenrir::SpellEntityId(entity.GetComponent<Fenrir::EntityId>())
                                                        : std::string();
     }
-
-    // The store's source over the asset root, counting each read, so a test can tell nothing was read.
-    class CountingSource : public Fenrir::Detail::AssetSource
-    {
-      public:
-        CountingSource(std::unique_ptr<Fenrir::Detail::AssetSource> inner, std::shared_ptr<std::size_t> reads)
-            : m_inner(std::move(inner)), m_reads(std::move(reads))
-        {
-        }
-
-        bool Exists(std::string_view path) override
-        {
-            return m_inner->Exists(path);
-        }
-
-        std::optional<std::vector<std::byte>> Read(std::string_view path) override
-        {
-            ++*m_reads;
-            return m_inner->Read(path);
-        }
-
-      private:
-        std::unique_ptr<Fenrir::Detail::AssetSource> m_inner;
-        std::shared_ptr<std::size_t> m_reads;
-    };
 
     // Makes `test`'s store read through a counting source over `root`, and gives the count.
     std::shared_ptr<std::size_t> CountReads(DataApp& test, const TempRoot& root)

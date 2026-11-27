@@ -975,9 +975,7 @@ namespace Fenrir
             Detail::WholeFileLoadProblem(m_state->root, path, assetPath, fileKey);
         // The load fails with `diagnostic`, logged here once, and no scene made.
         const auto fail = [&](Ser::Diagnostic diagnostic) -> SceneLoadResult {
-            m_state->logger->Error("Could not load scene '{}': {}", path, Ser::FormatDiagnostic(diagnostic));
-            result.status = LoadStatus::Failed;
-            result.diagnostics.push_back(std::move(diagnostic));
+            FailSceneRead(path, std::move(diagnostic), result);
             return std::move(result);
         };
         const auto failWith = [&](std::string message) {
@@ -1008,6 +1006,13 @@ namespace Fenrir
         return ReadSceneTree(*tree.tree, path, assetPath, fileKey, makeScene, parent, read, std::move(result));
     }
 
+    void AssetStore::FailSceneRead(std::string_view named, Ser::Diagnostic diagnostic, SceneLoadResult& result)
+    {
+        m_state->logger->Error("Could not load scene '{}': {}", named, Ser::FormatDiagnostic(diagnostic));
+        result.status = LoadStatus::Failed;
+        result.diagnostics.push_back(std::move(diagnostic));
+    }
+
     SceneLoadResult AssetStore::ReadSceneTree(Ser::Value& tree, std::string_view named, const std::string& assetPath,
                                               const std::string& fileKey, const std::function<Scene&()>& makeScene,
                                               Entity parent, Detail::SceneRead read, SceneLoadResult result)
@@ -1015,11 +1020,10 @@ namespace Fenrir
         Ser::Value* data = nullptr;
         if (std::optional<EnvelopeProblem> problem = CheckSceneEnvelope(tree, data))
         {
-            Ser::Diagnostic diagnostic = Detail::LocatedAt(Ser::DiagnosticSeverity::Error, fileKey, problem->node, tree,
-                                                           std::move(problem->message));
-            m_state->logger->Error("Could not load scene '{}': {}", named, Ser::FormatDiagnostic(diagnostic));
-            result.status = LoadStatus::Failed;
-            result.diagnostics.push_back(std::move(diagnostic));
+            FailSceneRead(named,
+                          Detail::LocatedAt(Ser::DiagnosticSeverity::Error, fileKey, problem->node, tree,
+                                            std::move(problem->message)),
+                          result);
             return result;
         }
 

@@ -8,7 +8,8 @@ add_executable(FenrirAssetsTests PublicHeaders.cpp Owners.cpp Revisions.cpp Load
                                  Clips.cpp BoneMasks.cpp SkinnedImport.cpp MeshLods.cpp Fonts.cpp ImageUpdates.cpp
                                  DataAssets.cpp AssetPaths.cpp SubAssets.cpp References.cpp Saving.cpp Move.cpp HotReload.cpp Scenes.cpp Instances.cpp SceneInstances.cpp AssetsTest.hpp
                                  DataAssetsTest.hpp
-                                 AssetsProbe.hpp)
+                                 AssetsProbe.hpp
+                                 CountingSource.hpp)
 # Models built in code, which FenrirSkeleton's spawning tests also build on.
 target_sources(FenrirAssetsTests PRIVATE ProceduralModels.cpp)
 target_link_libraries(FenrirAssetsTests PRIVATE FenrirAssets Catch2::Catch2WithMain)
