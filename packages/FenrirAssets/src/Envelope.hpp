@@ -106,6 +106,16 @@ namespace Fenrir::Detail
         std::function<void(std::string_view label, const TypeDescription& type)> reading;
     };
 
+    /** @brief Moves every diagnostic of `from` onto the end of `to`, in order. */
+    void Append(std::vector<Serialisation::Diagnostic>& to, std::vector<Serialisation::Diagnostic>&& from);
+
+    /**
+     * @brief Logs `diagnostic`, a reader's or writer's own, once (an error as an error, a warning as a warning), and
+     * appends it to `diagnostics`.
+     */
+    void Record(Serialisation::Diagnostic diagnostic, ILogger& logger,
+                std::vector<Serialisation::Diagnostic>& diagnostics);
+
     /** @brief How a diagnostic names what it found at `node`: its kind, with a string's or number's text; `none` for
      * null. */
     [[nodiscard]] std::string Found(const Serialisation::Value* node);
@@ -179,6 +189,13 @@ namespace Fenrir::Detail
 
     /** @brief The scene layout's version, a scene envelope's `version`: ADR-0078's layout is 1. */
     inline constexpr std::uint32_t SceneVersion = 1;
+
+    /**
+     * @brief The described components a scene block spells apart from its `components` (ADR-0078 §4, ADR-0080):
+     * `Relationship` as `parent` and the order, `EntityId` as `id`, and `Instance` as `instance`. The writer never
+     * writes them as entries, and the reader ignores an entry naming one.
+     */
+    inline constexpr std::string_view SpelledApart[] = {"Fenrir::Relationship", "Fenrir::EntityId", "Fenrir::Instance"};
 
     /**
      * @brief A `writeReference` that writes what `inner` names a reference by, unless it names no path or one a file

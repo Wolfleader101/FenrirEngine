@@ -15,6 +15,10 @@
         components: {
           "Fenrir::Name": {name: "Level"},
           "Fenrir::Transform": {},
+          "Mods::Tint": {
+            hue: 3,
+            version: 1,
+          },
         },
       },
       {

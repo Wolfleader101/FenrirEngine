@@ -327,8 +327,9 @@ namespace Fenrir
     {
         /**
          * @brief Succeeded when the file was written with every reference naming its target; Partial when it was
-         * written with references written `null` (`nullReferences`); Failed when nothing was written. Leaving out what
-         * a scene file never holds makes no save Partial.
+         * written with references written `null` (`nullReferences`), or with a component a load kept left out
+         * (`keptComponentsLost`); Failed when nothing was written. Leaving out what a scene file never holds makes no
+         * save Partial.
          */
         SaveStatus status = SaveStatus::Succeeded;
         /** @brief The entities written, one block apiece. */
@@ -343,9 +344,14 @@ namespace Fenrir
         /**
          * @brief The components of written entities left out of `components`: undescribed ones, `Relationship`, those
          * of a `@transient` type, `EntityId` and `Instance`, which a block spells as its `id` and `instance`, and
-         * `UnknownComponents`, whose entries are written in its place.
+         * `UnknownComponents`, whose entries are written in its place, and each of those entries that could not be.
          */
         std::size_t componentsSkipped = 0;
+        /**
+         * @brief The components a load kept in an `UnknownComponents` that could not be written back, each with a
+         * warning: one whose name a component the entity has now holds, or whose bytes do not decode.
+         */
+        std::size_t keptComponentsLost = 0;
         /**
          * @brief The references written `null` for want of a target the file can name: an `entity` field naming an
          * entity outside the file, and an asset handle field naming an asset with no asset path a file can hold.
@@ -760,9 +766,10 @@ namespace Fenrir
          * has one), so an `entity` field in a resource names an entity of the file.
          *
          * Tolerant past the envelope: a block that is not an object is left out; one with a bad id, or an id an
-         * earlier block has, loads with no place in the id map; one whose `parent` names no earlier block loads as a
-         * root. A component type the registry lacks is kept opaque in the entity's `UnknownComponents`, with one
-         * warning per type per load, and SaveScene writes it back unchanged. Each is reported in the result.
+         * earlier block has, loads with no `EntityId` and no place in the id map, so a save mints it one; one whose
+         * `parent` names no earlier block loads as a root. A component type the registry lacks is kept opaque in the
+         * entity's `UnknownComponents`, with one warning per type per load, and SaveScene writes it back unchanged.
+         * Each is reported in the result.
          */
         SceneLoadResult LoadScene(App& app, std::string_view path, std::string_view name = {});
 

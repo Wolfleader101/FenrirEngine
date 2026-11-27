@@ -477,6 +477,7 @@ TEST_CASE("A loaded scene is named by its path when no name is given", "[assets]
 
     const SceneLoadResult loaded = test.store.LoadScene(test.app, LevelPath);
 
+    INFO("the load succeeds, and the scene is named by the path as given");
     REQUIRE(loaded.status == LoadStatus::Succeeded);
     REQUIRE(loaded.scene->GetName() == LevelPath);
 }
@@ -493,7 +494,8 @@ TEST_CASE("A watch drained after a load sees one add per component the file hold
     Fenrir::ComponentWatch healths = entities.Watch(Fenrir::ComponentType::Native<AssetsTest::Health>());
     Fenrir::ComponentWatch followers = entities.Watch(Fenrir::ComponentType::Native<AssetsTest::Follower>());
 
-    const SceneLoadResult loaded = Fenrir::AssetsProbe::LoadSceneInto(test.store, scene, LevelPath);
+    const SceneLoadResult loaded = Fenrir::AssetsProbe::ReadSceneInto(test.store, scene, LevelPath);
+    INFO("the golden file loads into the watched scene");
     REQUIRE(loaded.status == LoadStatus::Succeeded);
 
     INFO("each of the four entities gains one Name, filled in place, and one EntityId, and nothing is removed");
@@ -520,16 +522,18 @@ TEST_CASE("A component type the registry lacks is kept with one warning, and wri
 
     const SceneLoadResult loaded = test.store.LoadScene(test.app, LevelPath, "Level");
 
-    INFO("the load is Partial, keeping the two Glow entries");
+    INFO("the load is Partial, keeping the level's Tint and the two Glow entries");
     REQUIRE(loaded.status == LoadStatus::Partial);
-    REQUIRE(loaded.unknownComponentsKept == 2);
+    REQUIRE(loaded.unknownComponentsKept == 3);
     REQUIRE(loaded.entities == 4);
     REQUIRE(loaded.components == 10);
-    INFO("one warning for the type in this load, located at the first entry, though two entities hold one");
-    REQUIRE(loaded.diagnostics.size() == 1);
+    INFO("one warning per type in this load, each located at its first entry, though two entities hold a Glow");
+    REQUIRE(loaded.diagnostics.size() == 2);
     REQUIRE(loaded.diagnostics[0].severity == DiagnosticSeverity::Warning);
-    REQUIRE(loaded.diagnostics[0].message.find("`Mods::Glow` is no component type") != std::string::npos);
-    REQUIRE(loaded.diagnostics[0].line == 44);
+    REQUIRE(loaded.diagnostics[0].message.find("`Mods::Tint` is no component type") != std::string::npos);
+    REQUIRE(loaded.diagnostics[0].line == 18);
+    REQUIRE(loaded.diagnostics[1].message.find("`Mods::Glow` is no component type") != std::string::npos);
+    REQUIRE(loaded.diagnostics[1].line == 48);
     REQUIRE(AssetsTest::CountContaining(*test.warnings, "`Mods::Glow` is no component type") == 1);
     INFO("the sun's Glow is held opaque with the version its entry recorded");
     const Entity sun = Named(*loaded.scene, "Sun");
@@ -540,9 +544,10 @@ TEST_CASE("A component type the registry lacks is kept with one warning, and wri
     REQUIRE(kept[0].version == 3);
 
     const SceneSaveResult saved = test.store.SaveScene(*loaded.scene, "levels/again.scene.json5");
-    INFO("the save writes each Glow back among its entity's entries, version and all: the file comes back unchanged");
+    INFO("the save writes each kept entry back among its entity's entries as it was read, the Glow's leading version "
+         "and the Tint's trailing `version: 1` alike: the file comes back unchanged");
     REQUIRE(saved.status == SaveStatus::Succeeded);
-    REQUIRE(saved.componentsWritten == 12);
+    REQUIRE(saved.componentsWritten == 13);
     REQUIRE(ReadFile(root.Path() / "levels/again.scene.json5") ==
             ReadFile(Fixtures() / "scenes" / "unknown-components.scene.json5"));
 }
@@ -594,10 +599,13 @@ TEST_CASE("A block repeating an earlier block's id loads, with one located error
     INFO("the sword follows the player, the first block with the id");
     Fenrir::Scene& scene = *loaded.scene;
     REQUIRE(Named(scene, "Sword").GetComponent<AssetsTest::Follower>().target == Named(scene, "Player"));
-    INFO("the sun is still a child of the level, and a save gives it an id of its own");
+    INFO("the sun is still a child of the level, and loads with no id, so no two entities share one");
     REQUIRE(ChildNames(Named(scene, "Level")) == std::vector<std::string>{"Player", "Sun"});
-    REQUIRE(test.store.SaveScene(scene, "levels/again.scene.json5").status == SaveStatus::Succeeded);
     REQUIRE(IdOf(Named(scene, "Player")) == "d4e5f");
+    REQUIRE(IdOf(Named(scene, "Sun")).empty());
+    INFO("a save mints the sun an id of its own");
+    REQUIRE(test.store.SaveScene(scene, "levels/again.scene.json5").status == SaveStatus::Succeeded);
+    REQUIRE(IdOf(Named(scene, "Sun")).size() == 5);
     REQUIRE(IdOf(Named(scene, "Sun")) != "d4e5f");
 }
 
@@ -610,15 +618,22 @@ TEST_CASE("A scene file that does not parse fails, with its located diagnostics 
 
     const SceneLoadResult loaded = test.store.LoadScene(test.app, LevelPath, "Level");
 
+    INFO("the load fails, makes no scene and reads nothing");
     REQUIRE(loaded.status == LoadStatus::Failed);
     REQUIRE(loaded.scene == nullptr);
+    REQUIRE(SceneCount(test.app) == scenes);
     REQUIRE(loaded.roots.empty());
     REQUIRE(loaded.entities == 0);
-    REQUIRE(SceneCount(test.app) == scenes);
-    INFO("the text's own error says where the file stopped");
+    REQUIRE(loaded.components == 0);
+    INFO("the text's own errors say where the file stopped, each located past the first line");
     REQUIRE_FALSE(loaded.diagnostics.empty());
-    REQUIRE(loaded.diagnostics[0].severity == DiagnosticSeverity::Error);
-    REQUIRE(loaded.diagnostics[0].line > 1);
+    for (const Fenrir::Serialisation::Diagnostic& diagnostic : loaded.diagnostics)
+    {
+        REQUIRE(diagnostic.severity == DiagnosticSeverity::Error);
+        REQUIRE(diagnostic.line > 1);
+    }
+    INFO("the store's one error says the load failed");
+    REQUIRE(AssetsTest::CountContaining(*test.errors, "Could not load scene") == 1);
 }
 
 TEST_CASE("A file naming another type fails at its `type`, with no scene made", "[assets][scenes]")
@@ -630,9 +645,11 @@ TEST_CASE("A file naming another type fails at its `type`, with no scene made", 
 
     const SceneLoadResult loaded = test.store.LoadScene(test.app, LevelPath, "Level");
 
+    INFO("the load fails and makes no scene");
     REQUIRE(loaded.status == LoadStatus::Failed);
     REQUIRE(loaded.scene == nullptr);
     REQUIRE(SceneCount(test.app) == scenes);
+    INFO("one error, at the `type`, says what was expected and found, logged once");
     REQUIRE(loaded.diagnostics.size() == 1);
     REQUIRE(loaded.diagnostics[0].line == 3);
     REQUIRE(loaded.diagnostics[0].message == "expected `type` \"Fenrir::Scene\", found \"AssetsTest::WeaponData\"");
@@ -659,4 +676,30 @@ TEST_CASE("A scene load from outside the asset root, of a sub-asset or of a miss
         REQUIRE(test.errors->size() == 1);
     }
     REQUIRE(SceneCount(test.app) == scenes);
+}
+
+TEST_CASE("A kept component that cannot be written back is left out with a warning, and the save is Partial",
+          "[assets][scenes][unknown]")
+{
+    TempRoot root;
+    CopyImages(root);
+    DataApp test({root.Path()});
+    Fenrir::Scene& scene = test.app.CreateScene("Level");
+    const Level level = BuildLevel(test, scene);
+    Fenrir::UnknownComponents kept;
+    kept.components.push_back({"Mods::Broken", 1, {std::byte{0x00}, std::byte{0xFF}}});
+    Entity(level.sun).AddComponent<Fenrir::UnknownComponents>(std::move(kept));
+
+    const SceneSaveResult saved = test.store.SaveScene(scene, LevelPath);
+
+    INFO("the file is written, Partial, with one warning naming the entity and the type");
+    REQUIRE(saved.status == SaveStatus::Partial);
+    REQUIRE(saved.keptComponentsLost == 1);
+    REQUIRE(saved.diagnostics.size() == 1);
+    REQUIRE(saved.diagnostics[0].severity == DiagnosticSeverity::Warning);
+    REQUIRE(saved.diagnostics[0].message.find("entity `s3w8c`: the kept `Mods::Broken`") != std::string::npos);
+    INFO("the rest of the scene is the golden file, and the lost entry is counted as left out");
+    REQUIRE(ReadFile(root.Path() / LevelPath) == Golden());
+    REQUIRE(saved.componentsWritten == 10);
+    REQUIRE(saved.componentsSkipped == 10);
 }

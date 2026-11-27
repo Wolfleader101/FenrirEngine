@@ -5,7 +5,6 @@
 #include <cstdint>
 #include <format>
 #include <functional>
-#include <iterator>
 #include <limits>
 #include <optional>
 #include <string>
@@ -43,17 +42,10 @@ namespace Fenrir
     {
         namespace Ser = Serialisation;
 
-        // The described components a block spells apart from `components` (ADR-0078 §4, ADR-0080): an entry naming
-        // one is ignored, with a warning, since `parent`, `id` and `instance` say what it would.
-        constexpr std::string_view SpelledApart[] = {"Fenrir::Relationship", "Fenrir::EntityId", "Fenrir::Instance"};
+        using Detail::Append;
 
-        void Append(std::vector<Ser::Diagnostic>& to, std::vector<Ser::Diagnostic>&& from)
-        {
-            to.insert(to.end(), std::make_move_iterator(from.begin()), std::make_move_iterator(from.end()));
-        }
-
-        // A component's or resource's entry: the version it was written at (1 when it has none), its fields with that
-        // `version` taken out, and whether the version could be read.
+        // The version a component's or resource's entry was written at (1 when it has none), and whether its
+        // `version` could be read.
         struct EntryVersion
         {
             std::uint32_t version = 1;
@@ -106,16 +98,8 @@ namespace Fenrir
             void Report(Ser::DiagnosticSeverity severity, const Ser::Value* node, const Ser::Value& fallback,
                         std::string message)
             {
-                Ser::Diagnostic diagnostic = Detail::LocatedAt(severity, path, node, fallback, std::move(message));
-                if (severity == Ser::DiagnosticSeverity::Error)
-                {
-                    logger.Error("{}", Ser::FormatDiagnostic(diagnostic));
-                }
-                else
-                {
-                    logger.Warn("{}", Ser::FormatDiagnostic(diagnostic));
-                }
-                result.diagnostics.push_back(std::move(diagnostic));
+                Detail::Record(Detail::LocatedAt(severity, path, node, fallback, std::move(message)), logger,
+                               result.diagnostics);
             }
 
             // Upgrades `tree`, an entry of `type` written at `version`, then fills `value`, an instance of the type,
@@ -178,18 +162,18 @@ namespace Fenrir
                 return std::nullopt;
             }
 
-            // Fills the entity `entity`, reserved for `block`, which is the file's `index`th: completes it, gives it
-            // its id, adds its components and appends it to its parent. `filled` holds every entity of an earlier
-            // block, which a `parent` may name.
+            // Fills the entity `entity`, reserved for `block`: completes it, gives it its id `id` when it `holdsId`,
+            // adds its components and appends it to its parent. `filled` holds every entity of an earlier block, which
+            // a `parent` may name.
             void FillBlock(Ser::Object& block, const Ser::Value& at, std::uint32_t entity, std::optional<EntityId> id,
-                           const std::unordered_set<std::uint32_t>& filled)
+                           bool holdsId, const std::unordered_set<std::uint32_t>& filled)
             {
                 EntityList& entities = scene.GetEntityList();
                 entities.CompleteEntity(entity);
                 Entity handle = entities.GetEntity(entity);
                 ++result.entities;
                 const std::string spelled = id ? SpellEntityId(*id) : std::string("?");
-                if (id)
+                if (holdsId)
                 {
                     handle.AddComponent<EntityId>(*id);
                 }
@@ -242,7 +226,7 @@ namespace Fenrir
             void FillComponent(Ser::Member& member, const Ser::Value& at, std::uint32_t entity,
                                const std::string& spelled, UnknownComponents& unknown)
             {
-                if (std::ranges::find(SpelledApart, member.key) != std::end(SpelledApart))
+                if (std::ranges::find(Detail::SpelledApart, member.key) != std::end(Detail::SpelledApart))
                 {
                     Report(Ser::DiagnosticSeverity::Warning, &member.value, at,
                            std::format("entity `{}`: `{}` is spelled by the block's `parent`, `id` or `instance`, not "
@@ -250,14 +234,14 @@ namespace Fenrir
                                        spelled, member.key));
                     return;
                 }
-                const EntryVersion version = TakeVersion(member.value);
                 const TypeDescription* type = registry.Find(member.key);
                 const std::optional<ComponentType> component = type != nullptr && type->role == Role::Component
                                                                    ? ComponentType::ForName(registry, type->name)
                                                                    : std::nullopt;
                 if (!component)
                 {
-                    // Kept as it was read, `version` apart, so a save writes it back unchanged (ADR-0078 §9).
+                    // Kept whole as it was read, `version` and all, so a save writes it back unchanged (ADR-0078 §9);
+                    // the version is noted beside it, 1 when it has none it can read.
                     if (unknownWarned.insert(member.key).second)
                     {
                         Report(Ser::DiagnosticSeverity::Warning, &member.value, at,
@@ -265,12 +249,13 @@ namespace Fenrir
                                            "as it is, and written back unchanged on save",
                                            spelled, member.key));
                     }
-                    unknown.components.push_back(
-                        {member.key, version.version, Ser::EncodeTree(member.value, Ser::Trivia::Keep)});
+                    std::vector<std::byte> tree = Ser::EncodeTree(member.value, Ser::Trivia::Keep);
+                    unknown.components.push_back({member.key, TakeVersion(member.value).version, std::move(tree)});
                     ++result.unknownComponentsKept;
                     return;
                 }
 
+                const EntryVersion version = TakeVersion(member.value);
                 EntityList& entities = scene.GetEntityList();
                 // Name and Transform are there already, from CompleteEntity; any other is added default.
                 entities.Add(*component, entity);
@@ -326,7 +311,9 @@ namespace Fenrir
                     Ser::Object* block = nullptr;
                     const Ser::Value* at = nullptr;
                     std::uint32_t entity = 0;
+                    // The block's id, when it parsed; the entity holds it only when no earlier block has it.
                     std::optional<EntityId> id;
+                    bool holdsId = false;
                 };
                 std::vector<Reserved> reserved;
                 EntityList& entities = scene.GetEntityList();
@@ -345,14 +332,18 @@ namespace Fenrir
                         Ser::Object& block = element.value.AsObject();
                         std::optional<EntityId> id = BlockId(block, element.value);
                         const std::uint32_t entity = entities.ReserveEntity();
+                        bool holdsId = id.has_value();
                         if (id && !ids.emplace(id->value, entity).second)
                         {
+                            // No two entities of the scene share an id: this one loads with none, as one whose id
+                            // did not parse does.
                             Report(Ser::DiagnosticSeverity::Error, block.Find("id"), element.value,
                                    std::format("the id `{}` is an earlier block's too; references to it name that "
-                                               "block, and a save mints this entity another",
+                                               "block, and this entity loads with no id, so a save mints one",
                                                SpellEntityId(*id)));
+                            holdsId = false;
                         }
-                        reserved.push_back({&block, &element.value, entity, id});
+                        reserved.push_back({&block, &element.value, entity, id, holdsId});
                     }
                 }
 
@@ -360,7 +351,7 @@ namespace Fenrir
                 std::unordered_set<std::uint32_t> filled;
                 for (const Reserved& entry : reserved)
                 {
-                    FillBlock(*entry.block, *entry.at, entry.entity, entry.id, filled);
+                    FillBlock(*entry.block, *entry.at, entry.entity, entry.id, entry.holdsId, filled);
                     filled.insert(entry.entity);
                 }
 

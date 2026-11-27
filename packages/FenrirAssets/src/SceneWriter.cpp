@@ -44,10 +44,6 @@ namespace Fenrir
         constexpr std::string_view NameType = "Fenrir::Name";
         constexpr std::string_view TransformType = "Fenrir::Transform";
 
-        // The described components a block never writes under `components`: Relationship is spelled by `parent` and
-        // the order, EntityId by `id` and Instance by `instance` (ADR-0078 §4, ADR-0080).
-        constexpr std::string_view SpelledApart[] = {"Fenrir::Relationship", "Fenrir::EntityId", "Fenrir::Instance"};
-
         // One described component type a block writes when its entity has one.
         struct WrittenType
         {
@@ -68,7 +64,8 @@ namespace Fenrir
             std::vector<WrittenType> written;
             for (const TypeDescription* type : registry.Types(Role::Component))
             {
-                if (type->transient || std::ranges::find(SpelledApart, type->name) != std::end(SpelledApart))
+                if (type->transient ||
+                    std::ranges::find(Detail::SpelledApart, type->name) != std::end(Detail::SpelledApart))
                 {
                     continue;
                 }
@@ -109,11 +106,10 @@ namespace Fenrir
             entity.ForEachChild([&](const Entity& child) { CollectWritten(child, written, skipped); });
         }
 
-        // An entry's object: `version` when it is above 1, then `fields`, the entry's fields as ToTree gave them or a
-        // load kept them.
+        // An entry's object: `version` when it is above 1, then `fields`, the type's fields as ToTree gave them.
         Ser::Value Entry(std::uint32_t version, Ser::Value fields)
         {
-            if (version <= 1 || fields.Kind() != Ser::ValueKind::Object)
+            if (version <= 1)
             {
                 return fields;
             }
@@ -267,23 +263,36 @@ namespace Fenrir
                     {std::string(entry.type->name),
                      Entry(entry.type->version, Ser::ToTree(component, *entry.type, registry, resolvers))});
             }
-            // The components a load kept opaque go back as they were read, among the rest in name order (ADR-0078
-            // §9). The holder is no entry of its own, so it is counted as left out.
+            // The components a load kept opaque go back as they were read, `version` and all, among the rest in name
+            // order (ADR-0078 §9). The holder is no entry of its own, so it is counted as left out. One that cannot go
+            // back (an entry of its name is written already, or its bytes do not decode) is left out too, with a
+            // warning, and counted.
             std::size_t kept = 0;
             if (entity.HasComponent<UnknownComponents>())
             {
                 for (const UnknownComponent& unknown : entity.GetComponent<UnknownComponents>().components)
                 {
+                    const auto lose = [&](std::string_view why) {
+                        Detail::Record({.severity = Ser::DiagnosticSeverity::Warning,
+                                        .path = named,
+                                        .message = std::format("entity `{}`: the kept `{}` {}; it is left out",
+                                                               ids.at(id), unknown.typeName, why)},
+                                       *m_state->logger, result.diagnostics);
+                        ++result.componentsSkipped;
+                        ++result.keptComponentsLost;
+                    };
                     if (std::ranges::find(entries, unknown.typeName, &Ser::Member::key) != entries.end())
                     {
+                        lose("has the name of a component the entity has now");
                         continue;
                     }
                     Ser::ReadTreeResult tree = Ser::DecodeTree(unknown.tree, named, *m_state->logger);
                     if (!tree.tree)
                     {
+                        lose("is not one whole tree encoding");
                         continue;
                     }
-                    entries.push_back({unknown.typeName, Entry(unknown.version, std::move(*tree.tree))});
+                    entries.push_back({unknown.typeName, std::move(*tree.tree)});
                     ++kept;
                 }
             }
@@ -314,7 +323,8 @@ namespace Fenrir
         {
             return fail(*problem);
         }
-        result.status = result.nullReferences > 0 ? SaveStatus::Partial : SaveStatus::Succeeded;
+        result.status =
+            result.nullReferences > 0 || result.keptComponentsLost > 0 ? SaveStatus::Partial : SaveStatus::Succeeded;
         return result;
     }
 } // namespace Fenrir

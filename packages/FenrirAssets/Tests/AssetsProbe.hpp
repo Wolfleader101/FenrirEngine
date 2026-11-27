@@ -32,7 +32,7 @@ namespace Fenrir
          * @brief Reads the scene file `path` into `scene`, which LoadScene makes itself: so a test can watch the
          * scene's components before the load fills it.
          */
-        static SceneLoadResult LoadSceneInto(AssetStore& store, Scene& scene, std::string_view path)
+        static SceneLoadResult ReadSceneInto(AssetStore& store, Scene& scene, std::string_view path)
         {
             return store.ReadSceneFile(path, [&]() -> Scene& { return scene; });
         }

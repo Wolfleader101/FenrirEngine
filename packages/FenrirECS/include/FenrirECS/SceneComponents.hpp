@@ -27,7 +27,10 @@ namespace Fenrir
         std::string typeName;
         /** @brief The type version the file recorded, 1 when it recorded none. */
         std::uint32_t version = 1;
-        /** @brief The component's value subtree as FenrirSerialisation's EncodeTree bytes, never read here. */
+        /**
+         * @brief The component's entry as the file held it, `version` included, as FenrirSerialisation's EncodeTree
+         * bytes, never read here.
+         */
         std::vector<std::byte> tree;
     };
 

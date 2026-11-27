@@ -31,11 +31,6 @@ namespace Fenrir::Detail
     {
         namespace Ser = Serialisation;
 
-        void Append(std::vector<Ser::Diagnostic>& to, std::vector<Ser::Diagnostic>&& from)
-        {
-            to.insert(to.end(), std::make_move_iterator(from.begin()), std::make_move_iterator(from.end()));
-        }
-
         // The string node under `node` whose text is the one at `text`: the bridge hands a resolver the node's own
         // text, so its address finds the node, and with it the line and column. Null when none is.
         const Ser::Value* StringAt(const Ser::Value& node, const char* text)
@@ -146,6 +141,24 @@ namespace Fenrir::Detail
         return diagnostic;
     }
 
+    void Append(std::vector<Ser::Diagnostic>& to, std::vector<Ser::Diagnostic>&& from)
+    {
+        to.insert(to.end(), std::make_move_iterator(from.begin()), std::make_move_iterator(from.end()));
+    }
+
+    void Record(Ser::Diagnostic diagnostic, ILogger& logger, std::vector<Ser::Diagnostic>& diagnostics)
+    {
+        if (diagnostic.severity == Ser::DiagnosticSeverity::Error)
+        {
+            logger.Error("{}", Ser::FormatDiagnostic(diagnostic));
+        }
+        else
+        {
+            logger.Warn("{}", Ser::FormatDiagnostic(diagnostic));
+        }
+        diagnostics.push_back(std::move(diagnostic));
+    }
+
     std::optional<std::string> FormatProblem(const Ser::Value* format)
     {
         if (PositiveWhole(format, EnvelopeFormat) == EnvelopeFormat)
@@ -186,10 +199,8 @@ namespace Fenrir::Detail
     void WarnWrittenNull(std::string message, std::string_view path, ILogger& logger,
                          std::vector<Ser::Diagnostic>& diagnostics, std::size_t& nulled)
     {
-        Ser::Diagnostic warning{
-            .severity = Ser::DiagnosticSeverity::Warning, .path = std::string(path), .message = std::move(message)};
-        logger.Warn("{}", Ser::FormatDiagnostic(warning));
-        diagnostics.push_back(std::move(warning));
+        Record({.severity = Ser::DiagnosticSeverity::Warning, .path = std::string(path), .message = std::move(message)},
+               logger, diagnostics);
         ++nulled;
     }
 
@@ -267,10 +278,9 @@ namespace Fenrir::Detail
         const std::size_t count = reading.emptied.size();
         for (EmptiedReference& reference : reading.emptied)
         {
-            Ser::Diagnostic error = LocatedAt(Ser::DiagnosticSeverity::Error, path, StringAt(data, reference.text),
-                                              data, std::move(reference.message));
-            logger.Error("{}", Ser::FormatDiagnostic(error));
-            diagnostics.push_back(std::move(error));
+            Record(LocatedAt(Ser::DiagnosticSeverity::Error, path, StringAt(data, reference.text), data,
+                             std::move(reference.message)),
+                   logger, diagnostics);
         }
         reading.emptied.clear();
         return count;
@@ -291,8 +301,7 @@ namespace Fenrir::Detail
             // Logs `error`, one of the reader's own that fails no read, and records it with the file's diagnostics.
             void Report(Ser::Diagnostic error) const
             {
-                logger.Error("{}", Ser::FormatDiagnostic(error));
-                diagnostics.push_back(std::move(error));
+                Record(std::move(error), logger, diagnostics);
             }
         };
 
