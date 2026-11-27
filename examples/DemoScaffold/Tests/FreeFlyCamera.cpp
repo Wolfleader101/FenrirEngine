@@ -5,6 +5,7 @@
 
 #include "DemoTestApp.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
+#include "FenrirECS/SceneComponents.hpp"
 
 using namespace DemoScaffoldTests;
 
@@ -41,6 +42,15 @@ TEST_CASE("The free-fly camera starts where the scene says", "[demo][camera]")
     REQUIRE(position.x == 1.0f);
     REQUIRE(position.y == 2.0f);
     REQUIRE(position.z == 3.0f);
+}
+
+TEST_CASE("The free-fly camera is Transient, so a scene file never holds it", "[demo][camera]")
+{
+    DemoTestApp test({StartAt({0.0f, 0.0f, 0.0f})});
+    test.Frames();
+
+    INFO("the scaffold's camera is tagged Transient");
+    REQUIRE(test.demo.FreeFlyCamera().HasComponent<Fenrir::Transient>());
 }
 
 TEST_CASE("Holding the right mouse button and W flies the camera forward, along -Z", "[demo][camera]")

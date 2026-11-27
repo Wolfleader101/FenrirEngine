@@ -1,11 +1,13 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "FenrirAssets/MeshData.hpp"
@@ -223,6 +225,26 @@ namespace FenrirDemo
      * way up and tiled `repeat` times across each side.
      */
     [[nodiscard]] Fenrir::MeshData ScreenQuad(float width, float height, float repeat = 1.0f);
+
+    /** @brief What one save of a demo scene wrote, which a smoke run's round trip compares. */
+    struct SceneRoundTripCounts
+    {
+        /** @brief The entities written, a block apiece. */
+        std::size_t entities = 0;
+        /**
+         * @brief The components written that are live in the scene: those a load kept opaque, which a save writes
+         * back, are not counted, since the scene lost them.
+         */
+        std::size_t components = 0;
+    };
+
+    /**
+     * @brief The error a smoke run logs when the demo scene `scene` did not load back whole: `saved` counts the save of
+     * the scene as it ran, and `reloaded` the save of the scene loaded back from that file. Empty when they match.
+     */
+    [[nodiscard]] std::optional<std::string> RoundTripMismatch(std::string_view scene,
+                                                               const SceneRoundTripCounts& saved,
+                                                               const SceneRoundTripCounts& reloaded);
 
     /**
      * @brief The owner of a demo app's engine packages and scaffold (GLOSSARY.md: demo scaffold). Move-only; destroy it

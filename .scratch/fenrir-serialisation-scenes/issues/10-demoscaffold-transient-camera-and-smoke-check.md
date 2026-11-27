@@ -13,10 +13,19 @@
 
 **Blocked by:** 06.
 
-**Touches:** `examples/DemoScaffold/` (`src/DemoScaffold.cpp`, its headers)
+**Touches:** `examples/DemoScaffold/` (`src/DemoScaffold.cpp`, its headers); as built, also `packages/FenrirSerialisation/` (the union tag) and `packages/FenrirAssets/` (the scene reader), below
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The free-fly camera carries `Transient`, and no saved demo scene holds it.
-- [ ] The smoke run saves and reloads every demo scene, and the counts match.
-- [ ] A deliberately dropped component makes the smoke check fail, naming the scene.
+- [x] The free-fly camera carries `Transient`, and no saved demo scene holds it.
+- [x] The smoke run saves and reloads every demo scene, and the counts match.
+- [x] A deliberately dropped component makes the smoke check fail, naming the scene.
+
+## Comments
+
+- **How the counts are compared:** the scene loaded back is saved too, and the two saves' entities and components written are compared, so both sides count what a file holds the same way. An instance is one block on each side, though its load expands it. A component the load kept opaque is written back but lost to the scene, so it is taken off the reloaded side. `RoundTripMismatch` makes the comparison and words the error. Its test feeds it a dropped component, since no real round trip can be made to drop one on purpose.
+- **When:** after each smoke scene's frames, before the next scene is entered, so a scene's run-time entities are in the file too. The files go under a `.demo-smoke-<random>` folder of the asset root, since two CTest smoke runs of one app share it.
+- **Two engine faults the check found, fixed here (the user, 2026-11-27):**
+  - **The tag spelling:** FenrirSerialisation's `FromTree` looked for a tagged union's tag under the tag field's own name (`m_type` in every engine union), while `ToTree` writes `kind`. So `Sky`, the physics shapes and `Camera::projection` lost their alternative on load, with an error. Both now use one key, `Detail::UnionTagKey`, with a test over an `m_type`-tagged union.
+  - **The Transform gap:** AnimationDemo's "No Transform" bone attachment has no `Transform`, which the reader's `CompleteEntity` gave back. A block now loads with only the Name and Transform it lists, since the writer lists both, as `{}` at their defaults, whenever the entity has them. This amends ADR-0078 §5 and the spec's "Loading and saving", with a test in `Tests/Scenes.cpp`.
+- **Left for later:** `Assets::Move` (`packages/FenrirAssets/src/Move.cpp`, ticket 11) still finds a union's tag by the tag field's name. So a moved asset named inside a tagged union is not rewritten. It needs the same `kind` key.
