@@ -1,5 +1,6 @@
 #include "FenrirSerialisation/Bridge.hpp"
 
+#include "HeldFields.hpp"
 #include "ResolverField.hpp"
 
 #include "FenrirTypes/FieldVisitor.hpp"
@@ -20,39 +21,14 @@ namespace Fenrir::Serialisation
 {
     namespace
     {
-        // One field as the visitor pushed it.
-        struct VisitedField
-        {
-            const FieldInfo* info;
-            ConstValueRef value;
-        };
+        // One field a file holds, as the visitor pushed it.
+        using VisitedField = HeldField<ConstValueRef>;
 
-        // Keeps every field a visit pushes, in the order pushed, so a value's fields and its default's can be walked
-        // side by side.
-        class FieldCollector final : public ConstFieldVisitor
-        {
-          public:
-            explicit FieldCollector(std::vector<VisitedField>& fields) noexcept : m_fields(fields)
-            {
-            }
-
-            void Field(const FieldInfo& field, ConstValueRef value) override
-            {
-                m_fields.push_back({&field, value});
-            }
-
-          private:
-            std::vector<VisitedField>& m_fields;
-        };
-
-        // The fields of the struct `value` refers to, as its description's visitor pushes them: for a tagged union,
-        // its tag and then its live alternative.
+        // The fields a file holds of the struct `value` refers to, in the order pushed, so a value's fields and its
+        // default's can be walked side by side: for a tagged union, its tag and then its live alternative.
         std::vector<VisitedField> FieldsOf(ConstValueRef value)
         {
-            std::vector<VisitedField> fields;
-            FieldCollector collector(fields);
-            value.Visit(collector);
-            return fields;
+            return HeldFieldsOf(value);
         }
 
         // An instance of a described type that its `Construct` made, destroyed with this: the defaults a value's
@@ -160,7 +136,7 @@ namespace Fenrir::Serialisation
                 return true;
             case Kind::Struct: {
                 // A tagged union pushes its tag first, so two unions of different alternatives differ there before
-                // their alternatives are compared.
+                // their alternatives are compared. FieldsOf leaves transient fields out, so one never makes two differ.
                 const std::vector<VisitedField> fieldsA = FieldsOf(a);
                 const std::vector<VisitedField> fieldsB = FieldsOf(b);
                 if (fieldsA.size() != fieldsB.size())

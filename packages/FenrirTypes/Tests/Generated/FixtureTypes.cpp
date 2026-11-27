@@ -424,7 +424,7 @@ namespace Fenrir::Generated::FixtureTypes
     };
 
     // Fixture::Dial
-    static_assert(sizeof(Fixture::Dial) == 20 && alignof(Fixture::Dial) == 4,
+    static_assert(sizeof(Fixture::Dial) == 24 && alignof(Fixture::Dial) == 4,
                   "Fixture::Dial is not the layout Fixture.api.json describes: regenerate the description, then this registration");
     constexpr std::string_view Fixture_Dial_Formerly[] = {"Fixture::Gauge", "Legacy::Meter"};
     constexpr std::string_view Fixture_Dial_fill_Formerly[] = {"level", "amount"};
@@ -434,6 +434,7 @@ namespace Fenrir::Generated::FixtureTypes
         {.name = "span", .type = {.kind = Fenrir::Kind::I32}, .offset = 8, .doc = "A default written as an arithmetic expression."},
         {.name = "enabled", .type = {.kind = Fenrir::Kind::Bool}, .offset = 12, .doc = "A default named by a constant computed from another."},
         {.name = "scaled", .type = {.kind = Fenrir::Kind::F32}, .offset = 16, .doc = "A float default computed from a named constant."},
+        {.name = "reading", .type = {.kind = Fenrir::Kind::F32}, .offset = 20, .doc = "Read-back state a step writes: kept in the layout, recorded as transient, never written to a file.", .transient = true},
     };
     constexpr Fenrir::TypeDescription Fixture_Dial{
         .name = "Fixture::Dial",

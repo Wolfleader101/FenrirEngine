@@ -7,6 +7,8 @@
 
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
+#include "FenrirECS/EntityId.hpp"
+#include "FenrirECS/SceneComponents.hpp"
 #include "FenrirECS/TypeAttachments.hpp"
 
 #include "FenrirMath/Generated/FenrirMathTypes.hpp"
@@ -45,6 +47,8 @@ namespace Fenrir::Generated
 namespace Fenrir::Generated::FenrirECSTypes
 {
     extern const Fenrir::TypeDescription Fenrir_Entity;
+    extern const Fenrir::TypeDescription Fenrir_EntityId;
+    extern const Fenrir::TypeDescription Fenrir_Instance;
     extern const Fenrir::TypeDescription Fenrir_Name;
     extern const Fenrir::TypeDescription Fenrir_Relationship;
     extern const Fenrir::TypeDescription Fenrir_Transform;
@@ -55,6 +59,22 @@ template <>
 struct Fenrir::Describe<Fenrir::Entity>
 {
     static constexpr Fenrir::Role role = Fenrir::Role::SharedStruct;
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of Fenrir::EntityId that RegisterFenrirECSTypes adds. */
+template <>
+struct Fenrir::Describe<Fenrir::EntityId>
+{
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of Fenrir::Instance that RegisterFenrirECSTypes adds. */
+template <>
+struct Fenrir::Describe<Fenrir::Instance>
+{
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 

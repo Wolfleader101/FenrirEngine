@@ -129,7 +129,7 @@ namespace Fenrir::Generated::FenrirPhysicsTypes
         {.name = "stopOnSlope", .type = {.kind = Fenrir::Kind::Bool}, .offset = 32, .doc = "On walkable ground, the falling part of `velocity` does not slide the character down a slope."},
         {.name = "interpolate", .type = {.kind = Fenrir::Kind::Bool}, .offset = 33, .doc = "As RigidBody::interpolate: between ticks the Transform holds its position and rotation blended between the last two steps, stair step-ups and ground snaps included, while `Tick` systems see the true one. A teleport and a new character snap. PhysicsConfig can turn interpolation off for every character."},
         {.name = "enabled", .type = {.kind = Fenrir::Kind::Bool}, .offset = 34, .doc = "Disabled: not moved, invisible to bodies, queries and triggers, `velocity` and the Transform left to game code, and `state` reset. Enabled again, it finds its contacts and ground where it is that tick, as a teleport does, and is not blended from where it was."},
-        {.name = "state", .type = {.kind = Fenrir::Kind::Struct, .type = &Fenrir_CharacterState}, .offset = 40, .doc = "Read-back: overwritten by physics after every move."},
+        {.name = "state", .type = {.kind = Fenrir::Kind::Struct, .type = &Fenrir_CharacterState}, .offset = 40, .doc = "Read-back: overwritten by physics after every move, so no scene file holds it.", .transient = true},
     };
     constexpr Fenrir::TypeDescription Fenrir_CharacterBody{
         .name = "Fenrir::CharacterBody",
@@ -1374,7 +1374,7 @@ namespace Fenrir::Generated::FenrirPhysicsTypes
         {.name = "probe", .type = {.kind = Fenrir::Kind::Enum, .type = &Fenrir_VehicleProbe}, .offset = 160, .doc = "How every wheel finds the ground. A live edit: the next step probes the new way."},
         {.name = "maxTilt", .type = {.kind = Fenrir::Kind::F32}, .offset = 164, .doc = "Radians: the cone around world up the chassis cannot pitch or roll past, a live edit. \317\200 (the default) is off; about 60\302\260 stops rollovers. Kept within 0 to \317\200."},
         {.name = "enabled", .type = {.kind = Fenrir::Kind::Bool}, .offset = 168, .doc = "Disabled, the entity is a plain rigid body resting on its chassis, its `state` and its wheels' reset and its wheel entities left where they were. Enabled again, it is built fresh with nothing carried over."},
-        {.name = "state", .type = {.kind = Fenrir::Kind::Struct, .type = &Fenrir_VehicleState}, .offset = 172, .doc = "Read-back: overwritten by physics after every step."},
+        {.name = "state", .type = {.kind = Fenrir::Kind::Struct, .type = &Fenrir_VehicleState}, .offset = 172, .doc = "Read-back: overwritten by physics after every step, so no scene file holds it.", .transient = true},
     };
     constexpr Fenrir::TypeDescription Fenrir_Vehicle{
         .name = "Fenrir::Vehicle",
@@ -1541,7 +1541,7 @@ namespace Fenrir::Generated::FenrirPhysicsTypes
         {.name = "maxHandbrakeTorque", .type = {.kind = Fenrir::Kind::F32}, .offset = 84, .doc = "Newton metres at full `handbrake`."},
         {.name = "longitudinal", .type = {.kind = Fenrir::Kind::Struct, .type = &Fenrir_VehicleTyre}, .offset = 88},
         {.name = "lateral", .type = {.kind = Fenrir::Kind::Struct, .type = &Fenrir_VehicleTyre}, .offset = 104},
-        {.name = "state", .type = {.kind = Fenrir::Kind::Struct, .type = &Fenrir_VehicleWheelState}, .offset = 120, .doc = "Read-back: overwritten by physics after every step."},
+        {.name = "state", .type = {.kind = Fenrir::Kind::Struct, .type = &Fenrir_VehicleWheelState}, .offset = 120, .doc = "Read-back: overwritten by physics after every step, so no scene file holds it.", .transient = true},
     };
     constexpr Fenrir::TypeDescription Fenrir_VehicleWheel{
         .name = "Fenrir::VehicleWheel",

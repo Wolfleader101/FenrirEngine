@@ -16,7 +16,7 @@
   - undescribed components;
   - `Relationship`;
   - `EntityId` and `Instance`, which are spelled as `id` and `instance`;
-  - `@transient` types;
+  - `@transient` types (a `@transient` field is left out by the bridge, uncounted);
   - `Transient` entities, with their children.
 - **References:**
   - An `entity` field writes through `writeEntity` as the target's id string. An empty handle, or a target outside the file, is written `null`, with one diagnostic, and counted.

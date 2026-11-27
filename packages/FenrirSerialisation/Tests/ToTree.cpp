@@ -334,3 +334,22 @@ TEST_CASE("An engaged optional writes as its value, the one at its default left 
     INFO("edge holds 0.75 and is written as the number; reach holds its default 2");
     REQUIRE(Tree(owned) == ObjectOf({{"edge", 0.75f}}));
 }
+
+TEST_CASE("A transient field is never written", "[serialisation][totree]")
+{
+    Sensed sensed;
+    sensed.speed = 3;
+    sensed.state.max = 9.0f;
+
+    INFO("speed differs from its default and is written; state, transient, is left out though it differs too");
+    REQUIRE(Tree(&sensed, SensedDescription) == ObjectOf({{"speed", std::int64_t{3}}}));
+}
+
+TEST_CASE("A struct differing from its default only in a transient field is left out", "[serialisation][totree]")
+{
+    Sensor sensor;
+    sensor.sensed.state.min = -2.0f;
+
+    INFO("sensed differs only in its transient state, so it compares equal to its default and is not written");
+    REQUIRE(Tree(&sensor, SensorDescription) == Value(Object{}));
+}

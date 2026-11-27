@@ -152,6 +152,11 @@ internal static class DescriptionWriter
         WriteDoc(json, field.Doc);
         WriteFormerly(json, field.Formerly);
         WriteMetadata(json, field.Metadata);
+        if (field.Transient)
+        {
+            json.WriteBoolean("transient", true);
+        }
+
         json.WriteEndObject();
     }
 

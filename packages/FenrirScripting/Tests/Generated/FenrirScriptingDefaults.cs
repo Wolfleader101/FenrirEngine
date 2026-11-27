@@ -9,6 +9,8 @@ namespace Fenrir.ScriptFixture;
 public static class Defaults
 {
     public static global::Fenrir.Scripting.Entity Entity() => new();
+    public static global::Fenrir.Scripting.EntityId EntityId() => new();
+    public static global::Fenrir.Scripting.Instance Instance() => new();
     public static global::Fenrir.Scripting.Name Name() => new();
     public static global::Fenrir.Scripting.Relationship Relationship() => new();
     public static global::Fenrir.Scripting.Transform Transform() => new();

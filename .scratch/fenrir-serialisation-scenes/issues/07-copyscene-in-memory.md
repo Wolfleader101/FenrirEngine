@@ -6,7 +6,7 @@
   - It runs the scene writer into a value tree, then the reader out of it into `App::CreateScene(name)`.
   - It uses no file, and no `AssetSource` read for the scene itself.
   - It records nothing for hot reload.
-- What a file would drop, the copy drops: `Transient` entities, undescribed and `@transient` components. Instances copy as instances.
+- What a file would drop, the copy drops: `Transient` entities, undescribed and `@transient` components, and `@transient` fields. Instances copy as instances.
 
 **Blocked by:** 03.
 

@@ -83,7 +83,7 @@ public partial struct Vehicle : IComponent
     /// wheel entities left where they were. Enabled again, it is built fresh with nothing carried over.
     /// </summary>
     public bool Enabled = true;
-    /// <summary>Read-back: overwritten by physics after every step.</summary>
+    /// <summary>Read-back: overwritten by physics after every step, so no scene file holds it.</summary>
     public readonly VehicleState State = new();
 
     public Vehicle()

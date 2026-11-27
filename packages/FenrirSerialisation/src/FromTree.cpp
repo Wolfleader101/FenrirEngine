@@ -1,5 +1,6 @@
 #include "FenrirSerialisation/Bridge.hpp"
 
+#include "HeldFields.hpp"
 #include "ResolverField.hpp"
 
 #include "FenrirLogger/ILogger.hpp"
@@ -22,38 +23,14 @@ namespace Fenrir::Serialisation
 {
     namespace
     {
-        // One field as the visitor pushed it, writable.
-        struct VisitedField
-        {
-            const FieldInfo* info;
-            ValueRef value;
-        };
+        // One field a file holds as the visitor pushed it, writable.
+        using VisitedField = HeldField<ValueRef>;
 
-        // Keeps every field a visit pushes, in the order pushed.
-        class FieldCollector final : public FieldVisitor
-        {
-          public:
-            explicit FieldCollector(std::vector<VisitedField>& fields) noexcept : m_fields(fields)
-            {
-            }
-
-            void Field(const FieldInfo& field, ValueRef value) override
-            {
-                m_fields.push_back({&field, value});
-            }
-
-          private:
-            std::vector<VisitedField>& m_fields;
-        };
-
-        // The fields of the struct `value` refers to, as its description's visitor pushes them: for a tagged union,
-        // its tag and then its live alternative.
+        // The fields a file holds of the struct `value` refers to, in the order pushed: for a tagged union, its tag
+        // and then its live alternative. A transient field is not among them, so it is never read and keeps its value.
         std::vector<VisitedField> FieldsOf(ValueRef value)
         {
-            std::vector<VisitedField> fields;
-            FieldCollector collector(fields);
-            value.Visit(collector);
-            return fields;
+            return HeldFieldsOf(value);
         }
 
         // What a node is, as a diagnostic names what it found.
@@ -450,7 +427,7 @@ namespace Fenrir::Serialisation
                     return Reject(node, where.empty() ? std::string(type->name) : where, "an object");
                 if (type->IsTaggedUnion())
                     return ReadUnion(node, target, where);
-                ReadFields(node.AsObject(), FieldsOf(target), where, {});
+                ReadFields(node.AsObject(), target.Description(), FieldsOf(target), where, {});
                 return true;
             }
 
@@ -498,11 +475,11 @@ namespace Fenrir::Serialisation
                     alternative->role != Role::BoundType && !alternative->IsTaggedUnion())
                 {
                     // Spread into the union's own object beside `kind`, as `ToTree` writes it.
-                    ReadFields(object, FieldsOf(live.value), where, type.tag.name);
+                    ReadFields(object, alternative, FieldsOf(live.value), where, type.tag.name);
                     return true;
                 }
                 std::vector<VisitedField> member{live};
-                ReadFields(object, member, where, type.tag.name);
+                ReadFields(object, &type, member, where, type.tag.name);
                 return true;
             }
 
@@ -519,9 +496,10 @@ namespace Fenrir::Serialisation
             // Reads each of `fields` from the member named by it, or else by the first of its former names present,
             // and warns of every member neither reads. Every field claims its current name before any former name is
             // tried, so a field renamed to another's old name keeps its own key. `tagKey` is a key read already, a
-            // tagged union's `kind`.
-            void ReadFields(const Object& object, const std::vector<VisitedField>& fields, const std::string& where,
-                            std::string_view tagKey)
+            // tagged union's `kind`. `type`, the struct `fields` belong to, words the warning for a key naming one of
+            // its transient fields, which `fields` leaves out.
+            void ReadFields(const Object& object, const TypeDescription* type, const std::vector<VisitedField>& fields,
+                            const std::string& where, std::string_view tagKey)
             {
                 const std::size_t none = object.members.size();
                 std::vector<bool> used(object.members.size(), false);
@@ -570,8 +548,12 @@ namespace Fenrir::Serialisation
                     if (used[m])
                         continue;
                     ++m_result.unknownFields;
+                    const std::string_view key = object.members[m].key;
+                    const bool namesTransient = type != nullptr && NamesTransientField(*type, key);
                     Report(DiagnosticSeverity::Warning, object.members[m].value,
-                           std::format("`{}` names no field, so it is dropped", Below(where, object.members[m].key)));
+                           namesTransient ? std::format("`{}` is transient, which no file holds, so it is dropped",
+                                                        Below(where, key))
+                                          : std::format("`{}` names no field, so it is dropped", Below(where, key)));
                 }
             }
 

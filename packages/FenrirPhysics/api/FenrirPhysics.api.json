@@ -315,7 +315,8 @@
           "kind": "struct",
           "type": "Fenrir::CharacterState",
           "default": {},
-          "doc": "Read-back: overwritten by physics after every move."
+          "doc": "Read-back: overwritten by physics after every move, so no scene file holds it.",
+          "transient": true
         }
       ]
     },
@@ -2641,7 +2642,8 @@
           "kind": "struct",
           "type": "Fenrir::VehicleState",
           "default": {},
-          "doc": "Read-back: overwritten by physics after every step."
+          "doc": "Read-back: overwritten by physics after every step, so no scene file holds it.",
+          "transient": true
         }
       ]
     },
@@ -3064,7 +3066,8 @@
           "kind": "struct",
           "type": "Fenrir::VehicleWheelState",
           "default": {},
-          "doc": "Read-back: overwritten by physics after every step."
+          "doc": "Read-back: overwritten by physics after every step, so no scene file holds it.",
+          "transient": true
         }
       ]
     }
