@@ -18,3 +18,8 @@ fenrir_scripting_extension(Assets
         src/AssetsScriptingState.hpp
     LINK FenrirAssets
 )
+
+# A test binding of FenrirAssets' data asset test package (Tests/DataAssetsTest.binding.toml): the C# classes and codecs
+# of its data assets, which the scripting tests check against C++'s bridge. Registered whether or not the tests build,
+# so the bindings target and CI's dirty-tree check cover its committed outputs.
+iris_generate_binding(FenrirAssetsDataTest Tests/DataAssetsTest.binding.toml ../Tests/Package/DataAssetsTestPackage.api.json)

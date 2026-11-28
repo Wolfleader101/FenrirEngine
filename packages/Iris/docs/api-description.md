@@ -26,7 +26,7 @@ Every type has:
 | --- | --- |
 | `name` | The C++ qualified name: as the selection spells it for a selected type (an alias such as `Math::Vec3` included), else clang's canonical spelling (`Ns::Type`). |
 | `category` | `struct`, `tagged-union`, `bound-type` or `enum`. |
-| `role` | Not on enums. `component`, `event`, `scene-resource`, `app-resource`, `shared-struct`, `data-asset`, `settings` or `bound-type` for a selected type; `nested` for a type described only because a field uses it. Iris.Bindings skips `data-asset` and `settings` types (see "Owning kinds"). |
+| `role` | Not on enums. `component`, `event`, `scene-resource`, `app-resource`, `shared-struct`, `data-asset`, `settings` or `bound-type` for a selected type; `nested` for a type described only because a field uses it. Iris.Bindings binds a `data-asset` as a class over the store's tree and skips `settings` types (see "Owning kinds"). |
 | `base` | For a `data-asset` extending another: the `name` of the data asset it extends. Absent otherwise. |
 | `size`, `alignment` | In bytes. An empty struct is 1 byte. Absent for a struct reached by member (see "Owning kinds"). |
 | `doc` | The doc comment, when there is one (see "Doc comments"). |
@@ -95,7 +95,7 @@ Anything else (a C++ reference, `T&`, `long double`, `wchar_t`, a bit-field, ...
 
 ## Owning kinds
 
-A `data-asset` or `settings` type is reached by member through a generated visitor, so it may hold the owning kinds. It, and every struct whose layout holds an owning kind, records no `size`, `alignment` or field `offset`: they are the standard library's. A `data-asset` may extend one other, recorded as `base`, and its `fields` are only those it declares. A `data-asset` never reaches an `entity` (ADR-0075): one reached through any field, element, base or component it holds by value fails the tool naming the field, the data asset and the path. Iris.Bindings skips every `data-asset` and `settings` type and every nested type and enum that only they reach, without failing or logging (the C# spec binds them), and fails naming the field on an owning kind or a missing layout in any type it binds.
+A `data-asset` or `settings` type is reached by member through a generated visitor, so it may hold the owning kinds. It, and every struct whose layout holds an owning kind, records no `size`, `alignment` or field `offset`: they are the standard library's. A `data-asset` may extend one other, recorded as `base`, and its `fields` are only those it declares. A `data-asset` never reaches an `entity` (ADR-0075): one reached through any field, element, base or component it holds by value fails the tool naming the field, the data asset and the path. Iris.Bindings generates a class for every `data-asset` and a layout-free mirror for every nested struct only data assets reach (ADR-0083 §3); it skips every `settings` type and every nested type and enum that only they reach, without failing or logging (the settings spec binds them), and fails naming the field on an owning kind or a missing layout in any other type it binds.
 
 ## Defaults
 

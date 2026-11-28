@@ -1,0 +1,48 @@
+# A test binding of FenrirAssets' data asset test package (../../Tests/Package), as a game binds its own data asset
+# types (ADR-0083 §3): Iris.Bindings generates a C# class with codecs for each AssetsTest and MyGame data asset into the
+# scripting fixture (Fixture/DataAssets), which the generated defaults test (Generated/DataAssetsTestDefaultsTests.cpp)
+# and DataAssets.cpp check against C++'s bridge. Paths are relative to this file; `cmake --build <dir> --target
+# fenrir-generate-bindings` regenerates every output below, and they are committed.
+namespace = "AssetsScriptFixture.DataAssets"
+descriptions = ["../../Tests/Package/DataAssetsTestPackage.api.json"]
+# The image handle a weapon's icon is: FenrirAssets' bound type.
+uses = ["../api/FenrirAssets.binding.toml"]
+defaults = "../../../FenrirScripting/api/FenrirScripting.binding-defaults.toml"
+# The package's components, scene resource and tagged union are its scene tests', and BannerData holds the tagged union,
+# whose tree a data asset's codecs do not write yet.
+exclude = [
+    "AssetsTest::BannerData",
+    "AssetsTest::Decal",
+    "AssetsTest::Look",
+    "AssetsTest::LookType",
+    "AssetsTest::PlainLook",
+    "AssetsTest::PaintedLook",
+    "AssetsTest::Follower",
+    "AssetsTest::Health",
+    "AssetsTest::FrameCounter",
+    "AssetsTest::Sky",
+]
+
+[csharp]
+contract = "Fixture"
+generated = "Fixture/DataAssets"
+# AssetHandle<T>, which a reference to a data asset is.
+usings = ["Fenrir.Assets"]
+asset-handle = "AssetHandle"
+
+[cpp]
+mappings = "Generated/DataAssetsTestMappings.hpp"
+includes = ["DataAssetsTestPackage.hpp"]
+
+[tests]
+cpp = "Generated/DataAssetsTestDefaultsTests.cpp"
+csharp = "Generated/DataAssetsTestDefaults.cs"
+class = "AssetsScriptFixture.DataAssetDefaults"
+includes = ["AssetsScriptingApp.hpp", "DataAssetTrees.hpp"]
+setup = "Fenrir::Testing::AssetsScriptingApp app;"
+tags = "[assets][scripting][bindings][data-assets]"
+data-asset-check = "Fenrir::Testing::CheckDataAssetDefaults"
+
+[names]
+# AssetsTest::Sword is Sword.
+"MyGame::Sword" = "GoldenSword"

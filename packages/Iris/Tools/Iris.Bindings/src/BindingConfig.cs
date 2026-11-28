@@ -41,7 +41,10 @@ internal sealed record CSharpConfig(
     IReadOnlySet<string> ImmutableStructs,
     IReadOnlySet<string> PrivateFields,
     IReadOnlySet<string> FixedBuffers,
-    IReadOnlySet<string> InternalStructs);
+    IReadOnlySet<string> InternalStructs,
+    string? DataAssetInterface,
+    string? DataAssetAttribute,
+    string? AssetHandle);
 
 /// <summary>
 /// Where the Iris mappings go, the headers they include, and the mappings header's include-directory spelling
@@ -74,7 +77,10 @@ internal sealed record RegistrationConfig(
     IReadOnlySet<string> ByHand,
     IReadOnlyList<string> Shares);
 
-/// <summary>The defaults test: its two sources, the C# class, and how a test case reaches the loaded C# assembly.</summary>
+/// <summary>
+/// The defaults test: its two sources, the C# class, how a test case reaches the loaded C# assembly, and the C++ function
+/// template that checks a data asset's trees (<c>data-asset-check</c>, optional: without it data assets get no case).
+/// </summary>
 internal sealed record TestsConfig(
     string Cpp,
     string CSharp,
@@ -82,7 +88,8 @@ internal sealed record TestsConfig(
     IReadOnlyList<string> Includes,
     string Setup,
     string Component,
-    string Tags);
+    string Tags,
+    string? DataAssetCheck);
 
 /// <summary>
 /// The native functions (<c>[natives]</c>): their description (<c>&lt;Name&gt;.natives.json</c> beside the
@@ -182,7 +189,7 @@ internal sealed record BindingConfig(
                     "read-only-component-interface", "event-attribute", "event-interface", "tagged-union-attribute",
                     "resource-attribute", "resource-interface", "read-only-resource-interface", "pointer-type",
                     "readonly-events", "readonly-structs", "immutable-structs", "private-fields", "fixed-buffers",
-                    "internal-structs");
+                    "internal-structs", "data-asset-interface", "data-asset-attribute", "asset-handle");
         var cpp = reader.Table(table, "cpp");
         reader.Keys(cpp, "cpp", "mappings", "includes", "include");
 
@@ -236,11 +243,12 @@ internal sealed record BindingConfig(
                     (removed.Count > 1 ? "s" : ""));
             }
 
-            reader.Keys(section, "tests", "cpp", "csharp", "class", "includes", "setup", "component", "tags");
+            reader.Keys(section, "tests", "cpp", "csharp", "class", "includes", "setup", "component", "tags",
+                        "data-asset-check");
             tests = new TestsConfig(reader.PathOf(section, "cpp"), reader.PathOf(section, "csharp"),
                                     reader.String(section, "class"), reader.Strings(section, "includes"),
                                     reader.String(section, "setup"), reader.String(section, "component"),
-                                    reader.String(section, "tags"));
+                                    reader.String(section, "tags"), reader.OptionalString(section, "data-asset-check"));
         }
 
         NativesConfig? nativesConfig = null;
@@ -303,7 +311,9 @@ internal sealed record BindingConfig(
                              reader.Strings(csharp, "immutable-structs").ToHashSet(StringComparer.Ordinal),
                              reader.Strings(csharp, "private-fields").ToHashSet(StringComparer.Ordinal),
                              reader.Strings(csharp, "fixed-buffers").ToHashSet(StringComparer.Ordinal),
-                             reader.Strings(csharp, "internal-structs").ToHashSet(StringComparer.Ordinal)),
+                             reader.Strings(csharp, "internal-structs").ToHashSet(StringComparer.Ordinal),
+                             reader.OptionalString(csharp, "data-asset-interface"),
+                             reader.OptionalString(csharp, "data-asset-attribute"), reader.OptionalString(csharp, "asset-handle")),
             new CppConfig(reader.PathOf(cpp, "mappings"), reader.Strings(cpp, "includes"),
                           reader.OptionalString(cpp, "include")),
             registration, tests,

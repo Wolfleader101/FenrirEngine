@@ -16,8 +16,8 @@
 
 **Touches:** `packages/Iris/Tools/Iris.Bindings/` (`src/`, its tests and goldens)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A selected data asset type generates a class extending its base's class, with properties, defaults and codecs.
-- [ ] Its codecs round-trip a tree, and the defaults test passes byte for byte.
-- [ ] A data asset `AssetHandle<T>` field maps to `AssetHandle<T>`, with no bound-type entry.
+- [x] A selected data asset type generates a class extending its base's class, with properties, defaults and codecs.
+- [x] Its codecs round-trip a tree, and the defaults test passes byte for byte.
+- [x] A data asset `AssetHandle<T>` field maps to `AssetHandle<T>`, with no bound-type entry.

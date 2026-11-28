@@ -40,6 +40,20 @@ internal static class Generator
             files.Add(Path.Combine(config.CSharp.Generated, name), text);
         }
 
+        foreach (var (name, text) in DataAssetWriter.Files(binding))
+        {
+            if (name == DataAssetWriter.RegistrationClass + ".cs" &&
+                (binding.Mirrored.Any(type => binding.CSharpName(type) == DataAssetWriter.RegistrationClass) ||
+                 config.Natives?.Class == DataAssetWriter.RegistrationClass || config.Stages?.Class == DataAssetWriter.RegistrationClass))
+            {
+                throw new BindingException(
+                    $"{config.Path}: {DataAssetWriter.RegistrationClass}, the class registering the data assets' codecs, is also " +
+                    "the C# name of a mirrored type, the [natives] class or the [stages] class: give that another name");
+            }
+
+            files.Add(Path.Combine(config.CSharp.Generated, name), text);
+        }
+
         if (natives is not null)
         {
             var (name, text) = CSharpWriter.Natives(binding, natives, bound);

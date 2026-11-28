@@ -47,8 +47,9 @@ public sealed class BindingTests
             Assert.True(generated.ContainsKey(Path.GetFullPath(file)), $"{file} is committed but no longer generated.");
         }
 
-        Assert.True(generated.Count == 28,
-                    $"The fixture should give 19 mirrors, the natives' class, its two facade parts, the stages' class, the " +
+        Assert.True(generated.Count == 32,
+                    $"The fixture should give 19 mirrors, two data asset classes, the mirror of the struct only they hold, " +
+                    $"the class registering their codecs, the natives' class, its two facade parts, the stages' class, the " +
                     $"mappings, the natives header, the registration and the defaults test's two files, but gave {generated.Count} files.");
     }
 
@@ -584,7 +585,7 @@ public sealed class BindingTests
         var first = Generator.Write(config, Generator.Generate(config, [description]));
         var second = Generator.Write(config, Generator.Generate(config, [description]));
 
-        Assert.True(first.Count == 28, $"The first run should write every file, but reported:\n{string.Join('\n', first)}");
+        Assert.True(first.Count == 32, $"The first run should write every file, but reported:\n{string.Join('\n', first)}");
         Assert.True(second.Count == 0, $"A second run should write nothing, but reported:\n{string.Join('\n', second)}");
     }
 
@@ -989,8 +990,10 @@ public sealed class BindingTests
     {
         // The natives' class has no bodies until the SDK's generator writes them, and the facade parts call it: the SDK
         // check compiles them. Body's methods call it too, so NativeStubs.cs stands in for the natives they call.
+        // The data assets' classes and codecs need the SDK's tree and codecs, which only the SDK check has.
         var sources = Directory.EnumerateFiles(Path.Combine(FixtureDirectory, "Contract"), "*.cs", SearchOption.AllDirectories)
-                          .Where(path => Path.GetFileName(path) is not ("FixtureNative.cs" or "Bodies.cs" or "Hits.cs"))
+                          .Where(path => Path.GetFileName(path) is not ("FixtureNative.cs" or "Bodies.cs" or "Hits.cs" or
+                                                                       "WeaponData.cs" or "Sword.cs" or "NativeDataAssets.cs"))
                           .Concat(Directory.EnumerateFiles(Path.Combine(FixtureDirectory, "Uses", "Contract"), "*.cs", SearchOption.AllDirectories))
                           .Concat(Directory.EnumerateFiles(Path.Combine(FixtureDirectory, "Tests", "Generated"), "*.cs"))
                           .Append(Path.Combine(TestsDirectory(), "Checks", "Stubs.cs"))
@@ -1469,31 +1472,24 @@ public sealed class BindingTests
                     $"A reference whose handle nothing describes should fail naming it, but failed with\n  {exception.Message}");
     }
 
-    // describe-api's data asset and settings roles and its owning kinds (SCHEMA.md, "Owning kinds"): the C# spec binds
-    // them; until then a binding skips them and the nested types only they hold, and generates what it did without them.
+    // describe-api's settings role and its owning kinds (SCHEMA.md, "Owning kinds"): the settings spec binds settings;
+    // until then a binding skips them and the nested types only they hold, and generates what it did without them.
 
     [Fact]
-    public void DataAssetsSettingsTypesAndWhatOnlyTheyHoldAreSkipped()
+    public void SettingsTypesAndWhatOnlyTheyHoldAreSkipped()
     {
         using var directory = new TemporaryDirectory();
         var config = CopyConfig(directory, "");
         var without = Generator.Generate(config, [WriteDescription(directory, root =>
         {
             var types = root["types"]!.AsArray();
-            foreach (var skipped in types.Where(type => type!["name"]!.GetValue<string>() is
-                                                            "Fixture::WeaponData" or "Fixture::Sword" or "Fixture::Paths" or
-                                                            "Fixture::Stat").ToList())
-            {
-                types.Remove(skipped);
-            }
+            types.Remove(Type(root, "Fixture::Paths"));
         })]);
         var with = Generator.Generate(config, [FixtureDescription]);
 
         var changes = Changes(without, with);
-        Assert.True(changes.Count == 0, "A data asset, settings type or what only they hold changed the binding:\n" +
-                                        string.Join("\n", changes));
-        Assert.DoesNotContain(with.Values, text => text.Contains("WeaponData", StringComparison.Ordinal) ||
-                                                    text.Contains("Fixture::Stat", StringComparison.Ordinal));
+        Assert.True(changes.Count == 0, "A settings type changed the binding:\n" + string.Join("\n", changes));
+        Assert.DoesNotContain(with.Values, text => text.Contains("Paths", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -1501,7 +1497,7 @@ public sealed class BindingTests
     {
         using var directory = new TemporaryDirectory();
         var config = CopyConfig(directory, "");
-        var description = WriteDescription(directory, root => Type(root, "Fixture::WeaponData")["fields"]!.AsArray().Add(
+        var description = WriteDescription(directory, root => Type(root, "Fixture::Paths")["fields"]!.AsArray().Add(
             new JsonObject
             {
                 ["name"] = "springs", ["kind"] = "list", ["elementKind"] = "struct", ["elementType"] = "Fixture::Spring",
@@ -1510,7 +1506,7 @@ public sealed class BindingTests
 
         var changes = Changes(Generator.Generate(config, [FixtureDescription]), Generator.Generate(config, [description]));
 
-        Assert.True(changes.Count == 0, "A data asset holding a nested type Body holds changed the binding:\n" +
+        Assert.True(changes.Count == 0, "A settings type holding a nested type Body holds changed the binding:\n" +
                                         string.Join("\n", changes));
     }
 
@@ -1526,7 +1522,7 @@ public sealed class BindingTests
                 ["name"] = "Fixture::Grade", ["category"] = "enum", ["size"] = 4, ["alignment"] = 4, ["underlying"] = "i32",
                 ["values"] = new JsonArray(new JsonObject { ["name"] = "Common", ["value"] = 0 }),
             });
-            Type(root, "Fixture::Stat")["fields"]!.AsArray().Add(new JsonObject
+            Type(root, "Fixture::Paths")["fields"]!.AsArray().Add(new JsonObject
             {
                 ["name"] = "grade", ["kind"] = "enum", ["type"] = "Fixture::Grade", ["default"] = "Common",
             });
@@ -1534,7 +1530,7 @@ public sealed class BindingTests
 
         var changes = Changes(Generator.Generate(config, [FixtureDescription]), Generator.Generate(config, [description]));
 
-        Assert.True(changes.Count == 0, "An enum only a data asset's row holds changed the binding:\n" +
+        Assert.True(changes.Count == 0, "An enum only a settings type holds changed the binding:\n" +
                                         string.Join("\n", changes));
     }
 
@@ -1548,10 +1544,161 @@ public sealed class BindingTests
 
         var exception = Assert.Throws<BindingException>(() => Generator.Generate(config, [description]));
 
-        Assert.True(exception.Message.Contains("Fixture::Hit::label: a string, an owning kind, which a binding skips only " +
-                                               "in a data asset or settings type and what only they hold",
+        Assert.True(exception.Message.Contains("Fixture::Hit::label: a string, an owning kind, which a binding binds only " +
+                                               "in a data asset and the nested structs only data assets reach",
                                                StringComparison.Ordinal),
                     $"A string in a shared struct should fail naming it, but failed with\n  {exception.Message}");
+    }
+
+    // The data asset role (ADR-0083 §3): a class of properties over the store's tree, extending its base's class, with the
+    // codecs that write and read the tree as C++'s bridge does, registered from the contract as it loads.
+
+    [Fact]
+    public void ADataAssetIsAClassOfPropertiesExtendingItsBaseWithItsCodecs()
+    {
+        var generated = Generator.Generate(FixtureConfig, [FixtureDescription]);
+
+        var weapon = Mirror(generated, "WeaponData.cs");
+        var sword = Mirror(generated, "Sword.cs");
+        foreach (var line in new[]
+                 {
+                     "[NativeDataAsset(\"Fixture::WeaponData\")]\npublic partial class WeaponData : IDataAsset\n",
+                     "    public string DisplayName { get; set; } = \"Weapon\";\n",
+                     "    public List<Stat> Stats { get; set; } = new();\n",
+                     "    public float? Cooldown { get; set; }\n",
+                     "    public float Damage { get; set; } = 10;\n",
+                     "    public static DataAssetCodec<WeaponData> Codec { get; } = new(\"Fixture::WeaponData\", 1, null,\n",
+                 })
+        {
+            Assert.True(weapon.Contains(line, StringComparison.Ordinal), $"WeaponData.cs should hold\n{line}but is:\n{weapon}");
+        }
+
+        foreach (var line in new[]
+                 {
+                     "[NativeDataAsset(\"Fixture::Sword\")]\npublic partial class Sword : WeaponData\n",
+                     "    public List<List<int>> Combos { get; set; } = new();\n",
+                     "    public static new DataAssetCodec<Sword> Codec { get; } = new(\"Fixture::Sword\", 1, \"Fixture::WeaponData\",\n",
+                     "        WeaponData.Codec.WriteFields(tree, value, defaults);\n",
+                     "        WeaponData.Codec.ReadFields(tree, value);\n",
+                 })
+        {
+            Assert.True(sword.Contains(line, StringComparison.Ordinal), $"Sword.cs should hold\n{line}but is:\n{sword}");
+        }
+
+        // The nested struct only data assets reach is a mirror of fields with no mapping; the codecs register bases first.
+        var stat = Mirror(generated, "Stat.cs");
+        var registration = Mirror(generated, "NativeDataAssets.cs");
+        Assert.True(stat.Contains("public partial struct Stat\n{\n    public string Name = \"\";\n    public float Value = 1;\n", StringComparison.Ordinal),
+                    "Stat should be a mirror of fields with initialisers:\n" + stat);
+        Assert.True(registration.Contains("[global::System.Runtime.CompilerServices.ModuleInitializer]", StringComparison.Ordinal) &&
+                    registration.IndexOf("DataAssetCodecs.RegisterValue(new ValueCodec<Stat>(\"Fixture::Stat\"", StringComparison.Ordinal) <
+                    registration.IndexOf("DataAssetCodecs.Register(WeaponData.Codec);", StringComparison.Ordinal) &&
+                    registration.IndexOf("DataAssetCodecs.Register(WeaponData.Codec);", StringComparison.Ordinal) <
+                    registration.IndexOf("DataAssetCodecs.Register(Sword.Codec);", StringComparison.Ordinal),
+                    "The module initialiser should register Stat's codecs, then WeaponData's, then Sword's:\n" + registration);
+        Assert.DoesNotContain("Fixture::WeaponData", Output(generated, "FixtureMappings.hpp"), StringComparison.Ordinal);
+        Assert.DoesNotContain("Fixture::Stat", Output(generated, "FixtureMappings.hpp"), StringComparison.Ordinal);
+        Assert.DoesNotContain("WeaponData", Output(generated, "FixtureRegistration.cpp"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AReferenceToADataAssetIsItsAssetHandleWithNoBoundType()
+    {
+        using var directory = new TemporaryDirectory();
+        var description = WriteDescription(directory, root => Type(root, "Fixture::Sword")["fields"]!.AsArray().Add(
+            new JsonObject { ["name"] = "upgrade", ["kind"] = "reference", ["target"] = "Fixture::WeaponData", ["default"] = null }));
+        var config = CopyConfig(directory, "", edit: text => text.Replace("[csharp]\n", "[csharp]\nasset-handle = \"AssetHandle\"\n",
+                                                                          StringComparison.Ordinal));
+
+        var sword = Mirror(Generator.Generate(config, [description]), "Sword.cs");
+
+        Assert.True(sword.Contains("    public AssetHandle<WeaponData> Upgrade { get; set; }\n", StringComparison.Ordinal) &&
+                    sword.Contains("TreeCodec.WriteReference((v).Index, (v).Generation, \"Fixture::WeaponData\")", StringComparison.Ordinal) &&
+                    sword.Contains("static (i, g) => new AssetHandle<WeaponData>(i, g)", StringComparison.Ordinal),
+                    "A reference to a data asset should be its class's AssetHandle<T>, written as a path:\n" + sword);
+
+        var without = CopyConfig(directory, "");
+        var exception = Assert.Throws<BindingException>(() => Generator.Generate(without, [description]));
+        Assert.True(exception.Message.Contains("[csharp] has no asset-handle", StringComparison.Ordinal),
+                    $"With no asset-handle the binding should say so, but failed with\n  {exception.Message}");
+    }
+
+    [Fact]
+    public void ATransientFieldOfAStructADataAssetHoldsIsMirroredButNotWritten()
+    {
+        using var directory = new TemporaryDirectory();
+        var description = WriteDescription(directory, root => Type(root, "Fixture::Stat")["fields"]!.AsArray().Add(
+            new JsonObject { ["name"] = "cached", ["kind"] = "f32", ["default"] = 0, ["transient"] = true }));
+
+        var generated = Generator.Generate(CopyConfig(directory, ""), [description]);
+
+        Assert.Contains("    public float Cached;\n", Mirror(generated, "Stat.cs"), StringComparison.Ordinal);
+        Assert.DoesNotContain("cached", Mirror(generated, "NativeDataAssets.cs"), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("entity", "Fixture::Sword::grip: an entity, which a data asset never holds (ADR-0075)")]
+    [InlineData("array", "Fixture::Sword::grip: a fixed-size array or fixed string")]
+    [InlineData("optional", "Fixture::Sword::grip: an optional of a string, but C# holds an optional only of a value type")]
+    [InlineData("pointer", "Fixture::Sword::grip: a pointer, which no file holds")]
+    public void WhatADataAssetCannotHoldFailsNamingTheField(string kind, string message)
+    {
+        using var directory = new TemporaryDirectory();
+        var description = WriteDescription(directory, root => Type(root, "Fixture::Sword")["fields"]!.AsArray().Add(kind switch
+        {
+            "entity" => new JsonObject { ["name"] = "grip", ["kind"] = "entity", ["default"] = null },
+            "array" => new JsonObject
+            {
+                ["name"] = "grip", ["kind"] = "array", ["elementKind"] = "i32", ["length"] = 2, ["default"] = new JsonArray(0, 0),
+            },
+            "optional" => new JsonObject { ["name"] = "grip", ["kind"] = "optional", ["elementKind"] = "string", ["default"] = null },
+            _ => new JsonObject { ["name"] = "grip", ["kind"] = "pointer", ["default"] = null },
+        }));
+
+        var exception = Assert.Throws<BindingException>(() => Generator.Generate(CopyConfig(directory, ""), [description]));
+
+        Assert.True(exception.Message.Contains(message, StringComparison.Ordinal),
+                    $"A data asset holding {kind} should fail naming the field, but failed with\n  {exception.Message}");
+    }
+
+    [Fact]
+    public void ADataAssetExtendingNoDescribedDataAssetFails()
+    {
+        using var directory = new TemporaryDirectory();
+        var description = WriteDescription(directory, root => Type(root, "Fixture::Sword")["base"] = "Fixture::Blade");
+
+        var exception = Assert.Throws<BindingException>(() => Generator.Generate(CopyConfig(directory, ""), [description]));
+
+        Assert.True(exception.Message.Contains("Fixture::Sword extends Fixture::Blade, which no description read describes as a data asset",
+                                               StringComparison.Ordinal),
+                    $"A data asset extending nothing described should fail naming its base, but failed with\n  {exception.Message}");
+    }
+
+    [Fact]
+    public void WithADataAssetCheckTheDefaultsTestComparesEachDataAssetsTrees()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "", edit: text => text.Replace("tags = \"[bindings]\"\n",
+                                                                          "tags = \"[bindings]\"\ndata-asset-check = \"Host::CheckDataAsset\"\n",
+                                                                          StringComparison.Ordinal));
+
+        var generated = Generator.Generate(config, [FixtureDescription]);
+
+        var cpp = Output(generated, "FixtureDefaultsTests.cpp");
+        var csharp = Output(generated, "FixtureDefaults.cs");
+        Assert.True(cpp.Contains("TEST_CASE(\"C#'s new Sword() writes C++'s Fixture::Sword{} tree, byte for byte\", \"[bindings]\")\n", StringComparison.Ordinal) &&
+                    cpp.Contains("    Host::CheckDataAsset<Fixture::Sword>(harness.Component(), DefaultsClass, \"Sword\");\n", StringComparison.Ordinal),
+                    "Each data asset should have a case calling the check:\n" + cpp);
+        Assert.True(csharp.Contains("using Fenrir.Scripting;\n", StringComparison.Ordinal) &&
+                    csharp.Contains("    public static byte[] WeaponData(bool full) =>\n" +
+                                    "        TreeWriter.Write(global::Fixture.Bindings.WeaponData.Codec.ToTree(new global::Fixture.Bindings.WeaponData(), " +
+                                    "full ? null : new global::Fixture.Bindings.WeaponData()));\n", StringComparison.Ordinal),
+                    "Each data asset should have a method giving its trees:\n" + csharp);
+
+        // Without the check, a data asset has no case, so a binding whose test cannot reach the bridge still builds.
+        var plain = Generator.Generate(FixtureConfig, [FixtureDescription]);
+        Assert.DoesNotContain("Sword", Output(plain, "FixtureDefaultsTests.cpp"), StringComparison.Ordinal);
+        Assert.DoesNotContain("WeaponData", Output(plain, "FixtureDefaults.cs"), StringComparison.Ordinal);
     }
 
     // The fixture's configuration, binding the mesh handle beside its own bound types.

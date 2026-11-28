@@ -45,6 +45,35 @@ internal static class CSharpLiteral
                    : $"'\\u{code:X4}'";
     }
 
+    /// <summary>A text default (a <c>string</c> or <c>path</c>) as a C# string literal: printable ASCII as it is, the rest escaped.</summary>
+    public static string String(JsonElement value, string where)
+    {
+        if (value.ValueKind != JsonValueKind.String)
+        {
+            throw new BindingException($"{where}: a text's default is a string, not {value}");
+        }
+
+        return Text(value.GetString()!);
+    }
+
+    /// <summary>Text as a C# string literal: printable ASCII as it is, the rest escaped.</summary>
+    public static string Text(string value)
+    {
+        var text = new System.Text.StringBuilder("\"");
+        foreach (var c in value)
+        {
+            text.Append(c switch
+            {
+                '"' => "\\\"",
+                '\\' => "\\\\",
+                >= ' ' and < '\x7F' => c.ToString(),
+                _ => $"\\u{(int)c:X4}",
+            });
+        }
+
+        return text.Append('"').ToString();
+    }
+
     /// <summary>
     /// A float default: an integral value as an integer literal (<c>1</c>), anything else as the shortest text that reads
     /// back the same, <c>f</c>-suffixed for <c>float</c>, and the infinities by name.
