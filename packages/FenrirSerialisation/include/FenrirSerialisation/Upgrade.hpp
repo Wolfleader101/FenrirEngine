@@ -48,6 +48,17 @@ namespace Fenrir::Serialisation
     bool RegisterUpgrader(TypeRegistry& registry, std::string_view typeName, std::uint32_t fromVersion,
                           Upgrader upgrader, ILogger& logger);
 
+    /**
+     * @brief Removes every upgrader of the type registered under `typeName`, its canonical or a former name, so its
+     * upgraders can be registered again, as a C# type's are when a script reload moves its version.
+     *
+     * `TypeRegistry::Unregister` removes them with the type, so this is for a type that stays registered.
+     *
+     * @return Whether the type had upgraders to remove: false when it had none or no type is registered under
+     * `typeName`, which is not an error.
+     */
+    bool UnregisterUpgraders(TypeRegistry& registry, std::string_view typeName) noexcept;
+
     /** @brief How an `Upgrade` went. */
     enum class UpgradeStatus
     {

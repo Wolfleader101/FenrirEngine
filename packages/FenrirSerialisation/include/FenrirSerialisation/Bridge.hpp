@@ -98,10 +98,13 @@ namespace Fenrir::Serialisation
      *        §4). A field equal to the same field there is left out, a nested struct field by field; one that differs
      *        is written, even when it is at the type's own default. A `reference` or `entity` compares by
      *        value, so one naming an entity of another scene always differs. Null for the constructed defaults.
+     * @param logger Where a refusal is reported: a tree-backed `type` (`TypeDescription::treeBacked`) has no value in
+     *        memory to walk, since its value is a tree already, so the result is `null` with one error here (or
+     *        nowhere, when this is null). Every other type gives an `Object` or, for a bound type, an `Array`.
      */
     [[nodiscard]] Value ToTree(const void* value, const TypeDescription& type, const TypeRegistry& registry,
-                               const Resolvers& resolvers, const Value* prior = nullptr,
-                               const void* defaults = nullptr);
+                               const Resolvers& resolvers, const Value* prior = nullptr, const void* defaults = nullptr,
+                               ILogger* logger = nullptr);
 
     /** @brief How a `FromTree` read went. */
     enum class BridgeStatus
@@ -112,6 +115,11 @@ namespace Fenrir::Serialisation
         Partial,
         /** @brief The registry lacks the type, so nothing was read; the caller keeps the tree and writes it back. */
         UnknownType,
+        /**
+         * @brief The type is tree-backed (`TypeDescription::treeBacked`): its value is the tree itself and is never
+         * read into memory, so nothing was read, with one error.
+         */
+        TreeBacked,
     };
 
     /** @brief What `FromTree` gives: the status, what it counted and its diagnostics (ADR-0077 §7, ADR-0079 §3). */
@@ -164,7 +172,8 @@ namespace Fenrir::Serialisation
      * the node it is about, or at line 1, column 1 for a node built in code.
      *
      * @param registry When it lacks `type`, by canonical or former name, the result is `UnknownType`: nothing is read
-     *        or logged, and the caller keeps the tree to write back unchanged (ADR-0077 §6).
+     *        or logged, and the caller keeps the tree to write back unchanged (ADR-0077 §6). When `type` is
+     *        tree-backed, the result is `TreeBacked`: nothing is read, with one error at the tree's root.
      * @param resolvers Asked once for each `reference` or `entity` value the tree holds as a string.
      * @param path The path diagnostics name the tree's file by, as `ReadText`'s does.
      */

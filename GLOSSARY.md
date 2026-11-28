@@ -319,8 +319,12 @@ FenrirSerialisation's compact binary form of a value tree, used in memory to han
 The generated pair that turns a data asset class into a value tree and back, emitted per C++ data asset type by the binding generator and per C# data asset type by the scripting source generator (ADR-0083).
 *Avoid:* serializer, converter, marshaller, mapper.
 
+**Tree-backed type**
+A type in the type registry whose layout C++ does not know, such as a C# data asset type: its description has fields without offsets and a default value tree, and no size, construct, destroy or visitor, and its values are only ever value trees. It may extend a C++ data asset type; a C++ type may neither extend nor hold one (ADR-0083).
+*Avoid:* dynamic type, runtime struct, managed layout.
+
 **Type registry**
-The run-time table of every described type the running engine knows, by canonical name: its role, fields, kinds, defaults, docs and metadata, filled from each package's generated type registration at `Install` and from C# at admission. A file reader, writer or inspector reaches a type's fields only through it, and a component or a scene or app resource through what the registrations hang on it: a `ComponentType`, a resource's find, add and remove (ADR-0074).
+The run-time table of every described type the running engine knows, by canonical name: its role, fields, kinds, defaults, docs and metadata, filled from each package's generated type registration at `Install` and from C# at admission, and emptied of a C# type again by `Unregister`. A file reader, writer or inspector reaches a type's fields only through it, and a component or a scene or app resource through what the registrations hang on it: a `ComponentType`, a resource's find, add and remove (ADR-0074).
 *Avoid:* reflection, RTTI, ClassDB, type database.
 
 **Type registration**

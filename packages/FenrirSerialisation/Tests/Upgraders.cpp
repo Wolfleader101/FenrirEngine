@@ -407,3 +407,57 @@ TEST_CASE("Registering an upgrader from above the type's version is one error an
     INFO("the registry holds no upgraders for the type");
     REQUIRE(registry.Attachment<UpgradersTag>("MyGame::Sword") == nullptr);
 }
+
+TEST_CASE("A type's upgraders are removed, and registered again after", "[serialisation][upgrade]")
+{
+    Fenrir::TypeRegistry registry = SwordRegistry();
+    RecordingLogger logger;
+    std::vector<std::uint32_t> steps;
+    INFO("setup: both steps register");
+    REQUIRE(RegisterUpgrader(registry, "MyGame::Sword", 1, AttackToPower(steps), logger));
+    REQUIRE(RegisterUpgrader(registry, "MyGame::Sword", 2, PowerToDamage(steps), logger));
+
+    INFO("removing them says there were some to remove");
+    REQUIRE(UnregisterUpgraders(registry, "MyGame::Sword"));
+
+    Value tree = TreeOf(SwordAtVersion1);
+    const UpgradeResult stopped = Upgrade(registry, "MyGame::Sword", 1, tree, Path, logger);
+    INFO("with none left, the version 1 tree stops at its first step");
+    REQUIRE(stopped.status == UpgradeStatus::MissingStep);
+    REQUIRE(steps.empty());
+
+    INFO("the same versions register again, the removed ones no longer taking them");
+    REQUIRE(RegisterUpgrader(registry, "MyGame::Sword", 1, AttackToPower(steps), logger));
+    REQUIRE(RegisterUpgrader(registry, "MyGame::Sword", 2, PowerToDamage(steps), logger));
+
+    Value again = TreeOf(SwordAtVersion1);
+    const UpgradeResult upgraded = Upgrade(registry, "MyGame::Sword", 1, again, Path, logger);
+    INFO("the new upgraders run, reaching the type's version");
+    REQUIRE(upgraded.status == UpgradeStatus::Succeeded);
+    REQUIRE(steps == std::vector<std::uint32_t>{1, 2});
+}
+
+TEST_CASE("Removing upgraders from a type with none, or one the registry lacks, removes nothing and logs nothing",
+          "[serialisation][upgrade]")
+{
+    Fenrir::TypeRegistry registry = SwordRegistry();
+
+    INFO("a registered type with no upgraders has none to remove");
+    REQUIRE_FALSE(UnregisterUpgraders(registry, "MyGame::Sword"));
+    INFO("a name the registry lacks has none either");
+    REQUIRE_FALSE(UnregisterUpgraders(registry, "MyGame::Nothing"));
+    INFO("the type is still registered");
+    REQUIRE(registry.Find("MyGame::Sword") == &SwordDescription);
+}
+
+TEST_CASE("A former type name finds the type to remove upgraders from", "[serialisation][upgrade]")
+{
+    Fenrir::TypeRegistry registry = SwordRegistry();
+    RecordingLogger logger;
+    std::vector<std::uint32_t> steps;
+    REQUIRE(RegisterUpgrader(registry, "MyGame::Sword", 1, AttackToPower(steps), logger));
+
+    INFO("the former name MyGame::Blade removes the sword's upgraders");
+    REQUIRE(UnregisterUpgraders(registry, "MyGame::Blade"));
+    REQUIRE(registry.Attachment<UpgradersTag>("MyGame::Sword") == nullptr);
+}

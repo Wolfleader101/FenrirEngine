@@ -24,6 +24,7 @@ target_sources(FenrirSerialisationTests PRIVATE ToTree.cpp BridgeTypes.hpp)
 target_sources(FenrirSerialisationTests PRIVATE FromTree.cpp)
 target_sources(FenrirSerialisationTests PRIVATE Resolvers.cpp)
 target_sources(FenrirSerialisationTests PRIVATE Upgraders.cpp)
+target_sources(FenrirSerialisationTests PRIVATE TreeBacked.cpp)
 target_sources(FenrirSerialisationTests PRIVATE PriorTree.cpp)
 target_sources(FenrirSerialisationTests PRIVATE ReadTree.cpp)
 target_compile_definitions(FenrirSerialisationTests

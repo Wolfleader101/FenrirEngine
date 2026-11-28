@@ -89,6 +89,9 @@ namespace Fenrir
 
     void TypeDescription::Visit(void* instance, FieldVisitor& visitor) const
     {
+        // A tree-backed type's fields have no offsets to read through.
+        if (treeBacked)
+            return;
         if (visit != nullptr)
         {
             visit(instance, visitor);

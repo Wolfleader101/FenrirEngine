@@ -140,7 +140,8 @@ namespace Fenrir
         std::string_view name;
         /** @brief The field value's kind, and its element or target type. */
         ValueType type;
-        /** @brief Bytes from the start of the struct, for a fixed-layout type; unused for an owning type. */
+        /** @brief Bytes from the start of the struct, for a fixed-layout type; unused for an owning type, and 0 for a
+         * tree-backed one. */
         std::size_t offset = 0;
         /** @brief The names the field had before (`@formerly oldName`), which files written then spell. */
         std::span<const std::string_view> formerly;

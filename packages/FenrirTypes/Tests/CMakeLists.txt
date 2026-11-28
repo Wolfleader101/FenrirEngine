@@ -22,7 +22,8 @@ foreach(header IN LISTS fenrir_types_headers)
     list(APPEND fenrir_types_header_checks "${check}")
 endforeach()
 
-add_executable(FenrirTypesTests PublicHeaders.cpp TestTypes.hpp Registry.cpp Attachments.cpp Visiting.cpp Values.cpp
+add_executable(FenrirTypesTests PublicHeaders.cpp TestTypes.hpp Registry.cpp Attachments.cpp TreeBacked.cpp Unregister.cpp
+                                Visiting.cpp Values.cpp
                                 Describe.cpp GeneratedFixture.cpp Generated/FixtureTypes.hpp Generated/FixtureTypes.cpp
                                 ${fenrir_types_header_checks})
 # The fixture header the generated registration is compiled against: describe-api's, from its include directory.
