@@ -1,7 +1,9 @@
 #include "FenrirTypes/TypeRegistry.hpp"
 
+#include <algorithm>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace Fenrir
 {
@@ -51,7 +53,8 @@ namespace Fenrir
         }
 
         // The first tree-backed struct `type` holds, through its elements and nested structs' fields; null when none.
-        const TypeDescription* HeldTreeBacked(const ValueType& type) noexcept
+        // A list may hold its own struct (`std::vector<Self>`), so `seen` stops the walk at a struct it has walked.
+        const TypeDescription* HeldTreeBacked(const ValueType& type, std::vector<const TypeDescription*>& seen)
         {
             const ValueType* leaf = &type;
             while (leaf->element != nullptr)
@@ -60,13 +63,31 @@ namespace Fenrir
                 return nullptr;
             if (leaf->type->treeBacked)
                 return leaf->type;
+            if (std::find(seen.begin(), seen.end(), leaf->type) != seen.end())
+                return nullptr;
+            seen.push_back(leaf->type);
             for (const FieldInfo& field : leaf->type->fields)
-                if (const TypeDescription* held = HeldTreeBacked(field.type))
+                if (const TypeDescription* held = HeldTreeBacked(field.type, seen))
                     return held;
             for (const Alternative& alternative : leaf->type->alternatives)
-                if (const TypeDescription* held = HeldTreeBacked(alternative.field.type))
+                if (const TypeDescription* held = HeldTreeBacked(alternative.field.type, seen))
                     return held;
             return nullptr;
+        }
+
+        const TypeDescription* HeldTreeBacked(const ValueType& type)
+        {
+            std::vector<const TypeDescription*> seen;
+            return HeldTreeBacked(type, seen);
+        }
+
+        // Whether `type`, through its elements, is a struct of `description`: a field holding a value of it.
+        bool Holds(const ValueType& type, const TypeDescription& description) noexcept
+        {
+            const ValueType* leaf = &type;
+            while (leaf->element != nullptr)
+                leaf = leaf->element;
+            return leaf->kind == Kind::Struct && leaf->type == &description;
         }
 
         // Why the tree-backed `description` cannot be registered, as the rest of a diagnostic; empty when it can.
@@ -88,6 +109,7 @@ namespace Fenrir
                 return "it is tree-backed and has no default tree";
             return {};
         }
+
     } // namespace
 
     TypeRegistry::TypeRegistry(Diagnostics diagnostics) : m_diagnostics(std::move(diagnostics))
@@ -135,6 +157,11 @@ namespace Fenrir
                 Report(prefix + refusal);
                 return false;
             }
+        }
+        else if (!description.defaultTree.empty())
+        {
+            Report(prefix + "it has a default tree and is not tree-backed; its default is an instance it constructs");
+            return false;
         }
 
         if (!description.base.empty())
@@ -244,6 +271,16 @@ namespace Fenrir
                 Report("cannot unregister " + Named(description) + ": " + Named(other) +
                        " extends it; unregister that type first");
                 return false;
+            }
+            // A field holding the type points at its description, which its registrant frees once it is removed.
+            for (const FieldInfo& field : other.fields)
+            {
+                if (&other != &description && Holds(field.type, description))
+                {
+                    Report("cannot unregister " + Named(description) + ": " + Named(other) + "'s field " +
+                           Quoted(field.name) + " holds it; unregister that type first");
+                    return false;
+                }
             }
         }
 

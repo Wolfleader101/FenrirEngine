@@ -1,3 +1,4 @@
+#include "RecordingRegistry.hpp"
 #include "TestTypes.hpp"
 
 #include "FenrirTypes/FieldVisitor.hpp"
@@ -14,20 +15,8 @@ using Fenrir::Role;
 using Fenrir::TypeDescription;
 using Fenrir::TypeRegistry;
 
-namespace
-{
-    // A registry whose diagnostics land in a list the test reads.
-    struct RecordingRegistry
-    {
-        std::vector<std::string> diagnostics;
-        TypeRegistry registry{[this](std::string_view message) { diagnostics.emplace_back(message); }};
-    };
-
-    bool Contains(const std::string& text, std::string_view part)
-    {
-        return text.find(part) != std::string::npos;
-    }
-} // namespace
+using TypesTest::Contains;
+using TypesTest::RecordingRegistry;
 
 TEST_CASE("A registered type is found by its canonical name", "[types][registry]")
 {

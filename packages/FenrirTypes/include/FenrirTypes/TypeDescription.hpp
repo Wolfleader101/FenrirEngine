@@ -29,14 +29,13 @@ namespace Fenrir
     }
 
     /**
-     * @brief The run-time description of one type: static, immutable data, held once per described type.
+     * @brief The run-time description of one type: immutable data, held once per described type.
      *
-     * A package's generated type registration holds one per type it describes and adds it to the type registry, and
-     * `Describe<T>` yields the same object. Nothing copies a description: the registry, value references and other
+     * A package's generated type registration holds one per type it describes, as static data, and adds it to the type
+     * registry, and `Describe<T>` yields the same object. A tree-backed description (`treeBacked`), one whose layout
+     * only the running engine learns such as a C# data asset type's, is made at run time instead, by a registrant that
+     * keeps it alive while it is registered. Nothing copies a description: the registry, value references and other
      * descriptions point at it.
-     *
-     * A description may instead be tree-backed (`treeBacked`): one whose layout only the running engine learns, such as
-     * a C# data asset type's, made at run time by its registrant, which keeps it alive while it is registered.
      */
     struct TypeDescription
     {

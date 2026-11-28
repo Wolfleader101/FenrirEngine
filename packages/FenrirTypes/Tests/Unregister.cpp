@@ -1,3 +1,4 @@
+#include "RecordingRegistry.hpp"
 #include "TestTypes.hpp"
 
 #include "FenrirTypes/TypeRegistry.hpp"
@@ -12,20 +13,11 @@ using Fenrir::Role;
 using Fenrir::TypeDescription;
 using Fenrir::TypeRegistry;
 
+using TypesTest::Contains;
+using TypesTest::RecordingRegistry;
+
 namespace
 {
-    // A registry whose diagnostics land in a list the test reads.
-    struct RecordingRegistry
-    {
-        std::vector<std::string> diagnostics;
-        TypeRegistry registry{[this](std::string_view message) { diagnostics.emplace_back(message); }};
-    };
-
-    bool Contains(const std::string& text, std::string_view part)
-    {
-        return text.find(part) != std::string::npos;
-    }
-
     struct LabelTag
     {
         using Value = std::string;
@@ -68,6 +60,7 @@ TEST_CASE("An unregistered type is found by none of its names, and its attachmen
 TEST_CASE("A type is unregistered by a former name", "[types][unregister]")
 {
     TypeRegistry registry;
+    INFO("setup: Transform registers");
     REQUIRE(registry.Register(TypesTest::TransformDescription));
 
     INFO("a former name unregisters the type");
@@ -136,6 +129,34 @@ TEST_CASE("Unregistering a type another registered type extends is refused, unti
     REQUIRE(recording.registry.Unregister("TypesTest::WeaponData"));
 }
 
+TEST_CASE("Unregistering a type another registered type's field holds is refused, until that type goes",
+          "[types][unregister]")
+{
+    RecordingRegistry recording;
+    INFO("setup: Gem, and a data asset holding a list of Gems, register");
+    REQUIRE(recording.registry.Register(TypesTest::GemDescription));
+    TypeDescription purse = TypesTest::SwordDescription;
+    purse.name = "TypesTest::Purse";
+    purse.base = {};
+    REQUIRE(recording.registry.Register(purse));
+
+    INFO("unregistering Gem is refused while Purse's field holds it");
+    REQUIRE_FALSE(recording.registry.Unregister("TypesTest::Gem"));
+
+    INFO("one diagnostic names the holder and its field: "
+         << (recording.diagnostics.empty() ? std::string("none") : recording.diagnostics.back()));
+    REQUIRE(recording.diagnostics.size() == 1);
+    REQUIRE(Contains(recording.diagnostics.back(), "`TypesTest::Purse`"));
+    REQUIRE(Contains(recording.diagnostics.back(), "`gems`"));
+
+    INFO("Gem is still registered");
+    REQUIRE(recording.registry.Find("TypesTest::Gem") == &TypesTest::GemDescription);
+
+    INFO("once Purse is unregistered, Gem unregisters");
+    REQUIRE(recording.registry.Unregister("TypesTest::Purse"));
+    REQUIRE(recording.registry.Unregister("TypesTest::Gem"));
+}
+
 TEST_CASE("Unregistering a name nothing registered is refused with a diagnostic", "[types][unregister]")
 {
     RecordingRegistry recording;
@@ -151,6 +172,7 @@ TEST_CASE("Unregistering a name nothing registered is refused with a diagnostic"
 TEST_CASE("Detaching removes one attachment and leaves the type's others", "[types][attachments]")
 {
     TypeRegistry registry;
+    INFO("setup: Transform registers and carries two attachments");
     REQUIRE(registry.Register(TypesTest::TransformDescription));
     REQUIRE(registry.Attach<LabelTag>("TypesTest::Transform", "placed"));
     REQUIRE(registry.Attach<CountTag>("TypesTest::Transform", 2));

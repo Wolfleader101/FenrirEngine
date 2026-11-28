@@ -62,8 +62,9 @@ namespace Fenrir
          * A tree-backed description (`TypeDescription::treeBacked`) needs no visit function for its owning fields, and
          * may extend a C++ data asset type. It is refused when it is not a data asset or nested type, when it has a
          * `size`, `construct`, `destroy` or `visit`, a field with an offset, alternatives or enumerators, or no
-         * `defaultTree`. A type that is not tree-backed is refused when its base is tree-backed, or when a field holds
-         * a tree-backed struct (itself, or through its elements or nested structs), since its layout would hold one.
+         * `defaultTree`. A type that is not tree-backed is refused when it has a `defaultTree`, when its base is
+         * tree-backed, or when a field holds a tree-backed struct (itself, or through its elements or nested structs),
+         * since its layout would hold one.
          *
          * @return Whether it was added.
          */
@@ -73,10 +74,11 @@ namespace Fenrir
          * @brief Removes the type registered under `name`, its canonical or a former one, with every name it holds and
          * every attachment hung on it, so the same names can be registered again.
          *
-         * For a type registered at run time, such as a C# data asset type a script reload drops or changes; not for
-         * engine types, which their packages' code still names, though nothing but the base check below guards them.
-         * Refused with a diagnostic, changing nothing, when no type is registered under `name` or while another
-         * registered type names it as its base.
+         * For a type registered at run time, such as a C# data asset type a new script generation drops or changes; not
+         * for engine types, which their packages' code still names, though nothing but the base check below guards
+         * them. Refused with a diagnostic, changing nothing, when no type is registered under `name`, while another
+         * registered type names it as its base, or while another registered type's field holds a value of it (itself,
+         * or as an element), since that field points at its description. Holders go first.
          *
          * @return Whether it was removed.
          */

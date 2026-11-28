@@ -1,3 +1,4 @@
+#include "RecordingRegistry.hpp"
 #include "TestTypes.hpp"
 
 #include "FenrirTypes/TypeRegistry.hpp"
@@ -17,20 +18,11 @@ using Fenrir::TypeDescription;
 using Fenrir::TypeRegistry;
 using Fenrir::ValueType;
 
+using TypesTest::Contains;
+using TypesTest::RecordingRegistry;
+
 namespace
 {
-    // A registry whose diagnostics land in a list the test reads.
-    struct RecordingRegistry
-    {
-        std::vector<std::string> diagnostics;
-        TypeRegistry registry{[this](std::string_view message) { diagnostics.emplace_back(message); }};
-    };
-
-    bool Contains(const std::string& text, std::string_view part)
-    {
-        return text.find(part) != std::string::npos;
-    }
-
     // What a registrant such as FenrirScripting builds at run time and keeps alive while the type is registered: a
     // tree-backed data asset type extending the C++ `WeaponData`, with a string, a list and a reference field. Its
     // default tree's bytes stand in for an encoded tree, which FenrirTypes never reads.
@@ -56,13 +48,11 @@ namespace
     };
 } // namespace
 
-TEST_CASE("A tree-backed type with string, list and reference fields registers, is found, and is-a its C++ base",
-          "[types][tree-backed]")
+TEST_CASE("A tree-backed type with string, list and reference fields registers and is found", "[types][tree-backed]")
 {
     RecordingRegistry recording;
     INFO("setup: the C++ base WeaponData registers");
     REQUIRE(recording.registry.Register(TypesTest::WeaponDataDescription));
-
     const TreeBackedTypes types;
 
     INFO("a tree-backed type with owning fields and no visit function registers; diagnostics: "
@@ -72,16 +62,25 @@ TEST_CASE("A tree-backed type with string, list and reference fields registers, 
     INFO("its name finds the registrant's own description, not a copy");
     REQUIRE(recording.registry.Find("Game::ScriptedSword") == &types.description);
 
-    INFO("it is a WeaponData, over its C++ base");
-    REQUIRE(recording.registry.IsA("Game::ScriptedSword", "TypesTest::WeaponData"));
-
-    INFO("the C++ base is not one of it");
-    REQUIRE_FALSE(recording.registry.IsA("TypesTest::WeaponData", "Game::ScriptedSword"));
-
-    INFO("it is listed among the data asset types");
+    INFO("it is listed among the data asset types, after WeaponData");
     const std::vector<const TypeDescription*> assets = recording.registry.Types(Role::DataAsset);
     REQUIRE(assets.size() == 2);
     REQUIRE(assets[1] == &types.description);
+}
+
+TEST_CASE("A tree-backed type is-a the C++ data asset type it extends", "[types][tree-backed]")
+{
+    TypeRegistry registry;
+    INFO("setup: WeaponData and a tree-backed type extending it register");
+    REQUIRE(registry.Register(TypesTest::WeaponDataDescription));
+    const TreeBackedTypes types;
+    REQUIRE(registry.Register(types.description));
+
+    INFO("it is a WeaponData, over its C++ base");
+    REQUIRE(registry.IsA("Game::ScriptedSword", "TypesTest::WeaponData"));
+
+    INFO("the C++ base is not one of it");
+    REQUIRE_FALSE(registry.IsA("TypesTest::WeaponData", "Game::ScriptedSword"));
 }
 
 TEST_CASE("A tree-backed type extends another tree-backed type", "[types][tree-backed]")
@@ -105,9 +104,10 @@ TEST_CASE("A tree-backed type extends another tree-backed type", "[types][tree-b
     REQUIRE(registry.IsA("Game::LongSword", "TypesTest::WeaponData"));
 }
 
-TEST_CASE("A tree-backed type with a layout is refused", "[types][tree-backed]")
+TEST_CASE("A tree-backed type with a size or a visit function is refused", "[types][tree-backed]")
 {
     RecordingRegistry recording;
+    INFO("setup: WeaponData registers");
     REQUIRE(recording.registry.Register(TypesTest::WeaponDataDescription));
     const TreeBackedTypes types;
 
@@ -115,8 +115,9 @@ TEST_CASE("A tree-backed type with a layout is refused", "[types][tree-backed]")
     sized.size = 16;
     INFO("a tree-backed type with a size is refused");
     REQUIRE_FALSE(recording.registry.Register(sized));
+    INFO("one diagnostic says it should have no layout: "
+         << (recording.diagnostics.empty() ? std::string("none") : recording.diagnostics.back()));
     REQUIRE(recording.diagnostics.size() == 1);
-    INFO("the diagnostic says it has a layout: " << recording.diagnostics.back());
     REQUIRE(Contains(recording.diagnostics.back(), "no layout"));
 
     TypeDescription visited = types.description;
@@ -124,21 +125,55 @@ TEST_CASE("A tree-backed type with a layout is refused", "[types][tree-backed]")
     INFO("a tree-backed type with a visit function is refused");
     REQUIRE_FALSE(recording.registry.Register(visited));
 
+    INFO("neither was added");
+    REQUIRE(recording.registry.Find("Game::ScriptedSword") == nullptr);
+}
+
+TEST_CASE("A tree-backed type whose field has an offset is refused, naming the field", "[types][tree-backed]")
+{
+    RecordingRegistry recording;
+    INFO("setup: WeaponData registers");
+    REQUIRE(recording.registry.Register(TypesTest::WeaponDataDescription));
+    const TreeBackedTypes types;
     std::array<FieldInfo, 1> offsetFields{{{.name = "title", .type = {.kind = Kind::String}, .offset = 8}}};
     TypeDescription offset = types.description;
     offset.fields = offsetFields;
-    INFO("a tree-backed type whose field has an offset is refused, naming the field");
-    REQUIRE_FALSE(recording.registry.Register(offset));
-    REQUIRE(Contains(recording.diagnostics.back(), "`title`"));
 
+    INFO("the type is refused");
+    REQUIRE_FALSE(recording.registry.Register(offset));
+    INFO("the diagnostic names the field: " << (recording.diagnostics.empty() ? std::string("none")
+                                                                              : recording.diagnostics.back()));
+    REQUIRE(Contains(recording.diagnostics.back(), "`title`"));
+}
+
+TEST_CASE("A tree-backed type with no default tree is refused", "[types][tree-backed]")
+{
+    RecordingRegistry recording;
+    INFO("setup: WeaponData registers");
+    REQUIRE(recording.registry.Register(TypesTest::WeaponDataDescription));
+    const TreeBackedTypes types;
     TypeDescription noDefault = types.description;
     noDefault.defaultTree = {};
-    INFO("a tree-backed type with no default tree is refused");
-    REQUIRE_FALSE(recording.registry.Register(noDefault));
-    REQUIRE(Contains(recording.diagnostics.back(), "default tree"));
 
-    INFO("none of them was added");
-    REQUIRE(recording.registry.Find("Game::ScriptedSword") == nullptr);
+    INFO("the type is refused");
+    REQUIRE_FALSE(recording.registry.Register(noDefault));
+    INFO("the diagnostic says it has no default tree: "
+         << (recording.diagnostics.empty() ? std::string("none") : recording.diagnostics.back()));
+    REQUIRE(Contains(recording.diagnostics.back(), "no default tree"));
+}
+
+TEST_CASE("A type that is not tree-backed may not carry a default tree", "[types][tree-backed]")
+{
+    RecordingRegistry recording;
+    const TreeBackedTypes types;
+    TypeDescription laidOut = TypesTest::WeaponDataDescription;
+    laidOut.defaultTree = types.defaultTree;
+
+    INFO("a C++ data asset with a default tree is refused");
+    REQUIRE_FALSE(recording.registry.Register(laidOut));
+    INFO("the diagnostic says it is not tree-backed: "
+         << (recording.diagnostics.empty() ? std::string("none") : recording.diagnostics.back()));
+    REQUIRE(Contains(recording.diagnostics.back(), "not tree-backed"));
 }
 
 TEST_CASE("Only a data asset or nested type may be tree-backed", "[types][tree-backed]")
@@ -152,13 +187,15 @@ TEST_CASE("Only a data asset or nested type may be tree-backed", "[types][tree-b
 
     INFO("a tree-backed component is refused");
     REQUIRE_FALSE(recording.registry.Register(component));
-    INFO("the diagnostic names the roles that may be tree-backed: " << recording.diagnostics.back());
+    INFO("the diagnostic names the roles that may be tree-backed: "
+         << (recording.diagnostics.empty() ? std::string("none") : recording.diagnostics.back()));
     REQUIRE(Contains(recording.diagnostics.back(), "only a data asset or nested type may be tree-backed"));
 }
 
 TEST_CASE("A C++ type may not extend a tree-backed type", "[types][tree-backed]")
 {
     RecordingRegistry recording;
+    INFO("setup: WeaponData and a tree-backed type extending it register");
     REQUIRE(recording.registry.Register(TypesTest::WeaponDataDescription));
     const TreeBackedTypes types;
     REQUIRE(recording.registry.Register(types.description));
@@ -169,7 +206,8 @@ TEST_CASE("A C++ type may not extend a tree-backed type", "[types][tree-backed]"
 
     INFO("a type with a layout extending a tree-backed one is refused");
     REQUIRE_FALSE(recording.registry.Register(laidOut));
-    INFO("the diagnostic says its base is tree-backed: " << recording.diagnostics.back());
+    INFO("the diagnostic says its base is tree-backed: "
+         << (recording.diagnostics.empty() ? std::string("none") : recording.diagnostics.back()));
     REQUIRE(Contains(recording.diagnostics.back(), "is tree-backed"));
 }
 
@@ -180,6 +218,7 @@ TEST_CASE("A C++ type may not hold a tree-backed struct, even in a list", "[type
     types.description.name = "Game::Charm";
     types.description.role = Role::Nested;
     types.description.base = {};
+    INFO("setup: a tree-backed nested type registers");
     REQUIRE(recording.registry.Register(types.description));
 
     const ValueType charm{.kind = Kind::Struct, .type = &types.description};
@@ -190,7 +229,8 @@ TEST_CASE("A C++ type may not hold a tree-backed struct, even in a list", "[type
 
     INFO("a type with a layout holding a list of a tree-backed struct is refused");
     REQUIRE_FALSE(recording.registry.Register(laidOut));
-    INFO("the diagnostic names the field and the held type: " << recording.diagnostics.back());
+    INFO("the diagnostic names the field and the held type: "
+         << (recording.diagnostics.empty() ? std::string("none") : recording.diagnostics.back()));
     REQUIRE(Contains(recording.diagnostics.back(), "`charms`"));
     REQUIRE(Contains(recording.diagnostics.back(), "`Game::Charm`"));
 
@@ -200,4 +240,21 @@ TEST_CASE("A C++ type may not hold a tree-backed struct, even in a list", "[type
     treeHolder.fields = held;
     INFO("a tree-backed type may hold one");
     REQUIRE(recording.registry.Register(treeHolder));
+}
+
+TEST_CASE("A C++ type holding a list of itself registers", "[types][tree-backed]")
+{
+    // The walk for held tree-backed structs goes through lists, and a list of the type itself is a legal member,
+    // as `std::vector<Self>` is. Its visit function is never called here.
+    TypeDescription node = TypesTest::WeaponDataDescription;
+    node.name = "TypesTest::Node";
+    const ValueType nodeType{.kind = Kind::Struct, .type = &node};
+    const ValueType children{.kind = Kind::List, .element = &nodeType};
+    std::array<FieldInfo, 1> fields{{{.name = "children", .type = children}}};
+    node.fields = fields;
+
+    RecordingRegistry recording;
+    INFO("the type registers, the walk ending at the struct it already walked; diagnostics: "
+         << (recording.diagnostics.empty() ? std::string("none") : recording.diagnostics.front()));
+    REQUIRE(recording.registry.Register(node));
 }

@@ -455,6 +455,7 @@ TEST_CASE("A former type name finds the type to remove upgraders from", "[serial
     Fenrir::TypeRegistry registry = SwordRegistry();
     RecordingLogger logger;
     std::vector<std::uint32_t> steps;
+    INFO("setup: one upgrader registers");
     REQUIRE(RegisterUpgrader(registry, "MyGame::Sword", 1, AttackToPower(steps), logger));
 
     INFO("the former name MyGame::Blade removes the sword's upgraders");

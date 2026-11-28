@@ -50,7 +50,7 @@ namespace Fenrir::Serialisation
 
     /**
      * @brief Removes every upgrader of the type registered under `typeName`, its canonical or a former name, so its
-     * upgraders can be registered again, as a C# type's are when a script reload moves its version.
+     * upgraders can be registered again, as a C# type's are when a hot reload's new generation moves its version.
      *
      * `TypeRegistry::Unregister` removes them with the type, so this is for a type that stays registered.
      *
