@@ -52,6 +52,9 @@ internal sealed record Field(string Name, int Offset, FieldKind Kind, JsonElemen
     /// <summary>The names the field had before (<c>@formerly</c>), which a file may still spell.</summary>
     public IReadOnlyList<string> Formerly { get; init; } = [];
 
+    /// <summary>Whether the field is <c>@transient</c>: read-back state in the layout that no file holds.</summary>
+    public bool Transient { get; init; }
+
     /// <summary>The inspector's metadata (<c>@range</c>, <c>@display</c>, ...) as the description records it; null for none.</summary>
     public JsonElement? Metadata { get; init; }
 }
@@ -405,6 +408,7 @@ internal static class Description
         return new Field(name, offset, ReadKind(field, subject), value, OptionalString(field, "doc"))
         {
             Formerly = Names(field, "formerly", subject),
+            Transient = Flag(field, "transient"),
             Metadata = field.TryGetProperty("metadata", out var metadata) && metadata.ValueKind == JsonValueKind.Object
                            ? metadata.Clone()
                            : null,

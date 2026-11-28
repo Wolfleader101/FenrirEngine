@@ -1623,6 +1623,19 @@ public sealed class BindingTests
                     $"With no asset-handle the binding should say so, but failed with\n  {exception.Message}");
     }
 
+    [Fact]
+    public void ATransientFieldOfAStructADataAssetHoldsIsMirroredButNotWritten()
+    {
+        using var directory = new TemporaryDirectory();
+        var description = WriteDescription(directory, root => Type(root, "Fixture::Stat")["fields"]!.AsArray().Add(
+            new JsonObject { ["name"] = "cached", ["kind"] = "f32", ["default"] = 0, ["transient"] = true }));
+
+        var generated = Generator.Generate(CopyConfig(directory, ""), [description]);
+
+        Assert.Contains("    public float Cached;\n", Mirror(generated, "Stat.cs"), StringComparison.Ordinal);
+        Assert.DoesNotContain("cached", Mirror(generated, "NativeDataAssets.cs"), StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("entity", "Fixture::Sword::grip: an entity, which a data asset never holds (ADR-0075)")]
     [InlineData("array", "Fixture::Sword::grip: a fixed-size array or fixed string")]

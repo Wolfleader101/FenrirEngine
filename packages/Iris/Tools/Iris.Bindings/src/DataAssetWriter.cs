@@ -105,7 +105,7 @@ internal static class DataAssetWriter
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var holder in holders)
         {
-            foreach (var field in holder.Fields)
+            foreach (var field in Written(holder))
             {
                 Walk(Shape(binding, holder, field.Kind, $"{holder.Source}: {holder.Name}::{field.Name}"));
             }
@@ -133,7 +133,7 @@ internal static class DataAssetWriter
                     }
 
                     structs.Add(type);
-                    foreach (var field in type.Fields)
+                    foreach (var field in Written(type))
                     {
                         Walk(Shape(binding, type, field.Kind, $"{type.Source}: {type.Name}::{field.Name}"));
                     }
@@ -174,7 +174,7 @@ internal static class DataAssetWriter
     private static string Class(Binding binding, DescribedType type)
     {
         var name = binding.CSharpName(type);
-        var shapes = type.Fields.Select(field => (Field: field, Shape: FieldShape(binding, type, field))).ToList();
+        var shapes = Written(type).Select(field => (Field: field, Shape: FieldShape(binding, type, field))).ToList();
         var text = Header(binding, type, shapes.Select(field => field.Shape), type.Base);
         CSharpWriter.Doc(text, type.Doc);
         text.Line($"[{binding.DataAssetAttribute(type)}(\"{type.Name}\")]");
@@ -235,6 +235,10 @@ internal static class DataAssetWriter
         text.Line("}");
         return text.ToString();
     }
+
+    // The fields the codecs write and read: all but the transient ones, which C++'s bridge never writes (a data asset's
+    // are left out of its description already; a nested struct's are in its layout, so in its mirror).
+    private static IEnumerable<Field> Written(DescribedType type) => type.Fields.Where(field => !field.Transient);
 
     private static DataShape FieldShape(Binding binding, DescribedType holder, Field field) =>
         Shape(binding, holder, field.Kind, $"{holder.Source}: {holder.Name}::{field.Name}");
@@ -414,7 +418,7 @@ internal static class DataAssetWriter
     {
         var name = binding.CSharpName(type);
         var mangled = Mangle(type.Name);
-        var shapes = type.Fields.Select(field => (Field: field, Shape: FieldShape(binding, type, field))).ToList();
+        var shapes = Written(type).Select(field => (Field: field, Shape: FieldShape(binding, type, field))).ToList();
         text.Line($"/// <summary>{CSharpWriter.Escape(type.Name)}'s entry in a data asset's description: its name and fields.</summary>");
         text.Line($"internal static TreeNode {mangled}Entry()");
         text.Line("{");
@@ -522,7 +526,7 @@ internal static class DataAssetWriter
         var enums = new List<DescribedType>();
         foreach (var holder in Structs(binding, [type]).Prepend(type))
         {
-            foreach (var field in holder.Fields)
+            foreach (var field in Written(holder))
             {
                 Walk(FieldShape(binding, holder, field));
             }
