@@ -1437,23 +1437,25 @@ namespace Fenrir
         {
             return;
         }
-        m_state->watcher->Poll(ReloadWatcher::Clock::now(), *m_state->logger,
-                               [this](const std::string& key, Detail::AssetKind kind) {
-                                   // A data asset file reloads through its envelope, an imported one through its
-                                   // importer (ADR-0081 §2).
-                                   if (kind == Detail::AssetKind::Data)
-                                   {
-                                       ReloadDataFile(key);
-                                   }
-                                   else if (kind == Detail::AssetKind::Model)
-                                   {
-                                       ReloadModelFile(key);
-                                   }
-                                   else
-                                   {
-                                       ReloadImportedFile(key, kind);
-                                   }
-                               });
+        m_state->watcher->Poll(
+            ReloadWatcher::Clock::now(), *m_state->logger,
+            [this](const std::string& key, Detail::AssetKind kind) {
+                // A data asset file reloads through its envelope, an imported one through its importer (ADR-0081 §2).
+                if (kind == Detail::AssetKind::Data)
+                {
+                    ReloadDataFile(key);
+                }
+                else if (kind == Detail::AssetKind::Model)
+                {
+                    ReloadModelFile(key);
+                }
+                else
+                {
+                    ReloadImportedFile(key, kind);
+                }
+            },
+            // A scene file patches every scene LoadScene filled from it (ADR-0081 §3).
+            [this](const std::string& key) { PatchSceneFile(key); });
     }
 
     void AssetStore::ReloadImportedFile(const std::string& fileKey, Detail::AssetKind kind)

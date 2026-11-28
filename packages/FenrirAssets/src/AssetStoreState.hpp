@@ -38,6 +38,7 @@ namespace Fenrir::Detail
     inline constexpr OwnerId ReloadOwnerId = std::numeric_limits<OwnerId>::max();
 
     class AssetWatcher;
+    struct SceneFileRecord;
 
     /**
      * @brief A data asset's instance (ADR-0075): of its file's type, which may extend the type it was loaded as, so it
@@ -144,6 +145,12 @@ namespace Fenrir::Detail
          * when done, and an instance block naming one of them would instance itself (ADR-0080 §5).
          */
         std::vector<std::string> scenesReading;
+        /**
+         * @brief The record of each scene a LoadScene filled from a file, which the scene patch finds the scenes of a
+         * changed file by (ADR-0081 §3). A record is a resource of its scene and takes itself off when the scene ends,
+         * so the patch never meets a destroyed scene.
+         */
+        std::vector<SceneFileRecord*> sceneFiles;
 
         /** @brief The live record `slot` names in `kind`'s table, or null. */
         [[nodiscard]] AssetRecord* Find(AssetKind kind, AssetSlot slot);
@@ -155,6 +162,12 @@ namespace Fenrir::Detail
 
         /** @brief Takes `owner` off every asset, freeing those it was the last owner of. */
         void ReleaseOwner(OwnerId owner);
+
+        /**
+         * @brief Takes `record`, a scene's that is ending, off `sceneFiles`, and stops watching its file when no other
+         * scene was filled from it.
+         */
+        void ForgetSceneFile(const SceneFileRecord& record);
     };
 
     /**
@@ -253,6 +266,43 @@ namespace Fenrir::Detail
             if (const std::shared_ptr<AssetStoreState> state = store.lock())
             {
                 state->ReleaseOwner(id);
+            }
+        }
+    };
+
+    /**
+     * @brief The scene resource that records which file LoadScene filled its scene from (ADR-0081 §3), beside the
+     * scene's SceneAssetOwner: a change to the file patches the scene. It is on the store's `sceneFiles` while it
+     * lives, and dies with its scene, so a destroyed scene is never patched. LoadSceneInto and CopyScene record
+     * nothing.
+     */
+    struct SceneFileRecord
+    {
+        std::weak_ptr<AssetStoreState> store;
+        /** @brief The scene the record is a resource of. */
+        Scene* scene = nullptr;
+        /** @brief The file's key, the absolute path its watch is under. */
+        std::string fileKey;
+        /** @brief The file's asset path, which the patch reads it by. */
+        std::string assetPath;
+        /**
+         * @brief The ids the file's blocks held when it last filled the scene: a patch destroys an entity whose id is
+         * one of them but is not in the file any more, and leaves an entity whose id the file never held (a merge's, or
+         * one a save minted into a run-time entity) alone.
+         */
+        std::unordered_set<std::uint64_t> fileIds;
+
+        SceneFileRecord(std::weak_ptr<AssetStoreState> owningStore, Scene& filled, std::string key, std::string path)
+            : store(std::move(owningStore)), scene(&filled), fileKey(std::move(key)), assetPath(std::move(path))
+        {
+        }
+        SceneFileRecord(const SceneFileRecord&) = delete;
+        SceneFileRecord& operator=(const SceneFileRecord&) = delete;
+        ~SceneFileRecord()
+        {
+            if (const std::shared_ptr<AssetStoreState> state = store.lock())
+            {
+                state->ForgetSceneFile(*this);
             }
         }
     };

@@ -90,6 +90,13 @@ namespace Fenrir
              * instance are scoped by its root and repeat in every instance of the file (ADR-0080 §2).
              */
             Instance,
+            /**
+             * @brief The scene patch (ADR-0081 §3): the file read again into the scene LoadScene filled from it. A
+             * block whose id an entity of the scene holds (outside any instance) fills that entity, each component the
+             * block writes reset to its defaults and read again, its parent and order restored; any other block is
+             * added as a load adds it, and the file's resources are rewritten.
+             */
+            Patch,
         };
 
         /**
@@ -1276,11 +1283,14 @@ namespace Fenrir
          * scene `makeScene` gives as ReadSceneFile does. `assetPath` is the file read, which a bare `#name` reference
          * names and which goes on the chain of scene files being read; empty for a tree no file holds. Diagnostics are
          * located at `fileKey`, and a refusal is logged naming `named`. `result` holds what came before, the parse's
-         * diagnostics.
+         * diagnostics. When `fileIds` is given, the read puts in it the ids the file's blocks hold; for a patch it
+         * holds those of the file's last read on the way in, and an entity of one of them the file no longer has is
+         * destroyed.
          */
         SceneLoadResult ReadSceneTree(Serialisation::Value& tree, std::string_view named, const std::string& assetPath,
                                       const std::string& fileKey, const std::function<Scene&()>& makeScene,
-                                      Entity parent, Detail::SceneRead read, SceneLoadResult result);
+                                      Entity parent, Detail::SceneRead read, SceneLoadResult result,
+                                      std::unordered_set<std::uint64_t>* fileIds = nullptr);
         /** @brief Logs that loading the scene `named` failed for `diagnostic`, and records it in `result` as Failed. */
         void FailSceneRead(std::string_view named, Serialisation::Diagnostic diagnostic, SceneLoadResult& result);
         /**
@@ -1306,6 +1316,11 @@ namespace Fenrir
         void PollForReload();
         /** @brief Reloads the data asset file `fileKey` in place under its handles, or keeps it whole and says why. */
         void ReloadDataFile(const std::string& fileKey);
+        /**
+         * @brief Patches every scene LoadScene filled from the scene file `fileKey` by entity id, or, when the file
+         * does not read as a scene, changes nothing and says why once.
+         */
+        void PatchSceneFile(const std::string& fileKey);
         /**
          * @brief Re-imports the image, cubemap, font or shader container file `fileKey` and replaces its one asset
          * under its handle, or keeps it and says why.

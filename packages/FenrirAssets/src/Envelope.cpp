@@ -172,6 +172,40 @@ namespace Fenrir::Detail
         return std::format("expected `format` {}, found {}", EnvelopeFormat, Found(format));
     }
 
+    std::optional<SceneEnvelopeProblem> CheckSceneEnvelope(Ser::Value& root, Ser::Value*& data)
+    {
+        if (root.Kind() != Ser::ValueKind::Object)
+        {
+            return SceneEnvelopeProblem{&root, std::format("expected a scene envelope object, found {}", Found(&root))};
+        }
+        Ser::Object& envelope = root.AsObject();
+        const Ser::Value* format = envelope.Find("format");
+        if (std::optional<std::string> problem = FormatProblem(format))
+        {
+            return SceneEnvelopeProblem{format, std::move(*problem)};
+        }
+        const Ser::Value* type = envelope.Find("type");
+        if (type == nullptr || type->Kind() != Ser::ValueKind::String || type->AsString() != SceneTypeName)
+        {
+            return SceneEnvelopeProblem{type,
+                                        std::format("expected `type` \"{}\", found {}", SceneTypeName, Found(type))};
+        }
+        const Ser::Value* version = envelope.Find("version");
+        if (PositiveWhole(version, SceneVersion) == std::nullopt)
+        {
+            return SceneEnvelopeProblem{version,
+                                        std::format("expected `version`, the scene layout's, from 1 up to {}, found {}",
+                                                    SceneVersion, Found(version))};
+        }
+        data = envelope.Find("data");
+        if (data == nullptr || data->Kind() != Ser::ValueKind::Object)
+        {
+            return SceneEnvelopeProblem{
+                data, std::format("expected `data`, an object of `resources` and `entities`, found {}", Found(data))};
+        }
+        return std::nullopt;
+    }
+
     std::function<std::string(ReferenceValue, const FieldInfo&)> CheckedReferenceWriter(
         const Ser::Resolvers& inner, const std::string& where, std::string_view path, ILogger& logger,
         std::vector<Ser::Diagnostic>& diagnostics, std::size_t& nulled)
