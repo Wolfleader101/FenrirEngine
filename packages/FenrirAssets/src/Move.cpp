@@ -78,13 +78,20 @@ namespace Fenrir
         class ReferenceRewriter
         {
           public:
-            ReferenceRewriter(std::string_view from, std::string_view to) noexcept : m_from(from), m_to(to)
+            ReferenceRewriter(std::string_view from, std::string_view to, const TypeRegistry& registry) noexcept
+                : m_from(from), m_to(to), m_registry(registry)
             {
             }
 
             // The rewritten references of `data`, of `type`, in place; how many.
             std::size_t Rewrite(Ser::Value& data, const TypeDescription& type)
             {
+                if (type.treeBacked)
+                {
+                    m_count = 0;
+                    WalkTreeBacked(data, type);
+                    return m_count;
+                }
                 Detail::DataValue scratch(type);
                 const ValueType valueType{.kind = Kind::Struct, .type = &type};
                 m_count = 0;
@@ -283,8 +290,78 @@ namespace Fenrir
                 }
             }
 
+            // A tree-backed value (ADR-0083) has no instance to walk: its C++ base's members are walked through a
+            // scratch base, as a C++ value's are, and its own through its description's fields.
+            void WalkTreeBacked(Ser::Value& node, const TypeDescription& type)
+            {
+                if (node.Kind() != Ser::ValueKind::Object)
+                {
+                    return;
+                }
+                if (const TypeDescription* layout = Detail::LayoutOf(type, m_registry))
+                {
+                    Detail::DataValue scratch(*layout);
+                    WalkFields(node.AsObject(),
+                               Ser::HeldFieldsOf(ValueRef(scratch.value, {.kind = Kind::Struct, .type = layout})), {});
+                }
+                for (const FieldInfo* field : Detail::TreeFieldsOf(type, m_registry))
+                {
+                    Ser::Value* member = node.AsObject().Find(field->name);
+                    for (auto former = field->formerly.begin(); member == nullptr && former != field->formerly.end();
+                         ++former)
+                    {
+                        member = node.AsObject().Find(*former);
+                    }
+                    if (member != nullptr)
+                    {
+                        WalkTree(*member, field->type);
+                    }
+                }
+            }
+
+            // One value of a tree-backed type's own field, of `type`.
+            void WalkTree(Ser::Value& node, const ValueType& type)
+            {
+                switch (type.kind)
+                {
+                case Kind::Reference:
+                    RewriteReference(node);
+                    break;
+                case Kind::List:
+                case Kind::Array:
+                    if (node.Kind() == Ser::ValueKind::Array && type.element != nullptr)
+                    {
+                        for (Ser::Element& element : node.AsArray().elements)
+                        {
+                            WalkTree(element.value, *type.element);
+                        }
+                    }
+                    break;
+                case Kind::Optional:
+                    if (node.Kind() != Ser::ValueKind::Null && type.element != nullptr)
+                    {
+                        WalkTree(node, *type.element);
+                    }
+                    break;
+                case Kind::Struct:
+                    if (type.type != nullptr && type.type->treeBacked)
+                    {
+                        WalkTreeBacked(node, *type.type);
+                    }
+                    else if (type.type != nullptr)
+                    {
+                        Detail::DataValue scratch(*type.type);
+                        Walk(node, ValueRef(scratch.value, type));
+                    }
+                    break;
+                default:
+                    break;
+                }
+            }
+
             std::string_view m_from;
             std::string_view m_to;
+            const TypeRegistry& m_registry;
             std::size_t m_count = 0;
         };
 
@@ -550,7 +627,7 @@ namespace Fenrir
         std::vector<Rewritten> rewritten;
         std::optional<std::string> movedText;
         NullLogger quiet;
-        ReferenceRewriter rewriter(fromPath, toPath);
+        ReferenceRewriter rewriter(fromPath, toPath, registry);
         for (std::filesystem::recursive_directory_iterator it(normalRoot, error), end; !error && it != end;
              it.increment(error))
         {

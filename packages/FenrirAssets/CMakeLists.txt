@@ -38,6 +38,7 @@ add_library(FenrirAssets STATIC
     src/DirectorySource.cpp
     src/Move.cpp
     src/Envelope.hpp
+    src/DataValues.cpp
     src/Envelope.cpp
     src/AssetData.cpp
     src/AnimationData.cpp

@@ -339,6 +339,59 @@ namespace Fenrir::Detail
                                                 const TypeRegistry& registry, const EnvelopeHooks& hooks,
                                                 ILogger& logger);
 
+    /** @brief What reading one data asset's `data` tree gave (ReadDataValue). */
+    struct DataRead
+    {
+        /** @brief The value, a DataValue of the type read. */
+        AssetBox value{nullptr, nullptr};
+        /** @brief Whether a field was left out that no diagnostic names, as the bridge counts it. */
+        bool incomplete = false;
+        /** @brief Each asset its references named, by kind and slot, in the order read: what its owners own too. */
+        std::vector<std::pair<AssetKind, AssetSlot>> references;
+    };
+
+    /**
+     * @brief Reads `data`, a data asset's fields at its type's version, into a new value of `type` (ADR-0079): a C++
+     * type through FromTree into an instance; a tree-backed one (ADR-0083) checked against its description and kept as
+     * a tree, its C++ base's members read into the materialised base as a C++ type's are.
+     *
+     * A tree-backed type's own members are checked as FromTree reads, and kept as given where they pass:
+     * - a key naming no field of the type, its bases or a former name is warned and dropped, and so is a transient
+     *   field's; a former name is read as its field's current one, and dropped with a warning beside the current;
+     * - a value of the wrong kind (a number out of its kind's range, an unknown enumerator, an array of the wrong
+     *   length, an entity, which no data asset holds) is dropped with one located error, so its field keeps its
+     *   default; a list, array or optional with such an element is dropped whole;
+     * - a number is held in its field kind's width (an `f32` as a single float, an unsigned kind as an unsigned
+     *   integer), as ToTree writes one, so the same value reads the same tree from text or from the tree encoding;
+     * - a reference is a path, passed through `readReference`, which loads its target; one naming none is written
+     *   `null`, with one located error;
+     * - a nested tree-backed struct is checked so, member by member; a nested C++ struct is read through FromTree, and
+     *   written back from what read, so a value that did not read in it takes its default.
+     *
+     * Every diagnostic is logged once and appended to `diagnostics`, located in `path`, after `where`, the entry's
+     * prefix. Private to FenrirAssets: the store reads files, replaces and adds through it.
+     */
+    [[nodiscard]] DataRead ReadDataValue(Serialisation::Value& data, const TypeDescription& type,
+                                         const std::string& where, std::string_view path, const TypeRegistry& registry,
+                                         const std::function<ReferenceRead(std::string_view, const FieldInfo&)>& read,
+                                         ILogger& logger, std::vector<Serialisation::Diagnostic>& diagnostics);
+
+    /**
+     * @brief The whole value tree of `value` (ADR-0079): a C++ type's through ToTree; a tree-backed type's its C++
+     * base's members through ToTree, then its own as `value.tree` holds them. With `prior` every node takes the
+     * comments of the node at its key path there, as ToTree's do; with none, the tree has no comments.
+     */
+    [[nodiscard]] Serialisation::Value ComposeDataTree(const DataValue& value, const TypeRegistry& registry,
+                                                       const Serialisation::Resolvers& resolvers,
+                                                       const Serialisation::Value* prior);
+
+    /**
+     * @brief Gives `into`, a value of the type `from` holds, `from`'s value at `into`'s own addresses, so a pointer
+     * TryGet or Edit gave keeps pointing at the asset (ADR-0081 §2): its instance crosses as a tree, each reference as
+     * its slot, and its tree is moved.
+     */
+    void AssignInPlace(DataValue& into, DataValue& from, const TypeRegistry& registry, ILogger& logger);
+
     /** @brief One sub-asset an envelope is written with: its name in `sub`, and its instance. */
     struct EnvelopeSub
     {

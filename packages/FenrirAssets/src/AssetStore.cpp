@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cassert>
 #include <cctype>
-#include <charconv>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -42,6 +41,7 @@
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "FenrirSerialisation/Bridge.hpp"
+#include "FenrirSerialisation/Encoding.hpp"
 #include "FenrirSerialisation/Text.hpp"
 #include "FenrirTypes/FieldInfo.hpp"
 #include "FenrirTypes/TypeRegistry.hpp"
@@ -180,6 +180,20 @@ namespace Fenrir
             return std::format("the type registry has no `{}`: register its package's types first", type.name);
         }
 
+        // Why `type`, what the registry finds under `name`, is refused by a by-name door: none, or no data asset type.
+        std::optional<std::string> NotADataAssetType(const TypeDescription* type, std::string_view name)
+        {
+            if (type == nullptr)
+            {
+                return std::format("the type registry has no `{}`: register its type first", name);
+            }
+            if (type->role != Role::DataAsset)
+            {
+                return std::format("`{}` is a type, but no data asset type", type->name);
+            }
+            return std::nullopt;
+        }
+
         std::string_view ReasonText(LoadFailure reason)
         {
             if (reason == LoadFailure::FileNotFound)
@@ -272,38 +286,6 @@ namespace Fenrir
             }
             data = Detail::AssetBox(new ImageData(std::move(*imported.image)), &Detail::DestroyAssetData<ImageData>);
             return {};
-        }
-
-        // Gives the instance `into` holds the value `from` holds, both of one type, at `into`'s own address, so a
-        // pointer TryGet or Edit gave keeps pointing at the asset (ADR-0081 §2). A description has no assignment of its
-        // own, so the value crosses as a tree, each reference as its slot rather than a path, which no file ever sees.
-        void AssignInPlace(Detail::DataValue& into, const Detail::DataValue& from, const TypeRegistry& registry,
-                           ILogger& logger)
-        {
-            assert(into.type == from.type && "a reload in place keeps the asset's type");
-            Serialisation::Resolvers slots;
-            slots.writeReference = [](ReferenceValue reference, const FieldInfo&) {
-                return std::format("{}:{}", reference.index, reference.generation);
-            };
-            slots.readReference = [](std::string_view text, const FieldInfo&) -> std::optional<ReferenceValue> {
-                ReferenceValue reference;
-                const std::size_t colon = text.find(':');
-                const char* end = text.data() + text.size();
-                if (colon == std::string_view::npos ||
-                    std::from_chars(text.data(), text.data() + colon, reference.index).ec != std::errc() ||
-                    std::from_chars(text.data() + colon + 1, end, reference.generation).ec != std::errc())
-                {
-                    return std::nullopt;
-                }
-                return reference;
-            };
-            const Serialisation::Value tree = Serialisation::ToTree(from.value, *from.type, registry, slots);
-            into.type->Destroy(into.value);
-            into.type->Construct(into.value);
-            [[maybe_unused]] const Serialisation::BridgeResult copied =
-                Serialisation::FromTree(tree, *into.type, registry, slots, into.value, "", logger);
-            assert(copied.status == Serialisation::BridgeStatus::Succeeded && copied.diagnostics.empty() &&
-                   "a value's own tree reads back whole");
         }
 
         // Logs that the changed file `path` did not reload as a `kind`, and why: its assets keep what they loaded.
@@ -505,6 +487,8 @@ namespace Fenrir
             record.data.reset();
             record.revision = 0;
             record.owners.clear();
+            // A type's name lives in its description, which an unregistered type's registrant frees.
+            record.typeName = {};
             record.imageUpdates.clear();
             if (!record.key.empty())
             {
@@ -1120,7 +1104,7 @@ namespace Fenrir
             }
             key = resolved.key;
         }
-        auto value = std::make_unique<Detail::DataValue>(*registered);
+        auto value = std::make_unique<Detail::DataValue>(*registered, Detail::LayoutOf(*registered, *m_state->types));
         void* instance = value->value;
         slot =
             Detail::InsertAsset(table, Detail::AssetBox(value.release(), &Detail::DestroyAssetData<Detail::DataValue>),
@@ -1266,11 +1250,17 @@ namespace Fenrir
             const std::scoped_lock lock(m_state->readLogMutex);
             if (record->logged.insert(std::format("read as {}", type.name)).second)
             {
-                m_state->logger->Error("Could not read a data asset as `{}`: its handle names a `{}`", type.name,
-                                       record->typeName);
+                const Detail::DataValue& held = *static_cast<const Detail::DataValue*>(record->data.get());
+                m_state->logger->Error("Could not read a data asset as `{}`: its handle names a `{}`{}", type.name,
+                                       record->typeName,
+                                       held.type->treeBacked && held.layout == nullptr
+                                           ? ", which is tree-backed with no C++ base, so only its tree is read"
+                                           : "");
             }
             return nullptr;
         }
+        // IsA has passed, so a C++ type up the record's base chain is `type` or extends it: the record's instance is
+        // of that type, its own or its materialised base.
         return static_cast<const Detail::DataValue*>(record->data.get())->value;
     }
 
@@ -1616,8 +1606,8 @@ namespace Fenrir
             const bool replacing = record.data != nullptr;
             if (replacing)
             {
-                AssignInPlace(*static_cast<Detail::DataValue*>(record.data.get()),
-                              *static_cast<const Detail::DataValue*>(entry.value.get()), registry, *m_state->logger);
+                Detail::AssignInPlace(*static_cast<Detail::DataValue*>(record.data.get()),
+                                      *static_cast<Detail::DataValue*>(entry.value.get()), registry, *m_state->logger);
             }
             else
             {
@@ -1715,9 +1705,221 @@ namespace Fenrir
                                    record->typeName, type.name);
             return nullptr;
         }
-        ++record->revision;
         // A data asset type extends at most one other and has no virtual functions (ADR-0075), so its base is at the
-        // instance's own address.
-        return static_cast<Detail::DataValue*>(record->data.get())->value;
+        // instance's own address; a tree-backed type's C++ base is its materialised base, which its tree is composed
+        // from, so an edit through it is in the tree at once (ADR-0083).
+        void* instance = static_cast<Detail::DataValue*>(record->data.get())->value;
+        if (instance == nullptr)
+        {
+            m_state->logger->Error("Could not {}: the data asset handle names a `{}`, which is tree-backed with no C++ "
+                                   "base to edit",
+                                   action, record->typeName);
+            return nullptr;
+        }
+        ++record->revision;
+        return instance;
+    }
+    DataLoadResult AssetStore::LoadDataAsset(std::string_view path, std::string_view typeName, AssetOwner owner)
+    {
+        DataLoadResult result;
+        const TypeDescription* type = m_state->types->Find(typeName);
+        if (std::optional<std::string> problem = NotADataAssetType(type, typeName))
+        {
+            std::string message = std::move(*problem);
+            m_state->logger->Error("Could not load {} '{}' as {}: {} ({})", KindName(Detail::AssetKind::Data), path,
+                                   typeName, ReasonText(LoadFailure::NotADataAsset), message);
+            result.diagnostic = LoadDiagnostic{std::string(path), LoadFailure::NotADataAsset, std::move(message)};
+            return result;
+        }
+        const Detail::AssetSlot slot =
+            LoadDataSlot(path, OwnerOf(owner), *type, result.diagnostic, result.diagnostics, result.incomplete);
+        result.handle = {slot.index, slot.generation};
+        return result;
+    }
+
+    std::optional<DataTree> AssetStore::DataAssetTree(DataAssetHandle handle) const
+    {
+        const Detail::AssetRecord* record = m_state->Find(Detail::AssetKind::Data, {handle.index, handle.generation});
+        if (record == nullptr || record->data == nullptr)
+        {
+            return std::nullopt;
+        }
+        const Detail::DataValue& value = *static_cast<const Detail::DataValue*>(record->data.get());
+        const Serialisation::Value tree =
+            Detail::ComposeDataTree(value, *m_state->types, Detail::WritingResolvers(*m_state), nullptr);
+        return DataTree{Serialisation::EncodeTree(tree, Serialisation::Trivia::Drop), record->revision,
+                        std::string(value.type->name)};
+    }
+
+    std::uint32_t AssetStore::Revision(DataAssetHandle handle) const
+    {
+        return RevisionOf(Detail::AssetKind::Data, {handle.index, handle.generation});
+    }
+
+    std::optional<Serialisation::Value> AssetStore::DecodeDataTree(std::span<const std::byte> bytes,
+                                                                   std::string_view action)
+    {
+        Serialisation::ReadTreeResult decoded = Serialisation::DecodeTree(bytes, "the tree given", *m_state->logger);
+        if (!decoded.tree)
+        {
+            Refuse(KindName(Detail::AssetKind::Data), action,
+                   "the bytes given are not a value tree in the tree encoding");
+            return std::nullopt;
+        }
+        return std::move(decoded.tree);
+    }
+
+    void AssetStore::FillDataRecord(Detail::AssetSlot slot, Serialisation::Value& tree)
+    {
+        Detail::AssetRecord* record = m_state->Find(Detail::AssetKind::Data, slot);
+        assert(record != nullptr && record->data != nullptr && "a door fills a live record");
+        const Detail::DataValue& held = *static_cast<const Detail::DataValue*>(record->data.get());
+        // A bare `#name` names a sub-asset of the record's own file; an asset with no path has none.
+        const std::string assetPath = Detail::PathOf(*m_state, Detail::AssetKind::Data, slot).value_or(std::string());
+        const std::string file = assetPath.substr(0, assetPath.find('#'));
+        const std::vector<Detail::OwnerId> owners = record->owners;
+        const Detail::OwnerId owner = owners.empty() ? Detail::AppOwnerId : owners.front();
+        const std::string named = assetPath.empty() ? std::string("a data asset added with no name") : assetPath;
+        std::vector<Serialisation::Diagnostic> diagnostics;
+        Detail::DataRead read = Detail::ReadDataValue(
+            tree, *held.type, {}, named, *m_state->types,
+            [&](std::string_view reference, const FieldInfo& field) {
+                return ReadFileReference(file, owner, reference, field);
+            },
+            *m_state->logger, diagnostics);
+
+        // The references' loads may have grown the table, so the record is found again.
+        record = m_state->Find(Detail::AssetKind::Data, slot);
+        Detail::AssignInPlace(*static_cast<Detail::DataValue*>(record->data.get()),
+                              *static_cast<Detail::DataValue*>(read.value.get()), *m_state->types, *m_state->logger);
+        record->references = std::move(read.references);
+        for (const Detail::OwnerId each : owners)
+        {
+            ShareData(slot.index, each);
+        }
+    }
+
+    bool AssetStore::ReplaceDataAsset(DataAssetHandle handle, std::span<const std::byte> tree)
+    {
+        const Detail::AssetSlot slot{handle.index, handle.generation};
+        if (EditRecord(Detail::AssetKind::Data, slot, "replace", "Could not {} a {}: its handle is empty or stale") ==
+            nullptr)
+        {
+            return false;
+        }
+        std::optional<Serialisation::Value> decoded = DecodeDataTree(tree, "replace");
+        if (!decoded)
+        {
+            return false;
+        }
+        FillDataRecord(slot, *decoded);
+        ++m_state->Find(Detail::AssetKind::Data, slot)->revision;
+        return true;
+    }
+
+    DataAssetHandle AssetStore::AddDataAsset(std::string_view typeName, std::span<const std::byte> tree,
+                                             AssetOwner owner)
+    {
+        return AddDataTree(typeName, tree, owner, std::nullopt);
+    }
+
+    DataAssetHandle AssetStore::AddDataAsset(std::string_view typeName, std::span<const std::byte> tree,
+                                             AssetOwner owner, std::string_view name)
+    {
+        return AddDataTree(typeName, tree, owner, name);
+    }
+
+    DataAssetHandle AssetStore::AddDataTree(std::string_view typeName, std::span<const std::byte> tree,
+                                            AssetOwner owner, std::optional<std::string_view> name)
+    {
+        const std::string_view word = KindName(Detail::AssetKind::Data);
+        const TypeDescription* type = m_state->types->Find(typeName);
+        if (const std::optional<std::string> problem = NotADataAssetType(type, typeName))
+        {
+            Refuse(word, "add", *problem);
+            return {};
+        }
+        std::optional<Serialisation::Value> decoded = DecodeDataTree(tree, "add");
+        if (!decoded)
+        {
+            return {};
+        }
+        // The slot is made, and its name checked, before the tree's references load, so a refusal loads nothing.
+        Detail::AssetSlot slot;
+        (void)AddDataSlot(*type, owner, name, slot);
+        if (slot.generation == 0)
+        {
+            return {};
+        }
+        FillDataRecord(slot, *decoded);
+        return {slot.index, slot.generation};
+    }
+
+    SaveResult AssetStore::SaveDataAsset(DataAssetHandle handle)
+    {
+        return SaveDataByHandle(handle, std::nullopt);
+    }
+
+    SaveResult AssetStore::SaveDataAsset(DataAssetHandle handle, std::string_view path)
+    {
+        return SaveDataByHandle(handle, path);
+    }
+
+    SaveResult AssetStore::SaveDataByHandle(DataAssetHandle handle, std::optional<std::string_view> path)
+    {
+        const Detail::AssetSlot slot{handle.index, handle.generation};
+        const Detail::AssetRecord* record = m_state->Find(Detail::AssetKind::Data, slot);
+        if (record == nullptr || record->data == nullptr)
+        {
+            std::string message = "the data asset handle is empty or stale";
+            m_state->logger->Error("Could not save {} {}: {}", KindName(Detail::AssetKind::Data),
+                                   path ? std::format("to '{}'", *path) : std::string("by its handle"), message);
+            SaveResult result;
+            result.status = SaveStatus::Failed;
+            result.diagnostics.push_back({.severity = Serialisation::DiagnosticSeverity::Error,
+                                          .path = path ? std::string(*path) : std::string(),
+                                          .message = std::move(message)});
+            return result;
+        }
+        return SaveData(slot, *static_cast<const Detail::DataValue*>(record->data.get())->type, path);
+    }
+
+    std::optional<std::string> AssetStore::TypeHeld(std::string_view typeName) const
+    {
+        const TypeRegistry& registry = *m_state->types;
+        const TypeDescription* type = registry.Find(typeName);
+        if (type == nullptr)
+        {
+            return std::nullopt;
+        }
+        const Detail::AssetTable& table = m_state->tables[static_cast<std::size_t>(Detail::AssetKind::Data)];
+        for (std::uint32_t index = 0; index < table.records.size(); ++index)
+        {
+            const Detail::AssetRecord& record = table.records[index];
+            // A slot reserved for a file still loading has its type and no data yet; a free one has neither.
+            const bool live = record.data != nullptr || !record.owners.empty();
+            if (live && !record.typeName.empty() && registry.IsA(record.typeName, type->name))
+            {
+                const std::optional<std::string> path =
+                    Detail::PathOf(*m_state, Detail::AssetKind::Data, {index, record.generation});
+                std::string where = path                 ? std::format("'{}'", *path)
+                                    : record.key.empty() ? std::string("added with no name")
+                                                         : record.key;
+                return std::format("the store holds a data asset of `{}` ({}), which points at its description",
+                                   record.typeName, where);
+            }
+        }
+        return std::nullopt;
+    }
+
+    bool AssetStore::UnregisterType(TypeRegistry& types, std::string_view typeName)
+    {
+        assert(&types == m_state->types && "a store's types are unregistered from its own registry");
+        if (const std::optional<std::string> held = TypeHeld(typeName))
+        {
+            m_state->logger->Error("Could not unregister the type `{}`: {}; unload it first", typeName, *held);
+            return false;
+        }
+        return types.Unregister(typeName);
     }
 } // namespace Fenrir

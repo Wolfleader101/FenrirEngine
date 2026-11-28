@@ -320,7 +320,7 @@ The generated pair that turns a data asset class into a value tree and back, emi
 *Avoid:* serializer, converter, marshaller, mapper.
 
 **Tree-backed type**
-A type in the type registry whose layout C++ does not know, such as a C# data asset type: its description has fields without offsets and a default value tree, and no size, construct, destroy or visitor, and its values are only ever value trees. It may extend a C++ data asset type; a C++ type may neither extend nor hold one (ADR-0083).
+A type in the type registry whose layout C++ does not know, such as a C# data asset type: its description has fields without offsets and a default value tree, and no size, construct, destroy or visitor, and its values are value trees. It may extend a C++ data asset type; a C++ type may neither extend nor hold one (ADR-0083). The asset store holds a data asset of one as its tree and, when it extends a C++ type, a materialised instance of that base, which C++ reads and edits and the tree is composed from.
 *Avoid:* dynamic type, runtime struct, managed layout.
 
 **Type registry**
