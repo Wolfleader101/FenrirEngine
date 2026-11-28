@@ -271,15 +271,38 @@ lays it out, and the engine registers it under that name.
   script compiles (`FENRIR0004`). It needs no `[NativeComponent]` attribute (a struct that has one mirrors a native
   component and is not reported). Its name is its full name, so it must not equal a native component's name.
 
+### Script components in files
+
+Admission also describes each script component to the App's `TypeRegistry` (ADR-0074, ADR-0083), so the scene writer
+and reader save and load it by its full name as they do a native component. The generated table reports every public
+field and fixed buffer of the component with its kind, measuring offsets, sizes and the `new T()` default at run time
+(the generator computes no layout); internal and private fields are not described, so no file holds them.
+
+| C# field | Described as |
+| --- | --- |
+| integers, floats, `bool`, `char`, a pointer | its plain kind; an enum as its underlying integer |
+| `Entity` | `entity`, written as the id of the entity it names |
+| `AssetHandle<T>` | `reference`, targeting `Fenrir::<T>` for an asset kind, or `T`'s full name |
+| `Vector2`/`3`/`4`, `Quaternion`, `Matrix4x4`, `Colour`, `Bounds`, `Ray` | the engine's description of the type it mirrors (`Fenrir::Math::Vec3`, ...) |
+| `[FixedString]` on a `fixed byte` buffer or an `[InlineArray]` byte struct | `fixed-string`; on anything else, `FENRIR0006` |
+| another `fixed` buffer or `[InlineArray]` struct | `array` of its element |
+| any other struct | `struct`, the struct described as a nested type under its full name |
+
+`[Transient]` on a field keeps it in the layout but out of files; on the component, the component is never written.
+`[EditorOnly]` marks a component as authoring data for an editor. The descriptions live in an arena of the script
+generation (`src/ScriptTypes.hpp`), one constructor slot each (a description's `construct` takes no context), and
+`Forget` unregisters them, holders first, so a reload registers the new shapes under the same names.
+
 ### Loading is all or nothing
 
 A script assembly's load is an *admission* (`src/ScriptData.hpp`). In order: the script report is discovered and checked;
 every native component's, event's, shared struct's and resource's mapping is checked against its C# struct; the script's
-components and events are registered; and only then is the previous generation's script data that no longer matches
+components and events are registered, and its components described to the type registry; and only then is the previous generation's script data that no longer matches
 dropped and the queues of new events made. If any step fails, the assembly is released and **nothing** from that load is
 registered: no registry entries, and no storage beyond what an earlier generation already owned. (The checks today are a
 malformed report, a name that clashes with a native component or another script component, two names that would share a
-storage, and a native mismatch. Systems will join the order when they exist.) The error says which.
+storage, a native mismatch, and a component whose description cannot be made: a name a registered type holds, a field
+outside its type or of the wrong size, or a struct neither the script nor the engine describes. Systems will join the order when they exist.) The error says which.
 
 ## Tagged unions
 

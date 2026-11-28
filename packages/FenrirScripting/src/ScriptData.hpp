@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -9,6 +10,7 @@
 
 #include "ComponentRegistry.hpp"
 #include "EngineContext.hpp"
+#include "ScriptTypes.hpp"
 
 namespace Fenrir::Detail
 {
@@ -73,6 +75,11 @@ namespace Fenrir::Detail
      * Admission keeps a generation's script report all or nothing: nothing of it is registered unless all of it is,
      * and a failed admission leaves the registry as Forget would. The data outlives a generation: Forget, the stop
      * path, keeps it for the next generation to admit against; Drop, the shutdown path, removes it.
+     *
+     * Each generation's components are also described to the App's type registry (ADR-0074), from the fields the
+     * script reported: a fixed-layout description of each, and a nested one of each struct they hold, owned by the
+     * generation's ScriptTypes, with the component's ComponentType attached, so the scene writer and reader treat a C#
+     * component as they treat a native one. Forget unregisters them.
      */
     class ScriptData
     {
@@ -84,18 +91,25 @@ namespace Fenrir::Detail
         ScriptData(const ScriptData&) = delete;
         ScriptData& operator=(const ScriptData&) = delete;
 
+        /** @brief Unregisters the descriptions still registered; the App whose registry holds them must still live. */
+        ~ScriptData();
+
         /**
          * @brief Admits a freshly loaded script assembly: its report is discovered and checked, every native component,
          * event, shared struct and resource is checked against its C# struct, its components and events are
-         * registered, and only then is what the previous generation left in `app` compared with these definitions
-         * (unchanged data stays, anything else goes with a warning) and the queues of new events made.
+         * registered, its components described to `app`'s type registry (which this keeps, for Forget), and only then
+         * is what the previous generation left in `app` compared with these definitions (unchanged data stays, anything
+         * else goes with a warning) and the queues of new events made.
          *
          * @return success, or why the assembly was refused; a refusal leaves the registry as Forget would, and the
          * data as it was before the stale layouts were dropped, or as that drop left it
          */
         [[nodiscard]] Iris::CallResult<void> Admit(App& app, ScriptAssembly& assembly);
 
-        /** @brief Forgets the registry's script-defined components and events. The data and its layouts stay. */
+        /**
+         * @brief Forgets the registry's script-defined components and events, and unregisters their descriptions from
+         * the type registry. The data and its layouts stay.
+         */
         void Forget();
 
         /** @brief Removes the data of every owned script component and event from `app`, and forgets them. */
@@ -114,8 +128,17 @@ namespace Fenrir::Detail
         }
 
       private:
+        // Unregisters the generation's descriptions, and any a refusal left behind before.
+        void ForgetTypes();
+
         ComponentRegistry& m_registry;
         OwnedLayouts m_components;
         OwnedLayouts m_events;
+        // The App's type registry, from the last admission; null before one.
+        TypeRegistry* m_types = nullptr;
+        // The descriptions of the admitted generation's components and the structs they hold.
+        std::unique_ptr<ScriptTypes> m_scriptTypes;
+        // Descriptions the registry refused to unregister: they must outlive it, so they stay until it lets them go.
+        std::vector<std::unique_ptr<ScriptTypes>> m_stranded;
     };
 } // namespace Fenrir::Detail

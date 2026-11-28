@@ -10,12 +10,17 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <optional>
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/EntityList.hpp"
+#include "FenrirECS/TypeAttachments.hpp"
 #include "FenrirScripting/Scripting.hpp"
+#include "FenrirTypes/TypeRegistry.hpp"
 
 namespace
 {
@@ -472,7 +477,102 @@ namespace
         }
     }
 
+    // The fixture's Described, a field of each kind, as the App's type registry holds it after admission.
+    void ACSharpComponentIsDescribedByItsFieldsInTheTypeRegistry()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        {
+            INFO("The fixture did not load");
+            REQUIRE(scripting.HasScripts());
+        }
+        const auto& types = headless.Get().GetResource<TypeRegistry>();
+        const TypeDescription* described = types.Find("Fenrir.ScriptFixture.Described");
+        const TypeDescription* spot = types.Find("Fenrir.ScriptFixture.Spot");
+        {
+            INFO("The component and the struct it holds should be registered under their full names");
+            REQUIRE((described != nullptr && spot != nullptr));
+            REQUIRE((described->role == Role::Component && spot->role == Role::Nested));
+        }
+        {
+            INFO("The component should have the layout C# gave it");
+            REQUIRE((described->size == 80 && described->alignment == 8));
+        }
+        {
+            INFO("Its public fields and fixed buffers should be described, in order, and its internal field not");
+            REQUIRE(described->fields.size() == 7);
+        }
+        const auto& fields = described->fields;
+        {
+            INFO("The entity, at 0");
+            CHECK((fields[0].name == "Target" && fields[0].type.kind == Kind::Entity && fields[0].offset == 0));
+        }
+        {
+            INFO("The fixed byte buffer, a 16-byte fixed string at 16");
+            CHECK((fields[1].name == "Label" && fields[1].type.kind == Kind::FixedString &&
+                   fields[1].type.count == 16 && fields[1].offset == 16));
+        }
+        {
+            INFO("The [InlineArray] struct, an 8-byte fixed string at 32");
+            CHECK((fields[2].name == "Short" && fields[2].type.kind == Kind::FixedString && fields[2].type.count == 8 &&
+                   fields[2].offset == 32));
+        }
+        {
+            INFO("The Vector3, described by the engine's Math::Vec3, at 40");
+            CHECK((fields[3].name == "Offset" && fields[3].type.kind == Kind::Struct &&
+                   fields[3].type.type == types.Find("Fenrir::Math::Vec3") && fields[3].offset == 40));
+        }
+        {
+            INFO("The script's own struct, at 52");
+            CHECK((fields[4].name == "Spot" && fields[4].type.kind == Kind::Struct && fields[4].type.type == spot &&
+                   fields[4].offset == 52));
+            REQUIRE(spot->fields.size() == 2);
+            CHECK((spot->fields[0].name == "Height" && spot->fields[0].type.kind == Kind::F32 &&
+                   spot->fields[1].name == "Count" && spot->fields[1].offset == 4));
+        }
+        {
+            INFO("The transient field, flagged, at 60");
+            CHECK((fields[5].name == "Frames" && fields[5].transient && fields[5].offset == 60));
+            CHECK(!fields[4].transient);
+        }
+        {
+            INFO("The fixed int buffer, an array of two i32s at 64");
+            CHECK((fields[6].name == "Slots" && fields[6].type.kind == Kind::Array && fields[6].type.count == 2 &&
+                   fields[6].type.element != nullptr && fields[6].type.element->kind == Kind::I32 &&
+                   fields[6].offset == 64));
+        }
+        {
+            INFO("Its default should be its new T(): the field initialiser's Spot");
+            std::vector<std::byte> value(described->size);
+            described->Construct(value.data());
+            float height = 0;
+            std::int32_t count = 0;
+            std::memcpy(&height, value.data() + 52, sizeof(height));
+            std::memcpy(&count, value.data() + 56, sizeof(count));
+            CHECK((height == 2.0f && count == 3));
+        }
+        {
+            INFO("[Transient] and [EditorOnly] on a component should mark its description");
+            const TypeDescription* scratch = types.Find("Fenrir.ScriptFixture.Scratch");
+            const TypeDescription* gizmo = types.Find("Fenrir.ScriptFixture.Gizmo");
+            REQUIRE((scratch != nullptr && gizmo != nullptr));
+            CHECK((scratch->transient && !scratch->editorOnly && gizmo->editorOnly && !gizmo->transient));
+        }
+        {
+            INFO("ComponentType::ForName should find the component scripts store, and NameOf name it back");
+            const auto component = ComponentType::ForName(types, "Fenrir.ScriptFixture.Described");
+            REQUIRE(component.has_value());
+            CHECK(component->Size() == 80);
+            CHECK(ComponentType::NameOf(types, scripting.FindComponent("Fenrir.ScriptFixture.Described")->type) ==
+                  std::optional<std::string_view>("Fenrir.ScriptFixture.Described"));
+        }
+    }
 } // namespace
+
+TEST_CASE("a C# component is described by its fields in the App's type registry", "[scripting][types]")
+{
+    ACSharpComponentIsDescribedByItsFieldsInTheTypeRegistry();
+}
 
 TEST_CASE("a script assembly reports the components it defines, with size and alignment", "[scripting]")
 {

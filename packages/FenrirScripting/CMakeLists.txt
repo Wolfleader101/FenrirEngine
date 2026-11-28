@@ -64,6 +64,7 @@ add_library(FenrirScripting STATIC
     src/Queries.hpp
     src/ChangeBuffer.hpp
     src/ScriptData.cpp
+    src/ScriptTypes.cpp
     src/ScriptSystems.cpp
     src/ScriptSystems.hpp
     src/SystemHost.hpp
@@ -72,6 +73,7 @@ add_library(FenrirScripting STATIC
     src/ScriptAssemblyLoader.hpp
     src/GenerationLifecycle.hpp
     src/ScriptData.hpp
+    src/ScriptTypes.hpp
     src/ScriptComponents.hpp
     src/ComponentRegistry.hpp
     include/FenrirScripting/BoundMappings.hpp
