@@ -43,6 +43,11 @@ namespace Fenrir
     /** @brief FenrirAssets's tests' way inside the store (Tests/AssetsProbe.hpp): no part of its interface. */
     struct AssetsProbe;
 
+    namespace Serialisation
+    {
+        class Value;
+    } // namespace Serialisation
+
     namespace Detail
     {
         /** @brief What the store set up. Defined in FenrirAssets's private headers; nothing else can use it. */
@@ -85,6 +90,21 @@ namespace Fenrir
              * instance are scoped by its root and repeat in every instance of the file (ADR-0080 §2).
              */
             Instance,
+            /**
+             * @brief The scene patch (ADR-0081 §3): the file read again into the scene LoadScene filled from it. A
+             * block whose id an entity of the scene holds (outside any instance) fills that entity, each component the
+             * block writes reset to its defaults and read again, its parent and order restored; any other block is
+             * added as a load adds it, and the file's resources are rewritten.
+             */
+            Patch,
+            /**
+             * @brief The instance re-patch (ADR-0081 §4): an instance's source read again into the instance, its root
+             * the merge's parent. A block whose id an entity below the root holds, of the ids the source's last read
+             * gave out, fills that entity as a patch does; the source's single root block fills the root itself; any
+             * other block is added as an instance read adds it, keeping its id; and the source's resources are
+             * skipped, as an instance's are.
+             */
+            Repatch,
         };
 
         /**
@@ -909,6 +929,25 @@ namespace Fenrir
         SceneLoadResult LoadSceneInto(Scene& scene, std::string_view path, Entity parent = {});
 
         /**
+         * @brief Copies `scene` into a new scene named `name`, made through App::CreateScene, with no disk (ADR-0082):
+         * the play-in-editor copy. It is exactly what saving `scene` with SaveScene and loading the file with
+         * LoadScene would give, since it runs the same writer into a value tree and the same reader out of it.
+         *
+         * So the copy drops what a scene file never holds: entities tagged `Transient` and what is below them,
+         * transient and undescribed components, and transient fields. An instance copies as an instance, its source
+         * expanded afresh and the diff the writer finds applied to it; an `entity` field naming an entity the copy
+         * does not hold is left empty, and an asset handle field loads its asset again with the copy as its owner. As
+         * a save does, it mints an `EntityId` for every copied entity of `scene` that lacks one, so the call changes
+         * `scene` and both scenes give each entity the same id.
+         *
+         * No file is written, and the scene is not read from the store's source; an instance's source still is, as
+         * any expansion reads one. Nothing is recorded for hot reload: the copy is no file's scene. What the write and
+         * read report is logged, under `scene`'s name as the path. As LoadScene, a `name` another scene has already
+         * makes a second scene of that name. Synchronous, on the main thread.
+         */
+        Scene& CopyScene(App& app, Scene& scene, std::string_view name);
+
+        /**
          * @brief Places the scene or model file `path` into `scene` as one instance (ADR-0080): its entities, made
          * under `parent` (or at the top when it is empty), below a root marked with `Instance { path }`, so SaveScene
          * writes the whole instance as one block. The host scene owns what it made, the model's assets included.
@@ -1229,7 +1268,7 @@ namespace Fenrir
          * naming one on the chain is refused.
          */
         SceneLoadResult ReadSceneFile(std::string_view path, const std::function<Scene&()>& makeScene, Entity parent,
-                                      Detail::SceneRead read);
+                                      Detail::SceneRead read, std::unordered_set<std::uint64_t>* fileIds = nullptr);
         /**
          * @brief Instantiate's work, and an instance block's in the reader: expands the source `path` at the top of
          * `scene` and marks its root, which the caller then places.
@@ -1240,6 +1279,31 @@ namespace Fenrir
          * `path`.
          */
         SceneSaveResult WriteSceneFile(Scene& scene, std::optional<Entity> root, std::string_view path);
+        /**
+         * @brief The writer behind SaveScene and CopyScene: writes the subtree `root` tops, or the whole scene when
+         * `root` is empty, into `envelope` as a scene file's whole tree, reporting under `named`. Failed, with
+         * `envelope` untouched, when `root` is no live entity of the scene or is tagged `Transient`.
+         */
+        SceneSaveResult WriteSceneTree(Scene& scene, std::optional<Entity> root, const std::string& named,
+                                       Serialisation::Value& envelope);
+        /** @brief Logs that saving `scene` to `named` failed for `message`, and records it in `result` as Failed. */
+        void FailSceneWrite(const Scene& scene, const std::string& named, std::string message, SceneSaveResult& result);
+        /**
+         * @brief The reader behind ReadSceneFile and CopyScene: checks the scene envelope `tree`, then fills the
+         * scene `makeScene` gives as ReadSceneFile does. `assetPath` is the file read, which a bare `#name` reference
+         * names and which goes on the chain of scene files being read; empty for a tree no file holds. Diagnostics are
+         * located at `fileKey`, and a refusal is logged naming `named`. `result` holds what came before, the parse's
+         * diagnostics. When `fileIds` is given, the read puts in it the ids the file's blocks hold; for a patch it
+         * holds those of the file's last read on the way in, and an entity of one of them the file no longer has is
+         * destroyed.
+         */
+        SceneLoadResult ReadSceneTree(Serialisation::Value& tree, std::string_view named, const std::string& assetPath,
+                                      const std::string& fileKey, const std::function<Scene&()>& makeScene,
+                                      Entity parent, Detail::SceneRead read, SceneLoadResult result,
+                                      std::unordered_set<std::uint64_t>* fileIds = nullptr,
+                                      std::optional<std::uint64_t>* rootId = nullptr);
+        /** @brief Logs that loading the scene `named` failed for `diagnostic`, and records it in `result` as Failed. */
+        void FailSceneRead(std::string_view named, Serialisation::Diagnostic diagnostic, SceneLoadResult& result);
         /**
          * @brief What the reference `reference` in the file `assetPath` names (ADR-0076 §2, §3): its target, loaded
          * first for `owner`, of the kind `field` holds and, for a data asset, of a type extending the field's; or why
@@ -1263,6 +1327,36 @@ namespace Fenrir
         void PollForReload();
         /** @brief Reloads the data asset file `fileKey` in place under its handles, or keeps it whole and says why. */
         void ReloadDataFile(const std::string& fileKey);
+        /**
+         * @brief Patches every scene LoadScene filled from the scene file `fileKey` by entity id, or, when the file
+         * does not read as a scene, changes nothing and says why once.
+         */
+        void PatchSceneFile(const std::string& fileKey);
+        /**
+         * @brief Re-patches every instance of the source `sourceKey`, a scene or model file, in every scene a LoadScene
+         * recorded (ADR-0081 §4): each top-level instance holding one, nested or not, is read again from its source and
+         * given its host block's diff on top. The host files are read, never written.
+         */
+        void RepatchInstancesOf(const std::string& sourceKey);
+        /**
+         * @brief Reads the instance `root` tops, in `scene`, again from its source: a scene file patched in by source
+         * id, a model re-spawned under the root. What is below the root that is not the source's is left where it is.
+         * Its host's diff is the caller's to apply. Whether the source read; when it did not, nothing changed.
+         */
+        bool RepatchInstance(Scene& scene, Entity root);
+        /**
+         * @brief For each of `chains`, an instance of a changed source in `scene` and the instances holding it out to
+         * the top, re-patches the nearest the host file's `tree` (its asset path `assetPath`, its key `fileKey`) still
+         * writes as a block of the same source, then reapplies that block's diff on top.
+         */
+        void RepatchHostInstances(Scene& scene, Serialisation::Value& tree, const std::string& assetPath,
+                                  const std::string& fileKey, const std::vector<std::vector<Entity>>& chains);
+        /**
+         * @brief The tree of the scene file `assetPath` (its key `fileKey`) for this patch run, read and checked once,
+         * or null when it does not read as a scene, said once, prefixed `what`.
+         */
+        [[nodiscard]] const Serialisation::Value* SceneSourceTree(const std::string& assetPath,
+                                                                  const std::string& fileKey, std::string_view what);
         /**
          * @brief Re-imports the image, cubemap, font or shader container file `fileKey` and replaces its one asset
          * under its handle, or keeps it and says why.

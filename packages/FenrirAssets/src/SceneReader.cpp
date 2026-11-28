@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "AssetStoreState.hpp"
+#include "AssetWatcher.hpp"
 #include "Envelope.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/AssetStore.hpp"
@@ -107,10 +108,43 @@ namespace Fenrir
             Append(outer.diagnostics, std::move(inner.diagnostics));
         }
 
+        // The one block of `data`, a scene envelope's, with no `parent`: the file's single root. Null when it has
+        // several roots, or none.
+        const Ser::Object* SingleRootBlock(const Ser::Value& data)
+        {
+            const Ser::Value* blocks = data.AsObject().Find("entities");
+            if (blocks == nullptr || blocks->Kind() != Ser::ValueKind::Array)
+            {
+                return nullptr;
+            }
+            const Ser::Object* single = nullptr;
+            for (const Ser::Element& element : blocks->AsArray().elements)
+            {
+                if (element.value.Kind() != Ser::ValueKind::Object ||
+                    element.value.AsObject().Find("parent") != nullptr)
+                {
+                    continue;
+                }
+                if (single != nullptr)
+                {
+                    return nullptr;
+                }
+                single = &element.value.AsObject();
+            }
+            return single;
+        }
+
         // A block's id as its diagnostics name it: `?` when it has none that parses.
         std::string Spelled(const std::optional<EntityId>& id)
         {
             return id ? SpellEntityId(*id) : std::string("?");
+        }
+
+        // Resets `value`, an instance of `type`, to the type's defaults in place: destroyed, then value-initialised.
+        void ResetValue(const TypeDescription& type, void* value)
+        {
+            type.Destroy(value);
+            type.Construct(value);
         }
 
         // One load's work: the scene being filled, where its types are found, its file's path for diagnostics, how
@@ -137,8 +171,26 @@ namespace Fenrir
             // The ids the scene's entities hold, from before the load and as it gives them: a block's id one of them
             // has already is re-minted, so a merge never repeats an id in its scene.
             std::unordered_set<std::uint64_t> taken;
+            // For a patch (ADR-0081 §3): the scene's entities outside any instance by the value of the id each holds,
+            // which a block of that id fills rather than adding one; the entities matched so, which the patch keeps;
+            // and the ids the file held when it last filled the scene, whose entities the file no longer has go.
+            std::unordered_map<std::uint64_t, std::uint32_t> live;
+            std::unordered_set<std::uint32_t> matched;
+            const std::unordered_set<std::uint64_t>* priorIds = nullptr;
+            // For an instance re-patch (ADR-0081 §4): the instance's root, which the source's single root block fills
+            // and which is never moved or destroyed.
+            Entity scopeRoot;
+            // For a patch or a re-patch: reads a matched instance block's instance again from its source, its diff
+            // then applied on top; whether the source read. Null for every other read.
+            std::function<bool(Entity)> repatch;
             // The unknown component types already warned of in this load.
             std::unordered_set<std::string> unknownWarned;
+
+            // Whether this read patches entities the scene has: a scene patch, or an instance re-patch.
+            [[nodiscard]] bool Patching() const
+            {
+                return read == Detail::SceneRead::Patch || read == Detail::SceneRead::Repatch;
+            }
 
             // Logs one of the reader's own diagnostics and records it.
             void Report(Ser::DiagnosticSeverity severity, const Ser::Value* node, const Ser::Value& fallback,
@@ -222,16 +274,21 @@ namespace Fenrir
 
             // Fills the entity `entity`, reserved for `block`: completes it, gives it its id `id` when it `holdsId`,
             // adds its components and appends it to its parent. `filled` holds every entity of an earlier block, which
-            // a `parent` may name.
+            // a `parent` may name. A patch's `matchedEntity` is the scene's already, holding the id: each component the
+            // block writes is reset and read again, the rest are left, and it is taken from its parent first, so
+            // appending it restores its parent and its order.
             void FillBlock(Ser::Object& block, const Ser::Value& at, std::uint32_t entity, std::optional<EntityId> id,
-                           bool holdsId, const std::unordered_set<std::uint32_t>& filled)
+                           bool holdsId, bool matchedEntity, const std::unordered_set<std::uint32_t>& filled)
             {
                 EntityList& entities = scene.GetEntityList();
-                entities.CompleteEntity(entity);
+                if (!matchedEntity)
+                {
+                    entities.CompleteEntity(entity);
+                }
                 Entity handle = entities.GetEntity(entity);
                 ++result.entities;
                 const std::string spelled = Spelled(id);
-                if (holdsId)
+                if (holdsId && !matchedEntity)
                 {
                     GiveId(handle, *id);
                 }
@@ -250,27 +307,76 @@ namespace Fenrir
                 {
                     for (Ser::Member& member : components->AsObject().members)
                     {
-                        FillComponent(member, *components, entity, spelled, unknown);
+                        FillComponent(member, *components, entity, spelled, unknown, matchedEntity);
                     }
                 }
-                // The block lists every described component its entity has, Name and Transform at their defaults as
-                // `{}`, so one it leaves out the entity had not: CompleteEntity's goes (ADR-0078 §5).
                 const auto lists = [&](std::string_view type) {
                     return components != nullptr && components->AsObject().Find(type) != nullptr;
                 };
-                if (!lists(Detail::NameType))
+                if (!matchedEntity)
                 {
-                    handle.RemoveComponent<Name>();
+                    // The block lists every described component its entity has, Name and Transform at their defaults
+                    // as `{}`, so one it leaves out the entity had not: CompleteEntity's goes (ADR-0078 §5).
+                    if (!lists(Detail::NameType))
+                    {
+                        handle.RemoveComponent<Name>();
+                    }
+                    if (!lists(Detail::TransformType))
+                    {
+                        handle.RemoveComponent<Transform>();
+                    }
                 }
-                if (!lists(Detail::TransformType))
+                else if (read == Detail::SceneRead::Repatch && !lists(Detail::TransformType) &&
+                         handle.HasComponent<Transform>())
                 {
-                    handle.RemoveComponent<Transform>();
+                    // A source that does not write a transform gives its entity none, so a transform there is a
+                    // host's override, reset to the identity: the override, if still written, is reapplied on top.
+                    handle.GetComponent<Transform>() = Transform{};
                 }
-                if (!unknown.components.empty())
+                if (matchedEntity)
+                {
+                    KeepUnknown(handle, std::move(unknown));
+                    if (handle == scopeRoot)
+                    {
+                        // The instance's root stays where its host put it.
+                        return;
+                    }
+                    Detach(handle);
+                }
+                else if (!unknown.components.empty())
                 {
                     handle.AddComponent<UnknownComponents>(std::move(unknown));
                 }
                 Attach(block, at, handle, spelled, filled);
+            }
+
+            // Takes `entity` from its parent's children, when it has a parent.
+            static void Detach(Entity entity)
+            {
+                const Entity above = entity.GetComponent<Relationship>().parent;
+                if (above.IsValid())
+                {
+                    above.RemoveChild(entity);
+                }
+            }
+
+            // Puts each component `unknown` keeps on `entity`, in place of one of its type name the entity kept.
+            static void KeepUnknown(Entity entity, UnknownComponents unknown)
+            {
+                if (unknown.components.empty())
+                {
+                    return;
+                }
+                if (!entity.HasComponent<UnknownComponents>())
+                {
+                    entity.AddComponent<UnknownComponents>();
+                }
+                std::vector<UnknownComponent>& kept = entity.GetComponent<UnknownComponents>().components;
+                for (UnknownComponent& added : unknown.components)
+                {
+                    std::erase_if(kept, [&](const UnknownComponent& was) { return was.typeName == added.typeName; });
+                    kept.push_back(std::move(added));
+                }
             }
 
             // Gives `entity` its block's id, `id`: as it is, unless an entity of the scene from before a merge has it,
@@ -413,22 +519,9 @@ namespace Fenrir
                     for (Ser::Member& member : components->AsObject().members)
                     {
                         // A field missing from the entry keeps the value the source gave it.
-                        FillComponent(member, *components, entity.GetId(), spelled, unknown);
+                        FillComponent(member, *components, entity.GetId(), spelled, unknown, false);
                     }
-                    if (!unknown.components.empty())
-                    {
-                        if (!entity.HasComponent<UnknownComponents>())
-                        {
-                            entity.AddComponent<UnknownComponents>();
-                        }
-                        std::vector<UnknownComponent>& kept = entity.GetComponent<UnknownComponents>().components;
-                        for (UnknownComponent& added : unknown.components)
-                        {
-                            std::erase_if(kept,
-                                          [&](const UnknownComponent& was) { return was.typeName == added.typeName; });
-                            kept.push_back(std::move(added));
-                        }
-                    }
+                    KeepUnknown(entity, std::move(unknown));
                 }
 
                 Ser::Value* removed = diff.Find("removed");
@@ -535,9 +628,10 @@ namespace Fenrir
             }
 
             // Adds the component `member` holds to `entity`, or keeps it in `unknown` when the registry lacks its
-            // type as a component.
+            // type as a component. With `reset`, a component the entity has is reset to its type's defaults first, so
+            // it holds what the entry writes and nothing from before: a patch rewrites it.
             void FillComponent(Ser::Member& member, const Ser::Value& at, std::uint32_t entity,
-                               const std::string& spelled, UnknownComponents& unknown)
+                               const std::string& spelled, UnknownComponents& unknown, bool reset)
             {
                 if (std::ranges::find(Detail::SpelledApart, member.key) != std::end(Detail::SpelledApart))
                 {
@@ -571,18 +665,25 @@ namespace Fenrir
                 const EntryVersion version = TakeVersion(member.value);
                 EntityList& entities = scene.GetEntityList();
                 // Name and Transform are there already, from CompleteEntity; any other is added default.
+                const bool had = entities.Has(*component, entity);
                 entities.Add(*component, entity);
-                Fill(member.value, *type, version, entities.Get(*component, entity),
-                     std::format("entity `{}`, `{}`: ", spelled, type->name));
+                void* value = entities.Get(*component, entity);
+                if (reset && had)
+                {
+                    // In place, so the component stays the one the scene's systems and watches know.
+                    ResetValue(*type, value);
+                }
+                Fill(member.value, *type, version, value, std::format("entity `{}`, `{}`: ", spelled, type->name));
                 ++result.components;
             }
 
             // Adds or fills each scene resource `resources` holds, after every entity, so an `entity` field in one
-            // names an entity of the file (ADR-0078 §7). A merge or an instance applies none: the target scene's
-            // resources stand, and each entry is counted as skipped, with no diagnostic (ADR-0079 §2).
+            // names an entity of the file (ADR-0078 §7). A patch rewrites one the scene has, reset first, in place. A
+            // merge or an instance applies none: the target scene's resources stand, and each entry is counted as
+            // skipped, with no diagnostic (ADR-0079 §2).
             void FillResources(Ser::Value& resources)
             {
-                if (read != Detail::SceneRead::Load)
+                if (read != Detail::SceneRead::Load && read != Detail::SceneRead::Patch)
                 {
                     result.resourcesSkipped += resources.AsObject().members.size();
                     return;
@@ -598,6 +699,10 @@ namespace Fenrir
                         if (resource == nullptr)
                         {
                             resource = scene.AddResource(registry, type->name);
+                        }
+                        else if (read == Detail::SceneRead::Patch)
+                        {
+                            ResetValue(*type, resource);
                         }
                     }
                     if (resource == nullptr)
@@ -673,6 +778,58 @@ namespace Fenrir
                 return root.GetId();
             }
 
+            // For a patch: the entity of the scene a block of id `id` fills, when one holds it outside any instance and
+            // no earlier block has the id. It is an instance's root of the source `instance` names for an instance
+            // block, and no instance's root for any other; one that is not is no match, so the block adds its entity
+            // afresh and the one the scene had goes.
+            [[nodiscard]] std::optional<std::uint32_t> Matching(const std::optional<EntityId>& id,
+                                                                const std::optional<BlockInstance>& instance)
+            {
+                if (!Patching() || !id || ids.contains(id->value))
+                {
+                    return std::nullopt;
+                }
+                const auto found = live.find(id->value);
+                if (found == live.end())
+                {
+                    return std::nullopt;
+                }
+                const Entity entity = scene.GetEntityList().GetEntity(found->second);
+                if (entity == scopeRoot)
+                {
+                    // A re-patch's root is the instance's, marked so, and filled by the source's ordinary root block.
+                    return instance ? std::nullopt : std::optional<std::uint32_t>(found->second);
+                }
+                const bool instanced = entity.HasComponent<Instance>();
+                if (instanced != instance.has_value() ||
+                    (instanced && std::string_view(entity.GetComponent<Instance>().source) != instance->source))
+                {
+                    return std::nullopt;
+                }
+                return found->second;
+            }
+
+            // For a patch: destroys, with what is below it, each entity of the scene holding an id the file held when
+            // it last filled the scene that no block matched. It runs after every block is placed, so an entity the
+            // file moved from under one that goes is kept.
+            void DestroyGone()
+            {
+                if (!Patching() || priorIds == nullptr)
+                {
+                    return;
+                }
+                EntityList& entities = scene.GetEntityList();
+                for (const auto& [value, entity] : live)
+                {
+                    const Entity gone = entities.GetEntity(entity);
+                    if (priorIds->contains(value) && !matched.contains(entity) && gone != scopeRoot &&
+                        Detail::LiveIn(entities, gone))
+                    {
+                        Detail::DestroySubtree(entities, gone);
+                    }
+                }
+            }
+
             // Fills the scene from `data`, a scene envelope's: the entities in two passes, then the resources.
             void FillScene(Ser::Value& data)
             {
@@ -698,6 +855,8 @@ namespace Fenrir
                     // Whether the entity is an instance's root, made complete already, and whether its source loaded.
                     bool instance = false;
                     bool expanded = false;
+                    // For a patch: whether the entity is one the scene had, holding the block's id.
+                    bool matched = false;
                 };
                 std::vector<Reserved> reserved;
                 EntityList& entities = scene.GetEntityList();
@@ -727,9 +886,22 @@ namespace Fenrir
                             ++result.entitiesSkipped;
                             continue;
                         }
+                        if (Patching() && (!id || ids.contains(id->value)))
+                        {
+                            // A block with no id of its own matches nothing: the entity the scene's load made for it
+                            // stays as it is, as an entity with no id does, rather than another being added each patch.
+                            ++result.entitiesSkipped;
+                            continue;
+                        }
                         bool expanded = false;
-                        const std::uint32_t entity =
-                            instance ? Expand(*instance, block, element.value, id, expanded) : entities.ReserveEntity();
+                        const std::optional<std::uint32_t> found = Matching(id, instance);
+                        const std::uint32_t entity = found      ? *found
+                                                     : instance ? Expand(*instance, block, element.value, id, expanded)
+                                                                : entities.ReserveEntity();
+                        if (found)
+                        {
+                            matched.insert(*found);
+                        }
                         bool holdsId = id.has_value();
                         if (id && !ids.emplace(id->value, entity).second)
                         {
@@ -741,8 +913,8 @@ namespace Fenrir
                                                SpellEntityId(*id)));
                             holdsId = false;
                         }
-                        reserved.push_back(
-                            {&block, &element.value, entity, id, holdsId, instance.has_value(), expanded});
+                        reserved.push_back({&block, &element.value, entity, id, holdsId, instance.has_value(), expanded,
+                                            found.has_value()});
                     }
                 }
 
@@ -750,17 +922,36 @@ namespace Fenrir
                 std::unordered_set<std::uint32_t> filled;
                 for (const Reserved& entry : reserved)
                 {
-                    if (entry.instance)
+                    if (entry.matched && entry.instance)
+                    {
+                        // The instance is read again from its source, and its diff applied on top, so an edit to
+                        // either shows (ADR-0081 §4); then its parent and order are restored. A source that does not
+                        // read leaves it as it was.
+                        Entity root = entities.GetEntity(entry.entity);
+                        ++result.entities;
+                        if (repatch)
+                        {
+                            // Over the source read again, or, when it does not read, over the instance as it was, so
+                            // an edit to the diff shows either way.
+                            (void)repatch(root);
+                            ApplyDiff(*entry.block, *entry.at, root, Spelled(entry.id));
+                        }
+                        Detach(root);
+                        Attach(*entry.block, *entry.at, root, Spelled(entry.id), filled);
+                    }
+                    else if (entry.instance)
                     {
                         FillInstance(*entry.block, *entry.at, entities.GetEntity(entry.entity), entry.id, entry.holdsId,
                                      entry.expanded, filled);
                     }
                     else
                     {
-                        FillBlock(*entry.block, *entry.at, entry.entity, entry.id, entry.holdsId, filled);
+                        FillBlock(*entry.block, *entry.at, entry.entity, entry.id, entry.holdsId, entry.matched,
+                                  filled);
                     }
                     filled.insert(entry.entity);
                 }
+                DestroyGone();
 
                 Ser::Value* resources = data.AsObject().Find("resources");
                 if (resources != nullptr && resources->Kind() != Ser::ValueKind::Object)
@@ -777,51 +968,279 @@ namespace Fenrir
                 }
             }
         };
+    } // namespace
 
-        // Why a scene envelope's root, read from the file, is refused: a located error's message, at `node`; or none,
-        // with its `data` in `data`.
-        struct EnvelopeProblem
+    const Ser::Value* AssetStore::SceneSourceTree(const std::string& assetPath, const std::string& fileKey,
+                                                  std::string_view what)
+    {
+        Detail::SourceTrees& trees = *m_state->sourceTrees;
+        if (const auto found = trees.find(fileKey); found != trees.end())
         {
-            const Ser::Value* node = nullptr;
-            std::string message;
+            return found->second ? &*found->second : nullptr;
+        }
+        std::optional<Ser::Value>& kept = trees[fileKey];
+        ILogger& logger = *m_state->logger;
+        const std::optional<std::vector<std::byte>> bytes = m_state->source->Read(assetPath);
+        if (!bytes)
+        {
+            logger.Error("Could not {} '{}': the file could not be read; they are left as they were", what, assetPath);
+            return nullptr;
+        }
+        Ser::ReadTreeResult tree = Ser::ReadTree(*bytes, fileKey, logger);
+        if (!tree.tree)
+        {
+            // ReadTree logged its own located diagnostics.
+            logger.Error("Could not {} '{}': the file is neither JSON5 nor the tree encoding; they are left as they "
+                         "were",
+                         what, assetPath);
+            return nullptr;
+        }
+        Ser::Value* data = nullptr;
+        if (const std::optional<Detail::SceneEnvelopeProblem> problem = Detail::CheckSceneEnvelope(*tree.tree, data))
+        {
+            logger.Error("Could not {} '{}': {}; they are left as they were", what, assetPath,
+                         Ser::FormatDiagnostic(Detail::LocatedAt(Ser::DiagnosticSeverity::Error, fileKey, problem->node,
+                                                                 *tree.tree, problem->message)));
+            return nullptr;
+        }
+        kept = std::move(*tree.tree);
+        return &*kept;
+    }
+
+    bool AssetStore::RepatchInstance(Scene& scene, Entity root)
+    {
+        Detail::InstanceScopes* const scopes = m_state->scopeSink;
+        if (scopes == nullptr || !root.HasComponent<Instance>())
+        {
+            return false;
+        }
+        const Detail::SourceTreesRun run(m_state->sourceTrees);
+        // Unordered map elements stay put as nested expansions add theirs, so the scope can be held throughout.
+        Detail::InstanceScope& scope = (*scopes)[root.GetId()];
+        if (!scope.source.empty() && scope.source != std::string_view(root.GetComponent<Instance>().source))
+        {
+            // A scope left by an instance since destroyed, whose entity's slot another instance now holds.
+            scope = {};
+        }
+        if (scope.source.empty())
+        {
+            // An instance no read recorded, as one whose source did not load: its source from its Instance, and no
+            // entity below it the source's yet.
+            const std::string source(root.GetComponent<Instance>().source);
+            if (Detail::WholeFileLoadProblem(m_state->root, source, scope.source, scope.sourceKey))
+            {
+                scopes->erase(root.GetId());
+                return false;
+            }
+            scope.model = !scope.source.ends_with(".scene.json5");
+        }
+        EntityList& entities = scene.GetEntityList();
+
+        if (!scope.model)
+        {
+            const Ser::Value* tree = SceneSourceTree(scope.source, scope.sourceKey, "re-patch the instances of");
+            if (tree == nullptr)
+            {
+                return false;
+            }
+            Ser::Value copy = *tree;
+            std::unordered_set<std::uint64_t> ids = scope.ids;
+            std::optional<std::uint64_t> rootId = scope.rootId;
+            const SceneLoadResult read = ReadSceneTree(
+                copy, scope.source, scope.source, scope.sourceKey, [&]() -> Scene& { return scene; }, root,
+                Detail::SceneRead::Repatch, {}, &ids, &rootId);
+            if (read.status == LoadStatus::Failed)
+            {
+                return false;
+            }
+            scope.ids = std::move(ids);
+            scope.rootId = rootId;
+            return true;
+        }
+
+        // A model re-spawns (ADR-0081 §4): its import was replaced in place, so the handle the scene holds names the
+        // new one. The spawn hangs a fresh root under the instance's, whose entities take the old ones' places.
+        const LoadResult<Model> model = Load<Model>(scope.source, AssetOwner(scene));
+        if (!model.Ok())
+        {
+            return false;
+        }
+        const std::uint32_t revision =
+            m_state->Find(Detail::AssetKind::Model, {model.handle.index, model.handle.generation})->revision;
+        if (revision == scope.revision && !scope.ids.empty())
+        {
+            // The import is the one spawned, so the instance's entities stand, and keep their handles; only its diff,
+            // the caller's, is applied again.
+            return true;
+        }
+        // The model's entities are those in the root's own scope: an instance below one of them (another model
+        // attached at run time, whose ids are numbers too) is in its own, and stays, as a run-time child does.
+        std::vector<Entity> old;
+        std::unordered_set<std::uint32_t> oldSet;
+        Detail::ForEachInInstance(root, [&](const Entity& entity) {
+            if (entity.HasComponent<EntityId>() && scope.ids.contains(entity.GetComponent<EntityId>().value) &&
+                oldSet.insert(entity.GetId()).second)
+            {
+                old.push_back(entity);
+            }
+        });
+        const SpawnedNodes spawned = m_state->modelSpawner != nullptr
+                                         ? m_state->modelSpawner->Spawn(scene, model.handle, root)
+                                         : SpawnNodes(scene, model.handle, root);
+        if (!spawned.root.IsValid())
+        {
+            m_state->logger->Error("Could not re-spawn the instances of '{}': the model spawned nothing; they are left "
+                                   "as they were",
+                                   scope.source);
+            return false;
+        }
+        const Entity fresh = spawned.root;
+        std::unordered_map<std::uint64_t, Entity> made;
+        std::unordered_set<std::uint64_t> madeIds;
+        Detail::ForEachInInstance(fresh, [&](const Entity& entity) {
+            if (entity.HasComponent<EntityId>())
+            {
+                made.emplace(entity.GetComponent<EntityId>().value, entity);
+                madeIds.insert(entity.GetComponent<EntityId>().value);
+            }
+        });
+        // What hangs from an old entity that is not the model's (a run-time child, or one a host added) moves to the
+        // new entity of its id, or to the root when the model has none any more.
+        for (const Entity& was : old)
+        {
+            std::vector<Entity> kept;
+            was.ForEachChild([&](const Entity& child) {
+                if (!oldSet.contains(child.GetId()))
+                {
+                    kept.push_back(child);
+                }
+            });
+            const auto to = made.find(was.GetComponent<EntityId>().value);
+            Entity into = to != made.end() ? to->second : root;
+            for (const Entity& child : kept)
+            {
+                was.RemoveChild(child);
+                into.AddChild(child);
+            }
+        }
+        for (const Entity& was : old)
+        {
+            if (Detail::LiveIn(entities, was))
+            {
+                Detail::DestroySubtree(entities, was);
+            }
+        }
+        std::vector<Entity> top;
+        fresh.ForEachChild([&](const Entity& child) { top.push_back(child); });
+        for (const Entity& child : top)
+        {
+            fresh.RemoveChild(child);
+            root.AddChild(child);
+        }
+        Detail::DestroySubtree(entities, fresh);
+        scope.ids = std::move(madeIds);
+        scope.revision = revision;
+        return true;
+    }
+
+    void AssetStore::RepatchHostInstances(Scene& scene, Ser::Value& tree, const std::string& assetPath,
+                                          const std::string& fileKey, const std::vector<std::vector<Entity>>& chains)
+    {
+        Ser::Value* data = nullptr;
+        if (Detail::CheckSceneEnvelope(tree, data))
+        {
+            return;
+        }
+        SceneLoadResult result;
+        const std::uint32_t owner = OwnerOf(AssetOwner(scene));
+        const std::function<Detail::ReferenceRead(std::string_view, const FieldInfo&)> readReference =
+            [&](std::string_view reference, const FieldInfo& field) {
+                return ReadFileReference(assetPath, owner, reference, field);
+            };
+        // The host's diffs are read as its patch reads them, an `entity` field naming the host's entity of that id.
+        SceneFiller filler{scene,
+                           *m_state->types,
+                           fileKey,
+                           readReference,
+                           *m_state->logger,
+                           result,
+                           {},
+                           Detail::SceneRead::Patch,
+                           m_state->root,
+                           m_state->scenesReading,
+                           [&](std::string_view source) { return ExpandInstance(scene, source); }};
+        // The host's blocks by id, the first of each.
+        std::unordered_map<std::uint64_t, Ser::Element*> blocks;
+        if (Ser::Value* listed = data->AsObject().Find("entities");
+            listed != nullptr && listed->Kind() == Ser::ValueKind::Array)
+        {
+            for (Ser::Element& element : listed->AsArray().elements)
+            {
+                if (element.value.Kind() != Ser::ValueKind::Object)
+                {
+                    continue;
+                }
+                const Ser::Value* id = element.value.AsObject().Find("id");
+                const std::optional<EntityId> parsed = id != nullptr && id->Kind() == Ser::ValueKind::String
+                                                           ? ParseEntityId(id->AsString())
+                                                           : std::nullopt;
+                if (parsed)
+                {
+                    blocks.emplace(parsed->value, &element);
+                }
+            }
+        }
+        // Each host entity by its id: those at the top, and those the host added inside an instance, whose ids are
+        // its blocks'.
+        EntityList& entities = scene.GetEntityList();
+        entities.ForEachEntity([&](auto handle) {
+            const Entity entity = entities.GetEntity(static_cast<std::uint32_t>(handle));
+            if (entity.HasComponent<EntityId>() &&
+                (!Detail::InsideInstance(entity) || blocks.contains(entity.GetComponent<EntityId>().value)))
+            {
+                filler.ids.emplace(entity.GetComponent<EntityId>().value, entity.GetId());
+            }
+        });
+        // The host block writing `entity` as an instance of its source, or null: a host's, not a source's.
+        const auto hostBlock = [&](const Entity& entity) -> Ser::Element* {
+            if (!Detail::LiveIn(entities, entity) || !entity.HasComponent<EntityId>() ||
+                !entity.HasComponent<Instance>())
+            {
+                return nullptr;
+            }
+            const auto found = blocks.find(entity.GetComponent<EntityId>().value);
+            const Ser::Value* instance =
+                found != blocks.end() ? found->second->value.AsObject().Find("instance") : nullptr;
+            if (instance == nullptr || instance->Kind() != Ser::ValueKind::String ||
+                instance->AsString() != std::string_view(entity.GetComponent<Instance>().source))
+            {
+                return nullptr;
+            }
+            return found->second;
         };
 
-        std::optional<EnvelopeProblem> CheckSceneEnvelope(Ser::Value& root, Ser::Value*& data)
+        // Each chain runs from an instance of the source out to the top-level instance holding it; the instance
+        // re-patched is the nearest the host writes, so one the host added inside another is re-patched itself. One
+        // the host no longer writes as an instance of this source is the host's patch's to change.
+        std::unordered_set<std::uint32_t> done;
+        for (const std::vector<Entity>& chain : chains)
         {
-            if (root.Kind() != Ser::ValueKind::Object)
+            for (const Entity& entity : chain)
             {
-                return EnvelopeProblem{&root,
-                                       std::format("expected a scene envelope object, found {}", Detail::Found(&root))};
+                Ser::Element* block = hostBlock(entity);
+                if (block == nullptr)
+                {
+                    continue;
+                }
+                if (done.insert(entity.GetId()).second && RepatchInstance(scene, entity))
+                {
+                    filler.ApplyDiff(block->value.AsObject(), block->value, entity,
+                                     SpellEntityId(entity.GetComponent<EntityId>()));
+                }
+                break;
             }
-            Ser::Object& envelope = root.AsObject();
-            const Ser::Value* format = envelope.Find("format");
-            if (std::optional<std::string> problem = Detail::FormatProblem(format))
-            {
-                return EnvelopeProblem{format, std::move(*problem)};
-            }
-            const Ser::Value* type = envelope.Find("type");
-            if (type == nullptr || type->Kind() != Ser::ValueKind::String || type->AsString() != Detail::SceneTypeName)
-            {
-                return EnvelopeProblem{
-                    type, std::format("expected `type` \"{}\", found {}", Detail::SceneTypeName, Detail::Found(type))};
-            }
-            const Ser::Value* version = envelope.Find("version");
-            if (Detail::PositiveWhole(version, Detail::SceneVersion) == std::nullopt)
-            {
-                return EnvelopeProblem{version,
-                                       std::format("expected `version`, the scene layout's, from 1 up to {}, found {}",
-                                                   Detail::SceneVersion, Detail::Found(version))};
-            }
-            data = envelope.Find("data");
-            if (data == nullptr || data->Kind() != Ser::ValueKind::Object)
-            {
-                return EnvelopeProblem{data, std::format("expected `data`, an object of `resources` and `entities`, "
-                                                         "found {}",
-                                                         Detail::Found(data))};
-            }
-            return std::nullopt;
         }
-    } // namespace
+    }
 
     SceneLoadResult AssetStore::LoadScene(App& app, std::string_view path, std::string_view name)
     {
@@ -833,6 +1252,25 @@ namespace Fenrir
     SceneLoadResult AssetStore::LoadSceneInto(Scene& scene, std::string_view path, Entity parent)
     {
         return ReadSceneFile(path, [&]() -> Scene& { return scene; }, parent, Detail::SceneRead::Merge);
+    }
+
+    Scene& AssetStore::CopyScene(App& app, Scene& scene, std::string_view name)
+    {
+        // The writer and the reader a save then a load would run, joined by the tree in memory: no file, no read of
+        // the store's source for the scene, and nothing recorded for hot reload.
+        const std::string named(scene.GetName());
+        Ser::Value envelope;
+        WriteSceneTree(scene, std::nullopt, named, envelope);
+        Scene* made = nullptr;
+        ReadSceneTree(envelope, named, {}, named,
+                      [&]() -> Scene& {
+                          made = &app.CreateScene(std::string(name));
+                          return *made;
+                      },
+                      {}, Detail::SceneRead::Load, {});
+        // The whole scene always writes, and the reader accepts what the writer writes; were either to refuse, the
+        // copy is the new scene left empty, the refusal logged.
+        return made != nullptr ? *made : app.CreateScene(std::string(name));
     }
 
     InstanceResult AssetStore::Instantiate(Scene& scene, std::string_view path, Entity parent)
@@ -884,11 +1322,21 @@ namespace Fenrir
         }
 
         Entity root;
+        // What a recorded scene's instance read, for its re-patch: looked at before the read, as a scene file is.
+        Detail::InstanceScope scope{.source = assetPath, .sourceKey = fileKey};
         constexpr std::string_view SceneExtension = ".scene.json5";
         if (assetPath.ends_with(SceneExtension))
         {
+            if (m_state->scopeSink != nullptr && m_state->watcher)
+            {
+                if (const std::optional<ReloadWatcher::Stamp> stamp = Detail::StampOf(Detail::Utf8Path(fileKey)))
+                {
+                    scope.stamp.emplace(stamp->modified, stamp->size);
+                }
+            }
             // The read refused the file and logged why; the instance adds nothing more.
-            result.load = ReadSceneFile(assetPath, [&]() -> Scene& { return scene; }, {}, Detail::SceneRead::Instance);
+            result.load = ReadSceneFile(
+                assetPath, [&]() -> Scene& { return scene; }, {}, Detail::SceneRead::Instance, &scope.ids);
             if (result.load.status == LoadStatus::Failed)
             {
                 return result;
@@ -901,6 +1349,7 @@ namespace Fenrir
                 if (root.HasComponent<EntityId>())
                 {
                     result.entities.emplace(root.GetComponent<EntityId>().value, root);
+                    scope.rootId = root.GetComponent<EntityId>().value;
                     root.RemoveComponent<EntityId>();
                 }
             }
@@ -934,6 +1383,9 @@ namespace Fenrir
                 return fail("the model spawned nothing");
             }
             root = spawned.root;
+            scope.model = true;
+            scope.revision =
+                m_state->Find(Detail::AssetKind::Model, {model.handle.index, model.handle.generation})->revision;
             result.load.scene = &scene;
             result.load.roots.push_back(root);
             result.load.entities = 1;
@@ -954,13 +1406,22 @@ namespace Fenrir
             if (entity.HasComponent<EntityId>())
             {
                 result.entities.emplace(entity.GetComponent<EntityId>().value, entity);
+                if (scope.model)
+                {
+                    scope.ids.insert(entity.GetComponent<EntityId>().value);
+                }
             }
         });
+        if (m_state->scopeSink != nullptr)
+        {
+            (*m_state->scopeSink)[root.GetId()] = std::move(scope);
+        }
         return result;
     }
 
     SceneLoadResult AssetStore::ReadSceneFile(std::string_view path, const std::function<Scene&()>& makeScene,
-                                              Entity parent, Detail::SceneRead read)
+                                              Entity parent, Detail::SceneRead read,
+                                              std::unordered_set<std::uint64_t>* readIds)
     {
         SceneLoadResult result;
         std::string assetPath;
@@ -969,9 +1430,7 @@ namespace Fenrir
             Detail::WholeFileLoadProblem(m_state->root, path, assetPath, fileKey);
         // The load fails with `diagnostic`, logged here once, and no scene made.
         const auto fail = [&](Ser::Diagnostic diagnostic) -> SceneLoadResult {
-            m_state->logger->Error("Could not load scene '{}': {}", path, Ser::FormatDiagnostic(diagnostic));
-            result.status = LoadStatus::Failed;
-            result.diagnostics.push_back(std::move(diagnostic));
+            FailSceneRead(path, std::move(diagnostic), result);
             return std::move(result);
         };
         const auto failWith = [&](std::string message) {
@@ -982,6 +1441,11 @@ namespace Fenrir
         {
             return failWith(*pathProblem);
         }
+        // A load fills a scene the store records for the scene patch, and watches; looked at before the read, so a
+        // write during it is a change the watch sees.
+        const bool recorded = read == Detail::SceneRead::Load;
+        const std::optional<ReloadWatcher::Stamp> stamp =
+            recorded && m_state->watcher ? Detail::StampOf(Detail::Utf8Path(fileKey)) : std::nullopt;
         Detail::AssetSource& source = *m_state->source;
         const std::optional<std::vector<std::byte>> bytes = source.Read(assetPath);
         if (!bytes)
@@ -999,11 +1463,96 @@ namespace Fenrir
             return result;
         }
         Append(result.diagnostics, std::move(tree.diagnostics));
-        Ser::Value* data = nullptr;
-        if (std::optional<EnvelopeProblem> problem = CheckSceneEnvelope(*tree.tree, data))
+        std::unordered_set<std::uint64_t> fileIds;
+        // A recorded load records each instance it expands, nested ones too, for the instance re-patch.
+        Detail::InstanceScopes scopes;
+        Detail::InstanceScopes* const outerSink = m_state->scopeSink;
+        if (recorded)
         {
-            return fail(Detail::LocatedAt(Ser::DiagnosticSeverity::Error, fileKey, problem->node, *tree.tree,
-                                          std::move(problem->message)));
+            m_state->scopeSink = &scopes;
+        }
+        SceneLoadResult loaded = ReadSceneTree(*tree.tree, path, assetPath, fileKey, makeScene, parent, read,
+                                               std::move(result), recorded || readIds != nullptr ? &fileIds : nullptr);
+        m_state->scopeSink = outerSink;
+        if (readIds != nullptr)
+        {
+            *readIds = fileIds;
+        }
+        if (recorded && loaded.scene != nullptr)
+        {
+            Detail::RecordSceneFile(m_state, *loaded.scene, fileKey, assetPath, std::move(fileIds), std::move(scopes),
+                                    stamp);
+        }
+        return loaded;
+    }
+
+    void AssetStore::FailSceneRead(std::string_view named, Ser::Diagnostic diagnostic, SceneLoadResult& result)
+    {
+        m_state->logger->Error("Could not load scene '{}': {}", named, Ser::FormatDiagnostic(diagnostic));
+        result.status = LoadStatus::Failed;
+        result.diagnostics.push_back(std::move(diagnostic));
+    }
+
+    SceneLoadResult AssetStore::ReadSceneTree(Ser::Value& tree, std::string_view named, const std::string& assetPath,
+                                              const std::string& fileKey, const std::function<Scene&()>& makeScene,
+                                              Entity parent, Detail::SceneRead read, SceneLoadResult result,
+                                              std::unordered_set<std::uint64_t>* fileIds,
+                                              std::optional<std::uint64_t>* rootId)
+    {
+        Ser::Value* data = nullptr;
+        if (std::optional<Detail::SceneEnvelopeProblem> problem = Detail::CheckSceneEnvelope(tree, data))
+        {
+            FailSceneRead(named,
+                          Detail::LocatedAt(Ser::DiagnosticSeverity::Error, fileKey, problem->node, tree,
+                                            std::move(problem->message)),
+                          result);
+            return result;
+        }
+
+        // A re-patch's source fills the instance's root from its single root block; one with several roots, or none,
+        // hangs them from the root. A variant's root block is itself an instance, which the root cannot be filled from.
+        std::optional<std::uint64_t> singleRoot;
+        if (read == Detail::SceneRead::Repatch)
+        {
+            const Ser::Object* rootBlock = SingleRootBlock(*data);
+            if (rootBlock != nullptr && rootBlock->Find("instance") != nullptr)
+            {
+                // Said once per run, however many instances the variant has.
+                if (m_state->sourceTrees == nullptr || m_state->sourceTrees->try_emplace("variant:" + fileKey).second)
+                {
+                    m_state->logger->Warn(
+                        "Could not re-patch the instances of '{}': its root is an instance of another file "
+                        "(a variant), which only a load expands again; they are left as they were",
+                        named);
+                }
+                result.status = LoadStatus::Failed;
+                return result;
+            }
+            if (rootBlock != nullptr)
+            {
+                const Ser::Value* id = rootBlock->Find("id");
+                if (id != nullptr && id->Kind() == Ser::ValueKind::String)
+                {
+                    if (const std::optional<EntityId> parsed = ParseEntityId(id->AsString()))
+                    {
+                        singleRoot = parsed->value;
+                    }
+                }
+            }
+            // A root that changed from the file's single root to a synthetic one, or back, holds the other's
+            // components, which a patch by id cannot undo.
+            const bool hadIds = fileIds != nullptr && !fileIds->empty();
+            if (hadIds && rootId != nullptr && rootId->has_value() != singleRoot.has_value())
+            {
+                if (m_state->sourceTrees == nullptr || m_state->sourceTrees->try_emplace("roots:" + fileKey).second)
+                {
+                    m_state->logger->Warn("Could not re-patch the instances of '{}': it changed between one root and "
+                                          "several, which only a load expands again; they are left as they were",
+                                          named);
+                }
+                result.status = LoadStatus::Failed;
+                return result;
+            }
         }
 
         Scene& scene = makeScene();
@@ -1027,15 +1576,65 @@ namespace Fenrir
         EntityList& entities = scene.GetEntityList();
         // An instance keeps its file's ids, which are scoped by its root; so are those inside the scene's instances
         // already, which no block's id can collide with.
-        if (read != Detail::SceneRead::Instance)
+        // A patch matches its blocks with the scene's entities by those ids instead.
+        if (read == Detail::SceneRead::Repatch)
+        {
+            // The source's entities are those below the root holding an id its last read gave out, nested instances'
+            // included, since a block of the source may hang from inside one; the first of each id holds it. What else
+            // is below the root (a run-time child, or one a host added) is no block's, and stays.
+            std::vector<Entity> below{parent};
+            for (std::size_t i = 0; i < below.size(); ++i)
+            {
+                below[i].ForEachChild([&](const Entity& child) {
+                    below.push_back(child);
+                    if (fileIds != nullptr && child.HasComponent<EntityId>() &&
+                        fileIds->contains(child.GetComponent<EntityId>().value))
+                    {
+                        filler.live.emplace(child.GetComponent<EntityId>().value, child.GetId());
+                    }
+                });
+            }
+            if (singleRoot)
+            {
+                filler.live.insert_or_assign(*singleRoot, parent.GetId());
+            }
+            filler.scopeRoot = parent;
+        }
+        else if (read != Detail::SceneRead::Instance)
         {
             entities.ForEachEntity([&](auto handle) {
                 const Entity entity = entities.GetEntity(static_cast<std::uint32_t>(handle));
-                if (entity.HasComponent<EntityId>() && !Detail::InsideInstance(entity))
+                if (!entity.HasComponent<EntityId>() || Detail::InsideInstance(entity))
                 {
-                    filler.taken.insert(entity.GetComponent<EntityId>().value);
+                    return;
+                }
+                const std::uint64_t value = entity.GetComponent<EntityId>().value;
+                if (read == Detail::SceneRead::Patch)
+                {
+                    filler.live.emplace(value, entity.GetId());
+                }
+                else
+                {
+                    filler.taken.insert(value);
                 }
             });
+        }
+        if (filler.Patching())
+        {
+            filler.priorIds = fileIds;
+            filler.repatch = [this, &scene](Entity root) { return RepatchInstance(scene, root); };
+        }
+        if (read == Detail::SceneRead::Patch)
+        {
+            // An id the file never held (a merge's) is the scene's own: a block of it that matches no entity, being of
+            // another kind, is re-minted, so no id repeats in the scene. One the file held goes with its entity.
+            for (const auto& [value, entity] : filler.live)
+            {
+                if (fileIds == nullptr || !fileIds->contains(value))
+                {
+                    filler.taken.insert(value);
+                }
+            }
         }
         if (parent.HasEntityList() && !Detail::LiveIn(entities, parent))
         {
@@ -1044,8 +1643,9 @@ namespace Fenrir
                           "the parent given is no live entity of the scene loaded into; the file's roots load at the "
                           "top");
         }
-        else
+        else if (!singleRoot)
         {
+            // A re-patch's single root block is the root itself, so it has no parent to go under.
             filler.parent = parent;
         }
         // On the chain while its blocks are read, so an instance of it, directly or through another file, is refused.
@@ -1057,9 +1657,26 @@ namespace Fenrir
                 chain.pop_back();
             }
         };
-        m_state->scenesReading.push_back(assetPath);
-        const OnChain onChain{m_state->scenesReading};
+        // A copy made in memory is no file, so there is nothing to put on the chain.
+        std::optional<OnChain> onChain;
+        if (!assetPath.empty())
+        {
+            m_state->scenesReading.push_back(assetPath);
+            onChain.emplace(m_state->scenesReading);
+        }
         filler.FillScene(*data);
+        if (fileIds != nullptr)
+        {
+            fileIds->clear();
+            for (const auto& [value, entity] : filler.ids)
+            {
+                fileIds->insert(value);
+            }
+        }
+        if (rootId != nullptr)
+        {
+            *rootId = singleRoot;
+        }
         result.status = result.diagnostics.empty() ? LoadStatus::Succeeded : LoadStatus::Partial;
         return result;
     }

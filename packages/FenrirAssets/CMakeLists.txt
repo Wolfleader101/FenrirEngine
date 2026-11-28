@@ -54,6 +54,7 @@ add_library(FenrirAssets STATIC
     src/SpawnNodes.cpp
     src/SceneInstances.cpp
     src/SceneReader.cpp
+    src/ScenePatch.cpp
     src/SceneWriter.cpp
 
     src/Importers/ImageImporter.hpp

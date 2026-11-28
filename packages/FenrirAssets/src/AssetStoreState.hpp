@@ -20,6 +20,7 @@
 #include "AssetSource.hpp"
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirSerialisation/Bridge.hpp"
+#include "FenrirSerialisation/Value.hpp"
 #include "FenrirTypes/TypeDescription.hpp"
 
 namespace Fenrir::Detail
@@ -38,6 +39,89 @@ namespace Fenrir::Detail
     inline constexpr OwnerId ReloadOwnerId = std::numeric_limits<OwnerId>::max();
 
     class AssetWatcher;
+    struct SceneFileRecord;
+
+    /**
+     * @brief What one instance's expansion read from its source (ADR-0081 §4), which the instance re-patch matches the
+     * source's next read against: the source, and the ids its read gave out. Kept for every instance a recorded scene
+     * expanded, nested ones too, by its root's entity id.
+     */
+    struct InstanceScope
+    {
+        /** @brief The source's asset path, as its Instance names it. */
+        std::string source;
+        /** @brief The source's key, the absolute path its watch is under. */
+        std::string sourceKey;
+        /** @brief Whether the source is a model, which re-spawns, rather than a scene file, which is patched. */
+        bool model = false;
+        /**
+         * @brief The ids of the source's blocks at its last read, or of a model spawn's entities: an entity below the
+         * root holding one is the source's, and any other (a run-time child, or one a host added) is left alone.
+         */
+        std::unordered_set<std::uint64_t> ids;
+        /**
+         * @brief The id of the source file's single root block, whose entity is the instance's root; none for a
+         * synthetic root. A re-patch refuses a source whose root changed between the two, which only a load expands.
+         */
+        std::optional<std::uint64_t> rootId;
+        /** @brief For a model, the revision of the import spawned: an unchanged one is not spawned again. */
+        std::uint32_t revision = 0;
+        /**
+         * @brief What a scene source looked like before it was read (its modification time and size), which its watch
+         * starts from; none when it could not be looked at. Spelled apart from ReloadWatcher's stamp, since FenrirCore
+         * is private to FenrirAssets and its tests include this header.
+         */
+        std::optional<std::pair<std::filesystem::file_time_type, std::uintmax_t>> stamp;
+    };
+
+    /** @brief The instances a recorded scene expanded, by their roots' entity ids. */
+    using InstanceScopes = std::unordered_map<std::uint32_t, InstanceScope>;
+
+    /**
+     * @brief The scene sources one re-patch has read, by key, each read once however many instances it has: its tree,
+     * or none when it did not read as a scene, which was said once.
+     */
+    using SourceTrees = std::unordered_map<std::string, std::optional<Serialisation::Value>>;
+
+    /**
+     * @brief Points `current` at `value` while it lives, and puts back what it pointed at before: the store's scope
+     * sink, or its source trees, for one read or one run.
+     */
+    template <typename T>
+    struct PointedAt
+    {
+        T*& current;
+        T* const before;
+
+        PointedAt(T*& pointer, T& value) : current(pointer), before(pointer)
+        {
+            current = &value;
+        }
+        PointedAt(const PointedAt&) = delete;
+        PointedAt& operator=(const PointedAt&) = delete;
+        ~PointedAt()
+        {
+            current = before;
+        }
+    };
+
+    /**
+     * @brief The source trees of one patch run: its own, unless a run is going already, whose trees it shares, so a
+     * source read in either is read, and its failure said, once.
+     */
+    struct SourceTreesRun
+    {
+        SourceTrees own;
+        std::optional<PointedAt<SourceTrees>> pointed;
+
+        explicit SourceTreesRun(SourceTrees*& current)
+        {
+            if (current == nullptr)
+            {
+                pointed.emplace(current, own);
+            }
+        }
+    };
 
     /**
      * @brief A data asset's instance (ADR-0075): of its file's type, which may extend the type it was loaded as, so it
@@ -144,6 +228,25 @@ namespace Fenrir::Detail
          * when done, and an instance block naming one of them would instance itself (ADR-0080 §5).
          */
         std::vector<std::string> scenesReading;
+        /**
+         * @brief The record of each scene a LoadScene filled from a file, which the scene patch finds the scenes of a
+         * changed file by (ADR-0081 §3). A record is a resource of its scene and takes itself off when the scene ends,
+         * so the patch never meets a destroyed scene.
+         */
+        std::vector<SceneFileRecord*> sceneFiles;
+        /**
+         * @brief While a recorded scene is read or re-patched, where each instance an expansion makes is recorded: the
+         * scene's record's scopes. Null otherwise, so Instantiate and the writer's baselines record nothing.
+         */
+        InstanceScopes* scopeSink = nullptr;
+        /** @brief While a scene patch or instance re-patch runs, the scene sources it has read. */
+        SourceTrees* sourceTrees = nullptr;
+
+        /**
+         * @brief Whether a live record names the file `key`: as the file it filled its scene from, or as a scene
+         * source one of its instances expanded. Its watch stays while one does.
+         */
+        [[nodiscard]] bool RecordNames(const std::string& key) const;
 
         /** @brief The live record `slot` names in `kind`'s table, or null. */
         [[nodiscard]] AssetRecord* Find(AssetKind kind, AssetSlot slot);
@@ -155,6 +258,12 @@ namespace Fenrir::Detail
 
         /** @brief Takes `owner` off every asset, freeing those it was the last owner of. */
         void ReleaseOwner(OwnerId owner);
+
+        /**
+         * @brief Takes `record`, a scene's that is ending, off `sceneFiles`, and stops watching its file when no other
+         * scene was filled from it.
+         */
+        void ForgetSceneFile(const SceneFileRecord& record);
     };
 
     /**
@@ -253,6 +362,48 @@ namespace Fenrir::Detail
             if (const std::shared_ptr<AssetStoreState> state = store.lock())
             {
                 state->ReleaseOwner(id);
+            }
+        }
+    };
+
+    /**
+     * @brief The scene resource that records which file LoadScene filled its scene from (ADR-0081 §3), beside the
+     * scene's SceneAssetOwner: a change to the file patches the scene. It is on the store's `sceneFiles` while it
+     * lives, and dies with its scene, so a destroyed scene is never patched. LoadSceneInto and CopyScene record
+     * nothing.
+     */
+    struct SceneFileRecord
+    {
+        std::weak_ptr<AssetStoreState> store;
+        /** @brief The scene the record is a resource of. */
+        Scene* scene = nullptr;
+        /** @brief The file's key, the absolute path its watch is under. */
+        std::string fileKey;
+        /** @brief The file's asset path, which the patch reads it by. */
+        std::string assetPath;
+        /**
+         * @brief The ids the file's blocks held when it last filled the scene: a patch destroys an entity whose id is
+         * one of them but is not in the file any more, and leaves an entity whose id the file never held (a merge's, or
+         * one a save minted into a run-time entity) alone.
+         */
+        std::unordered_set<std::uint64_t> fileIds;
+        /**
+         * @brief Every instance the scene's file expanded, nested ones too, and those a patch added since: a change to
+         * one's source re-patches it (ADR-0081 §4).
+         */
+        InstanceScopes scopes;
+
+        SceneFileRecord(std::weak_ptr<AssetStoreState> owningStore, Scene& filled, std::string key, std::string path)
+            : store(std::move(owningStore)), scene(&filled), fileKey(std::move(key)), assetPath(std::move(path))
+        {
+        }
+        SceneFileRecord(const SceneFileRecord&) = delete;
+        SceneFileRecord& operator=(const SceneFileRecord&) = delete;
+        ~SceneFileRecord()
+        {
+            if (const std::shared_ptr<AssetStoreState> state = store.lock())
+            {
+                state->ForgetSceneFile(*this);
             }
         }
     };
