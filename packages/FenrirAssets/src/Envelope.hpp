@@ -194,6 +194,20 @@ namespace Fenrir::Detail
     /** @brief The scene layout's version, a scene envelope's `version`: ADR-0078's layout is 1. */
     inline constexpr std::uint32_t SceneVersion = 1;
 
+    /** @brief Why a scene envelope is refused: a located error's message, at `node`. */
+    struct SceneEnvelopeProblem
+    {
+        const Serialisation::Value* node = nullptr;
+        std::string message;
+    };
+
+    /**
+     * @brief Why `root`, a scene file's tree, is no scene envelope this reader reads (its `format`, `type`, layout
+     * `version` and `data` checked in turn); or none, with its `data` in `data`.
+     */
+    [[nodiscard]] std::optional<SceneEnvelopeProblem> CheckSceneEnvelope(Serialisation::Value& root,
+                                                                         Serialisation::Value*& data);
+
     /**
      * @brief The described components a scene block spells apart from its `components` (ADR-0078 §4, ADR-0080):
      * `Relationship` as `parent` and the order, `EntityId` as `id`, and `Instance` as `instance`. The writer never

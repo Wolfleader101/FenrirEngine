@@ -404,21 +404,44 @@ namespace Fenrir
 
     SceneSaveResult AssetStore::WriteSceneFile(Scene& scene, std::optional<Entity> root, std::string_view path)
     {
-        SceneSaveResult result;
         const std::string named(path);
-        const auto fail = [&](std::string message) -> SceneSaveResult {
-            m_state->logger->Error("Could not save scene '{}' to '{}': {}", scene.GetName(), named, message);
-            result.status = SaveStatus::Failed;
-            result.diagnostics.push_back(
-                {.severity = Ser::DiagnosticSeverity::Error, .path = named, .message = std::move(message)});
-            return std::move(result);
-        };
-
         std::filesystem::path target;
         if (std::optional<std::string> problem = Detail::SavePathProblem(m_state->root, path, target))
         {
-            return fail(std::move(*problem));
+            SceneSaveResult result;
+            FailSceneWrite(scene, named, std::move(*problem), result);
+            return result;
         }
+        Ser::Value envelope;
+        SceneSaveResult result = WriteSceneTree(scene, root, named, envelope);
+        if (result.status == SaveStatus::Failed)
+        {
+            return result;
+        }
+        if (const std::optional<std::string> problem = Detail::WriteAtomically(target, Ser::WriteText(envelope)))
+        {
+            FailSceneWrite(scene, named, *problem, result);
+        }
+        return result;
+    }
+
+    void AssetStore::FailSceneWrite(const Scene& scene, const std::string& named, std::string message,
+                                    SceneSaveResult& result)
+    {
+        m_state->logger->Error("Could not save scene '{}' to '{}': {}", scene.GetName(), named, message);
+        result.status = SaveStatus::Failed;
+        result.diagnostics.push_back(
+            {.severity = Ser::DiagnosticSeverity::Error, .path = named, .message = std::move(message)});
+    }
+
+    SceneSaveResult AssetStore::WriteSceneTree(Scene& scene, std::optional<Entity> root, const std::string& named,
+                                               Ser::Value& envelope)
+    {
+        SceneSaveResult result;
+        const auto fail = [&](std::string message) -> SceneSaveResult {
+            FailSceneWrite(scene, named, std::move(message), result);
+            return std::move(result);
+        };
 
         const TypeRegistry& registry = *m_state->types;
         EntityList& entities = scene.GetEntityList();
@@ -658,16 +681,12 @@ namespace Fenrir
         Ser::Object data;
         data.Add("resources", std::move(resources));
         data.Add("entities", std::move(blocks));
-        Ser::Object envelope;
-        envelope.Add("format", Detail::EnvelopeFormat);
-        envelope.Add("type", Detail::SceneTypeName);
-        envelope.Add("version", Detail::SceneVersion);
-        envelope.Add("data", std::move(data));
-        if (const std::optional<std::string> problem =
-                Detail::WriteAtomically(target, Ser::WriteText(Ser::Value(std::move(envelope)))))
-        {
-            return fail(*problem);
-        }
+        Ser::Object file;
+        file.Add("format", Detail::EnvelopeFormat);
+        file.Add("type", Detail::SceneTypeName);
+        file.Add("version", Detail::SceneVersion);
+        file.Add("data", std::move(data));
+        envelope = Ser::Value(std::move(file));
         result.status =
             result.nullReferences > 0 || result.keptComponentsLost > 0 ? SaveStatus::Partial : SaveStatus::Succeeded;
         return result;

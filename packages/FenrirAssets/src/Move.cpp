@@ -1,5 +1,6 @@
 // Assets::Move (ADR-0076 §5, ADR-0079 §6): moves one file under the asset root and rewrites every reference to it in
-// the root's envelopes, editing each file's own tree so its comments and every other value stay as they were.
+// the root's envelopes and scene files, editing each file's own tree so its comments and every other value stay as they
+// were.
 
 #include <algorithm>
 #include <cstddef>
@@ -114,6 +115,15 @@ namespace Fenrir
                 const ValueType valueType{.kind = Kind::Struct, .type = &type};
                 m_count = 0;
                 Walk(data, ValueRef(scratch.value, valueType));
+                return m_count;
+            }
+
+            // The asset path `node` holds, rewritten if it names the moved file; how many: 0 or 1. A scene block's
+            // `instance` is one, with no type to walk.
+            std::size_t RewritePath(Ser::Value& node)
+            {
+                m_count = 0;
+                RewriteReference(node);
                 return m_count;
             }
 
@@ -358,6 +368,121 @@ namespace Fenrir
             return std::nullopt;
         }
 
+        constexpr std::string_view SceneExtension = ".scene.json5";
+
+        // What a scene file holds to scan (ADR-0078 §4, ADR-0080 §4): the entries of its `resources`, of each block's
+        // `components` and of each `overrides` entry's `components`, with their types; each block's `instance`; and
+        // the names of the entries' types the registry lacks, once each, in file order.
+        struct SceneScan
+        {
+            std::vector<ScanEntry> entries;
+            std::vector<Ser::Value*> instances;
+            std::vector<std::string> missing;
+        };
+
+        // The scene envelope `tree`'s scan, or why it is not scanned. Where the reader would skip a part of the wrong
+        // shape, the scan skips it too, so what it finds is what a load reads.
+        std::optional<std::string> ScanScene(Ser::Value& tree, const TypeRegistry& registry, SceneScan& scan)
+        {
+            if (tree.Kind() != Ser::ValueKind::Object)
+            {
+                return "it is no scene envelope: its root is not an object";
+            }
+            Ser::Object& envelope = tree.AsObject();
+            const Ser::Value* type = envelope.Find("type");
+            if (type == nullptr || type->Kind() != Ser::ValueKind::String || type->AsString() != Detail::SceneTypeName)
+            {
+                return std::format("it is no scene envelope: its `type` is not \"{}\"", Detail::SceneTypeName);
+            }
+            // The rest of what a load refuses a file for: such a file is no scene, so nothing in it names the file.
+            if (std::optional<std::string> problem = Detail::FormatProblem(envelope.Find("format")))
+            {
+                return std::format("it is no scene envelope: {}", *problem);
+            }
+            if (Detail::PositiveWhole(envelope.Find("version"), Detail::SceneVersion) == std::nullopt)
+            {
+                return std::format("it is no scene envelope: its `version` is not the scene layout's, from 1 up to {}",
+                                   Detail::SceneVersion);
+            }
+            Ser::Value* data = envelope.Find("data");
+            if (data == nullptr || data->Kind() != Ser::ValueKind::Object)
+            {
+                return "it is no scene envelope: it has no `data` object";
+            }
+            // The entries of an object keyed by type name. In a block's `components`, those the block spells apart
+            // are ignored by the reader, so are skipped.
+            const auto addEntries = [&](Ser::Value* entries, bool inBlock) {
+                if (entries == nullptr || entries->Kind() != Ser::ValueKind::Object)
+                {
+                    return;
+                }
+                for (Ser::Member& member : entries->AsObject().members)
+                {
+                    if (inBlock && std::ranges::find(Detail::SpelledApart, std::string_view(member.key)) !=
+                                       std::ranges::end(Detail::SpelledApart))
+                    {
+                        continue;
+                    }
+                    if (const TypeDescription* description = registry.Find(member.key); description != nullptr)
+                    {
+                        scan.entries.push_back({&member.value, description});
+                    }
+                    else if (std::ranges::find(scan.missing, member.key) == scan.missing.end())
+                    {
+                        scan.missing.push_back(member.key);
+                    }
+                }
+            };
+            addEntries(data->AsObject().Find("resources"), false);
+            Ser::Value* blocks = data->AsObject().Find("entities");
+            if (blocks == nullptr || blocks->Kind() != Ser::ValueKind::Array)
+            {
+                return std::nullopt;
+            }
+            for (Ser::Element& element : blocks->AsArray().elements)
+            {
+                if (element.value.Kind() != Ser::ValueKind::Object)
+                {
+                    continue;
+                }
+                Ser::Object& block = element.value.AsObject();
+                addEntries(block.Find("components"), true);
+                // A block's `overrides` are read only on an instance block, against its source.
+                Ser::Value* instance = block.Find("instance");
+                if (instance == nullptr)
+                {
+                    continue;
+                }
+                scan.instances.push_back(instance);
+                Ser::Value* overrides = block.Find("overrides");
+                if (overrides == nullptr || overrides->Kind() != Ser::ValueKind::Object)
+                {
+                    continue;
+                }
+                for (Ser::Member& diff : overrides->AsObject().members)
+                {
+                    if (diff.value.Kind() == Ser::ValueKind::Object)
+                    {
+                        addEntries(diff.value.AsObject().Find("components"), true);
+                    }
+                }
+            }
+            return std::nullopt;
+        }
+
+        // Why a scene file whose other entries were scanned is still listed as unscanned.
+        std::string MissingTypes(const std::vector<std::string>& missing)
+        {
+            std::string names;
+            for (const std::string& name : missing)
+            {
+                names += std::format("{}`{}`", names.empty() ? "" : ", ", name);
+            }
+            return std::format("the type registry has no {}, so the entries of {} are left as they are; its other "
+                               "entries are scanned",
+                               names, missing.size() == 1 ? "that type" : "those types");
+        }
+
         std::optional<std::string> ReadFileText(const std::filesystem::path& file)
         {
             std::ifstream stream(file, std::ios::binary);
@@ -483,12 +608,31 @@ namespace Fenrir
                 continue;
             }
             std::vector<ScanEntry> entries;
-            if (std::optional<std::string> problem = EntriesOf(*read.tree, registry, entries))
+            std::size_t count = 0;
+            if (found->ends_with(SceneExtension))
+            {
+                SceneScan scan;
+                if (std::optional<std::string> problem = ScanScene(*read.tree, registry, scan))
+                {
+                    result.unscanned.push_back({relative, std::move(*problem)});
+                    continue;
+                }
+                // An entry of a type the registry lacks cannot be walked, but leaves the rest of the file to scan.
+                if (!scan.missing.empty())
+                {
+                    result.unscanned.push_back({relative, MissingTypes(scan.missing)});
+                }
+                for (Ser::Value* instance : scan.instances)
+                {
+                    count += rewriter.RewritePath(*instance);
+                }
+                entries = std::move(scan.entries);
+            }
+            else if (std::optional<std::string> problem = EntriesOf(*read.tree, registry, entries))
             {
                 result.unscanned.push_back({relative, std::move(*problem)});
                 continue;
             }
-            std::size_t count = 0;
             for (const ScanEntry& entry : entries)
             {
                 count += rewriter.Rewrite(*entry.data, *entry.type);
