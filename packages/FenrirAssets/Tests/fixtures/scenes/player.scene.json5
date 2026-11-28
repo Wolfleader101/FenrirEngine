@@ -1,0 +1,44 @@
+{
+  format: 1,
+  type: "Fenrir::Scene",
+  version: 1,
+  data: {
+    resources: {},
+    entities: [
+      {
+        id: "d4e5f",
+        components: {
+          "Fenrir::Name": {name: "Player"},
+          "Fenrir::Transform": {
+            pos: [0, 2, 0],
+          },
+          "AssetsTest::Health": {
+            version: 2,
+            current: 75,
+          },
+        },
+      },
+      {
+        id: "m9x1p",
+        parent: "d4e5f",
+        components: {
+          "Fenrir::Name": {name: "Sword"},
+          "Fenrir::Transform": {},
+          "AssetsTest::Follower": {
+            target: "d4e5f",
+            icon: "icons/sword.png",
+          },
+        },
+      },
+      {
+        id: "h2q7r",
+        parent: "d4e5f",
+        components: {
+          "Fenrir::Name": {name: "Shield"},
+          "Fenrir::Transform": {},
+          "AssetsTest::Follower": {target: null},
+        },
+      },
+    ],
+  },
+}

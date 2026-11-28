@@ -68,6 +68,16 @@ namespace Fenrir
         using AssetWarnings = std::vector<std::string>;
 
         /**
+         * @brief What a scene read does with the file's `resources`: applies them to the scene (LoadScene), or leaves
+         * the scene's own standing and counts each as skipped (LoadSceneInto).
+         */
+        enum class SceneResources
+        {
+            Apply,
+            Skip,
+        };
+
+        /**
          * @name Checks before the store takes data
          * Each checks one kind of data and completes what the store computes (a mesh's bounds and skin boxes, a
          * skeleton's engine names and signature, a clip's duration and event order). It returns an empty string when
@@ -365,8 +375,9 @@ namespace Fenrir
     };
 
     /**
-     * @brief What AssetStore::LoadScene gives back (ADR-0078): how it went, the scene it filled and its top-level
-     * entities, what it read and what it could not, and the located diagnostics.
+     * @brief What AssetStore::LoadScene and AssetStore::LoadSceneInto give back (ADR-0078, ADR-0079): how it went, the
+     * scene it filled and the file's top-level entities, what it read and what it could not, and the located
+     * diagnostics.
      */
     struct SceneLoadResult
     {
@@ -377,9 +388,12 @@ namespace Fenrir
          * parse, or names another `type`, or a newer layout), or its path is outside the asset root.
          */
         LoadStatus status = LoadStatus::Succeeded;
-        /** @brief The scene made and filled; null when the load failed. */
+        /** @brief The scene made and filled, or merged into; null when the load failed. */
         Scene* scene = nullptr;
-        /** @brief The entities with no parent, in the file's order. */
+        /**
+         * @brief The entities of the blocks with no parent (or none the file holds), in the file's order: the top of a
+         * loaded scene, or what a merge appended under its parent.
+         */
         std::vector<Entity> roots;
         /** @brief The entities made, a block apiece. */
         std::size_t entities = 0;
@@ -400,7 +414,11 @@ namespace Fenrir
          * nothing that loads as the field's target.
          */
         std::size_t referencesEmptied = 0;
-        /** @brief The `resources` entries whose type the registry lacks as a scene resource, dropped. */
+        /**
+         * @brief The `resources` entries left unapplied: those whose type the registry lacks as a scene resource,
+         * dropped with a warning, and on a merge every entry, with no diagnostic, since the target scene's resources
+         * stand.
+         */
         std::size_t resourcesSkipped = 0;
         /**
          * @brief Every located diagnostic of the load, in the order found, each already logged once through the
@@ -730,7 +748,8 @@ namespace Fenrir
          *   out, preceded by `version` only when its type's version is above 1.
          *
          * Each written entity without an `EntityId`, and each whose id another entity written before it already has,
-         * is given a newly minted one, so the save changes the scene and a later save keeps its ids. Left out, and
+         * is given a newly minted one that no entity of the scene has, so the save changes the scene and a later save
+         * keeps its ids. Left out, and
          * counted with no diagnostic: entities tagged `Transient` and every entity below them; `Relationship`, which
          * `parent` and the order spell; `EntityId` and `Instance`, which `id` and `instance` spell; undescribed
          * components; and components of a `@transient` type. A `@transient` field is left out by the bridge, uncounted.
@@ -744,6 +763,22 @@ namespace Fenrir
          * climbing out of the root, or naming a sub-asset (`#`).
          */
         SceneSaveResult SaveScene(Scene& scene, std::string_view path);
+
+        /**
+         * @brief Writes the subtree `root` tops in `scene` to the scene file `path` as its own scene, as SaveScene
+         * writes a whole one: "make a prefab from this selection" (ADR-0080 §8). The file's one root block is `root`'s,
+         * with no `parent`, and its blocks are the subtree's, depth-first; `resources` is `{}`, since the scene's
+         * resources are not the subtree's.
+         *
+         * Ids are minted as SaveScene mints them, for the subtree's entities only, and never one another entity of the
+         * scene has. An `entity` field naming an entity outside the subtree (its parent, a sibling, or one tagged
+         * Transient) is written `null`, with a warning, and counted in `nullReferences`; a null entity is its default,
+         * left out.
+         *
+         * Refused with a logged error, and nothing written, as SaveScene is, and also for `root` not a live entity of
+         * `scene`, or tagged `Transient`, which a scene file never holds.
+         */
+        SceneSaveResult SaveScene(Scene& scene, Entity root, std::string_view path);
 
         /**
          * @brief Reads the scene file `path`, an asset path relative to the asset root (`level1.scene.json5`), into a
@@ -772,6 +807,23 @@ namespace Fenrir
          * Each is reported in the result.
          */
         SceneLoadResult LoadScene(App& app, std::string_view path, std::string_view name = {});
+
+        /**
+         * @brief Reads the scene file `path` into `scene`, which exists, as LoadScene reads one into a new scene: the
+         * same two passes, the same refusals (nothing is added), and the same tolerance (ADR-0079 §2). The unlinked
+         * additive merge; Instantiate is the linked one (ADR-0080 §7).
+         *
+         * The file's top-level blocks are appended under `parent` in file order, after any children it has, or go at
+         * the top of the scene when `parent` is empty. A `parent` that is no live entity of `scene` is reported with
+         * an error, and the blocks go at the top. `roots` lists them either way.
+         *
+         * The file's `resources` are not applied: the scene's own stand, and each entry is counted in
+         * `resourcesSkipped`, with no diagnostic. A block's id that an entity of the scene has already is re-minted
+         * for the merged entity, with no diagnostic, so no two entities of the scene share one (a subtree merged back
+         * into its own scene, say); the file's `entity` fields still name its blocks. Nothing is recorded for hot
+         * reload.
+         */
+        SceneLoadResult LoadSceneInto(Scene& scene, std::string_view path, Entity parent = {});
 
         /** @brief Whether `handle` names a live asset: false for an empty or stale handle. */
         template <typename T>
@@ -1036,10 +1088,18 @@ namespace Fenrir
                                        std::optional<LoadDiagnostic>& diagnostic,
                                        std::vector<Serialisation::Diagnostic>& diagnostics, bool& incomplete);
         /**
-         * @brief LoadScene's read of the scene file `path`: checks its envelope, then fills the scene `makeScene`
-         * gives, called once the file is known to be a scene, so a refused file makes none.
+         * @brief LoadScene's and LoadSceneInto's read of the scene file `path`: checks its envelope, then fills the
+         * scene `makeScene` gives, called once the file is known to be a scene, so a refused file makes none. The
+         * file's roots go under `parent` (the top when empty), and its `resources` are applied or skipped as
+         * `resources` says.
          */
-        SceneLoadResult ReadSceneFile(std::string_view path, const std::function<Scene&()>& makeScene);
+        SceneLoadResult ReadSceneFile(std::string_view path, const std::function<Scene&()>& makeScene, Entity parent,
+                                      Detail::SceneResources resources);
+        /**
+         * @brief Both SaveScene doors: writes the subtree `root` tops, or the whole scene when `root` is empty, to
+         * `path`.
+         */
+        SceneSaveResult WriteSceneFile(Scene& scene, std::optional<Entity> root, std::string_view path);
         /**
          * @brief What the reference `reference` in the file `assetPath` names (ADR-0076 §2, §3): its target, loaded
          * first for `owner`, of the kind `field` holds and, for a data asset, of a type extending the field's; or why

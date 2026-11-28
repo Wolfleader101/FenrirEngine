@@ -1,4 +1,5 @@
-// The scene writer (ADR-0078, ADR-0079): AssetStore::SaveScene, a scene to its scene envelope.
+// The scene writer (ADR-0078, ADR-0079, ADR-0080): AssetStore::SaveScene, a scene, or a subtree of one, to its scene
+// envelope.
 
 #include <algorithm>
 #include <cstddef>
@@ -125,6 +126,16 @@ namespace Fenrir
 
     SceneSaveResult AssetStore::SaveScene(Scene& scene, std::string_view path)
     {
+        return WriteSceneFile(scene, std::nullopt, path);
+    }
+
+    SceneSaveResult AssetStore::SaveScene(Scene& scene, Entity root, std::string_view path)
+    {
+        return WriteSceneFile(scene, root, path);
+    }
+
+    SceneSaveResult AssetStore::WriteSceneFile(Scene& scene, std::optional<Entity> root, std::string_view path)
+    {
         SceneSaveResult result;
         const std::string named(path);
         const auto fail = [&](std::string message) -> SceneSaveResult {
@@ -143,35 +154,52 @@ namespace Fenrir
 
         const TypeRegistry& registry = *m_state->types;
         EntityList& entities = scene.GetEntityList();
-
-        // The roots, in the order of their entity ids, so a scene saved twice lists them alike.
-        std::vector<std::uint32_t> roots;
-        entities.ForEachEntity([&](auto handle) {
-            const auto id = static_cast<std::uint32_t>(handle);
-            const Entity entity = entities.GetEntity(id);
-            if (entity.HasComponent<Relationship>() && !entity.GetComponent<Relationship>().parent.IsValid())
-            {
-                roots.push_back(id);
-            }
-        });
-        std::ranges::sort(roots);
-        std::vector<Entity> written;
-        for (const std::uint32_t root : roots)
+        if (root && !Detail::LiveIn(entities, *root))
         {
-            CollectWritten(entities.GetEntity(root), written, result.entitiesSkipped);
+            return fail("the subtree's root is no live entity of the scene");
+        }
+        if (root && root->HasComponent<Transient>())
+        {
+            return fail("the subtree's root is tagged Transient, which a scene file never holds");
+        }
+
+        // The entities the file holds: the subtree's, or every root's in the order of their entity ids, so a scene
+        // saved twice lists them alike.
+        std::vector<Entity> written;
+        if (root)
+        {
+            CollectWritten(*root, written, result.entitiesSkipped);
+        }
+        else
+        {
+            std::vector<std::uint32_t> roots;
+            entities.ForEachEntity([&](auto handle) {
+                const auto id = static_cast<std::uint32_t>(handle);
+                const Entity entity = entities.GetEntity(id);
+                if (entity.HasComponent<Relationship>() && !entity.GetComponent<Relationship>().parent.IsValid())
+                {
+                    roots.push_back(id);
+                }
+            });
+            std::ranges::sort(roots);
+            for (const std::uint32_t top : roots)
+            {
+                CollectWritten(entities.GetEntity(top), written, result.entitiesSkipped);
+            }
         }
 
         // Every entity the file holds has an id unique within it before any block is written, so an `entity` field
         // names one written after its own block too. An id is kept by the first entity in file order that has it; a
-        // later one, and an entity with none, is minted one no entity of the file has (ADR-0078 §2).
+        // later one, and an entity with none, is minted one no entity of the scene has, so a subtree's minted ids
+        // stay apart from the rest of its scene too (ADR-0078 §2).
         std::unordered_set<std::uint64_t> held;
-        for (const Entity& entity : written)
-        {
+        entities.ForEachEntity([&](auto handle) {
+            const Entity entity = entities.GetEntity(static_cast<std::uint32_t>(handle));
             if (entity.HasComponent<EntityId>())
             {
                 held.insert(entity.GetComponent<EntityId>().value);
             }
-        }
+        });
         std::unordered_set<std::uint64_t> taken;
         std::unordered_map<std::uint32_t, std::string> ids;
         for (const Entity& entity : written)
@@ -213,16 +241,22 @@ namespace Fenrir
             }
             Detail::WarnWrittenNull(
                 std::format("{}`{}` names an entity the file does not hold (one tagged Transient or "
-                            "below one, one destroyed, or one of another scene); it is written null",
+                            "below one, one outside the subtree saved, one destroyed, or one of another scene); it is "
+                            "written null",
                             where, field.name),
                 named, *m_state->logger, result.diagnostics, result.nullReferences);
             return {};
         };
 
         // Resources come before entities in the file but are applied after them on load, so an `entity` field in one
-        // resolves (ADR-0078 §7); name order keeps the bytes stable.
+        // resolves (ADR-0078 §7); name order keeps the bytes stable. A subtree's file holds none: the scene's
+        // resources are not the subtree's.
         Ser::Object resources;
-        std::vector<const TypeDescription*> resourceTypes = registry.Types(Role::SceneResource);
+        std::vector<const TypeDescription*> resourceTypes;
+        if (!root)
+        {
+            resourceTypes = registry.Types(Role::SceneResource);
+        }
         std::ranges::sort(resourceTypes, {}, &TypeDescription::name);
         for (const TypeDescription* type : resourceTypes)
         {
@@ -243,7 +277,8 @@ namespace Fenrir
             const std::uint32_t id = entity.GetId();
             Ser::Object block;
             block.Add("id", ids.at(id));
-            if (const Entity parent = entity.GetComponent<Relationship>().parent; parent.IsValid())
+            // The subtree's root is the file's root, whatever its parent in the scene.
+            if (const Entity parent = entity.GetComponent<Relationship>().parent; parent.IsValid() && entity != root)
             {
                 block.Add("parent", ids.at(parent.GetId()));
             }

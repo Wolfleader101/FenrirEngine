@@ -1,7 +1,9 @@
-// Saving and loading scenes (ADR-0078, ADR-0079): SaveScene writes a scene built in code to a scene file in ADR-0078's
-// layout, the same scene as the same bytes, minting the entity ids it lacks, leaving out what a scene file never holds
-// and counting it; LoadScene reads one back into a new scene in two passes, keeping what it cannot read as a component
-// and reporting the rest. Every test saves into, or loads from, a temporary asset root of its own.
+// Saving and loading scenes (ADR-0078, ADR-0079, ADR-0080): SaveScene writes a scene built in code to a scene file in
+// ADR-0078's layout, the same scene as the same bytes, minting the entity ids it lacks, leaving out what a scene file
+// never holds and counting it; LoadScene reads one back into a new scene in two passes, keeping what it cannot read as
+// a component and reporting the rest. LoadSceneInto merges a file into a scene that exists, under a parent, leaving the
+// scene's resources standing; the subtree SaveScene writes a selection as its own file. Every test saves into, or loads
+// from, a temporary asset root of its own.
 
 #include <cstddef>
 #include <filesystem>
@@ -46,10 +48,18 @@ namespace
         float phase = 0.0f;
     };
 
+    constexpr std::string_view PlayerPath = "prefabs/player.scene.json5";
+
     // The committed golden scene file.
     std::string Golden()
     {
         return ReadFile(Fixtures() / "scenes" / "level1.scene.json5");
+    }
+
+    // The committed golden subtree file: the golden scene's player, with the shield AddShield gives them.
+    std::string GoldenPlayer()
+    {
+        return ReadFile(Fixtures() / "scenes" / "player.scene.json5");
     }
 
     // An asset root holding the images the golden scene names: the sky's cubemap and the sword's icon.
@@ -113,6 +123,16 @@ namespace
             GiveId(built.sun, "s3w8c");
         }
         return built;
+    }
+
+    // Gives the golden scene's player a second child, a shield following the sun: a reference out of the player's
+    // subtree.
+    Entity AddShield(Fenrir::Scene& scene, const Level& level)
+    {
+        Entity shield = Spawn(scene, "Shield", level.player);
+        shield.AddComponent<AssetsTest::Follower>().target = level.sun;
+        GiveId(shield, "h2q7r");
+        return shield;
     }
 
     // The scene fixture `name` under `fixtures/scenes/`, copied to LevelPath in `root` beside the images it names.
@@ -702,4 +722,264 @@ TEST_CASE("A kept component that cannot be written back is left out with a warni
     REQUIRE(ReadFile(root.Path() / LevelPath) == Golden());
     REQUIRE(saved.componentsWritten == 10);
     REQUIRE(saved.componentsSkipped == 10);
+}
+
+TEST_CASE("Merging a scene file under a parent appends its roots after the parent's children, leaving the resources",
+          "[assets][scenes][merge]")
+{
+    TempRoot root;
+    CopyScene(root, "level1.scene.json5");
+    DataApp test({root.Path()});
+    Fenrir::Scene& host = test.app.CreateScene("Host");
+    host.AddResource<AssetsTest::Sky>().exposure = 3.0f;
+    const Entity mount = Spawn(host, "Mount");
+    Spawn(host, "Existing", mount);
+    const std::size_t scenes = SceneCount(test.app);
+
+    const SceneLoadResult first = test.store.LoadSceneInto(host, LevelPath, mount);
+    const SceneLoadResult second = test.store.LoadSceneInto(host, LevelPath, mount);
+
+    INFO("each merge succeeds with nothing to report, into the scene given; no scene is made");
+    REQUIRE(first.status == LoadStatus::Succeeded);
+    REQUIRE(first.diagnostics.empty());
+    REQUIRE(first.scene == &host);
+    REQUIRE(second.status == LoadStatus::Succeeded);
+    REQUIRE(SceneCount(test.app) == scenes);
+    INFO("each reads the file's four entities and ten components");
+    REQUIRE(first.entities == 4);
+    REQUIRE(first.components == 10);
+    INFO("the file's root goes under the mount after its existing child, the second merge's after the first's");
+    REQUIRE(first.roots.size() == 1);
+    REQUIRE(second.roots.size() == 1);
+    REQUIRE(ChildNames(mount) == std::vector<std::string>{"Existing", "Level", "Level"});
+    REQUIRE(first.roots[0].GetComponent<Fenrir::Relationship>().parent == mount);
+    REQUIRE(ChildNames(first.roots[0]) == std::vector<std::string>{"Player", "Sun"});
+    INFO("the file's sky is counted as skipped, with no diagnostic, and the host's own sky stands");
+    REQUIRE(first.resourcesSkipped == 1);
+    REQUIRE(host.GetResource<AssetsTest::Sky>()->exposure == 3.0f);
+    INFO("each merge's references name its own entities: the second sword follows the second player");
+    Entity secondPlayer;
+    second.roots[0].ForEachChild([&](const Entity& child) {
+        if (std::string_view(child.GetComponent<Fenrir::Name>().Get()) == "Player")
+        {
+            secondPlayer = child;
+        }
+    });
+    REQUIRE(secondPlayer.IsValid());
+    std::size_t swords = 0;
+    secondPlayer.ForEachChild([&](const Entity& sword) {
+        ++swords;
+        REQUIRE(sword.GetComponent<AssetsTest::Follower>().target == secondPlayer);
+    });
+    REQUIRE(swords == 1);
+}
+
+TEST_CASE("Merging a scene file with no parent puts its roots at the top of the scene", "[assets][scenes][merge]")
+{
+    TempRoot root;
+    CopyScene(root, "level1.scene.json5");
+    DataApp test({root.Path()});
+    Fenrir::Scene& host = test.app.CreateScene("Host");
+
+    const SceneLoadResult merged = test.store.LoadSceneInto(host, LevelPath);
+
+    INFO("the merge succeeds, its root at the top, and the sky the host lacks is still not applied");
+    REQUIRE(merged.status == LoadStatus::Succeeded);
+    REQUIRE(merged.roots.size() == 1);
+    REQUIRE_FALSE(merged.roots[0].GetComponent<Fenrir::Relationship>().parent.IsValid());
+    REQUIRE(merged.resourcesSkipped == 1);
+    REQUIRE(host.GetResource<AssetsTest::Sky>() == nullptr);
+}
+
+TEST_CASE("Merging under a parent of another scene reports an error and puts the roots at the top",
+          "[assets][scenes][merge]")
+{
+    TempRoot root;
+    CopyScene(root, "level1.scene.json5");
+    DataApp test({root.Path()});
+    Fenrir::Scene& host = test.app.CreateScene("Host");
+    Fenrir::Scene& other = test.app.CreateScene("Other");
+    const Entity elsewhere = Spawn(other, "Elsewhere");
+
+    const SceneLoadResult merged = test.store.LoadSceneInto(host, LevelPath, elsewhere);
+
+    INFO("the merge is Partial, with one error, its root at the top of the host and nothing added to the other scene");
+    REQUIRE(merged.status == LoadStatus::Partial);
+    REQUIRE(merged.diagnostics.size() == 1);
+    REQUIRE(merged.diagnostics[0].severity == DiagnosticSeverity::Error);
+    REQUIRE(merged.roots.size() == 1);
+    REQUIRE_FALSE(merged.roots[0].GetComponent<Fenrir::Relationship>().parent.IsValid());
+    REQUIRE(ChildNames(elsewhere).empty());
+}
+
+TEST_CASE("A merge of a file that is no scene fails, adding nothing", "[assets][scenes][merge]")
+{
+    TempRoot root;
+    CopyScene(root, "wrong-type.scene.json5");
+    DataApp test({root.Path()});
+    Fenrir::Scene& host = test.app.CreateScene("Host");
+    const Entity mount = Spawn(host, "Mount");
+
+    const SceneLoadResult merged = test.store.LoadSceneInto(host, LevelPath, mount);
+
+    INFO("the merge fails as LoadScene would, naming no scene, and the mount gains no child");
+    REQUIRE(merged.status == LoadStatus::Failed);
+    REQUIRE(merged.scene == nullptr);
+    REQUIRE(merged.roots.empty());
+    REQUIRE(ChildNames(mount).empty());
+}
+
+TEST_CASE("A subtree saves byte for byte as the golden subtree file, its references out written null and counted",
+          "[assets][scenes][subtree][golden]")
+{
+    TempRoot root;
+    CopyImages(root);
+    DataApp test({root.Path()});
+    Fenrir::Scene& scene = test.app.CreateScene("Level");
+    const Level level = BuildLevel(test, scene);
+    AddShield(scene, level);
+
+    const SceneSaveResult saved = test.store.SaveScene(scene, level.player, PlayerPath);
+
+    INFO("the file is the golden subtree file: no resources, the player as its root with no parent, then the sword "
+         "following the player and the shield whose target, the sun, is outside the subtree, written null");
+    REQUIRE(ReadFile(root.Path() / PlayerPath) == GoldenPlayer());
+    INFO("the save is Partial for the one reference written null, with one warning naming it");
+    REQUIRE(saved.status == SaveStatus::Partial);
+    REQUIRE(saved.nullReferences == 1);
+    REQUIRE(saved.diagnostics.size() == 1);
+    REQUIRE(saved.diagnostics[0].severity == DiagnosticSeverity::Warning);
+    REQUIRE(saved.diagnostics[0].message.find("entity `h2q7r`, `AssetsTest::Follower`: `target`") != std::string::npos);
+    INFO("three entities and their nine components are written, and nothing outside the subtree is counted skipped");
+    REQUIRE(saved.entitiesWritten == 3);
+    REQUIRE(saved.componentsWritten == 9);
+    REQUIRE(saved.entitiesSkipped == 0);
+    INFO("the scene is unchanged: the player keeps its parent");
+    REQUIRE(level.player.GetComponent<Fenrir::Relationship>().parent == level.level);
+}
+
+TEST_CASE("A subtree saved then merged back reproduces the subtree's components", "[assets][scenes][subtree][merge]")
+{
+    TempRoot root;
+    CopyImages(root);
+    DataApp test({root.Path()});
+    Fenrir::Scene& scene = test.app.CreateScene("Level");
+    const Level level = BuildLevel(test, scene, false);
+    const Entity shield = AddShield(scene, level);
+    shield.RemoveComponent<Fenrir::EntityId>();
+    const SceneSaveResult saved = test.store.SaveScene(scene, level.player, PlayerPath);
+    REQUIRE(saved.status == SaveStatus::Partial);
+    INFO("the subtree's entities are minted ids, and the rest of the scene is left without");
+    REQUIRE_FALSE(IdOf(level.player).empty());
+    REQUIRE_FALSE(IdOf(shield).empty());
+    REQUIRE(IdOf(level.level).empty());
+    REQUIRE(IdOf(level.sun).empty());
+
+    Fenrir::Scene& copy = test.app.CreateScene("Copy");
+    const SceneLoadResult merged = test.store.LoadSceneInto(copy, PlayerPath);
+
+    INFO("the merge reads the three entities and nine components with nothing to report");
+    REQUIRE(merged.status == LoadStatus::Succeeded);
+    REQUIRE(merged.entities == 3);
+    REQUIRE(merged.components == 9);
+    REQUIRE(merged.resourcesSkipped == 0);
+    REQUIRE(merged.roots.size() == 1);
+    const Entity player = merged.roots[0];
+    INFO("the player is the root, with the sword then the shield, each with the id the save gave its original");
+    REQUIRE(ChildNames(player) == std::vector<std::string>{"Sword", "Shield"});
+    REQUIRE(IdOf(player) == IdOf(level.player));
+    REQUIRE(IdOf(Named(copy, "Sword")) == IdOf(level.sword));
+    REQUIRE(IdOf(Named(copy, "Shield")) == IdOf(shield));
+    INFO("the components are the originals': the player's position and health, the sword's icon and its target");
+    REQUIRE(player.GetComponent<Fenrir::Transform>().pos.y == 2.0f);
+    REQUIRE(player.GetComponent<AssetsTest::Health>().current == 75.0f);
+    const auto& follower = Named(copy, "Sword").GetComponent<AssetsTest::Follower>();
+    REQUIRE(follower.target == player);
+    REQUIRE(follower.icon == level.sword.GetComponent<AssetsTest::Follower>().icon);
+    INFO("the shield's target, outside the subtree, comes back empty");
+    REQUIRE_FALSE(Named(copy, "Shield").GetComponent<AssetsTest::Follower>().target.IsValid());
+
+    INFO("saving the copy's subtree writes the same file again, save that the emptied target is now a default, left "
+         "out");
+    const SceneSaveResult again = test.store.SaveScene(copy, player, "prefabs/again.scene.json5");
+    REQUIRE(again.status == SaveStatus::Succeeded);
+    std::string expected = ReadFile(root.Path() / PlayerPath);
+    const std::string nullTarget = "\"AssetsTest::Follower\": {target: null},";
+    const std::size_t at = expected.find(nullTarget);
+    REQUIRE(at != std::string::npos);
+    expected.replace(at, nullTarget.size(), "\"AssetsTest::Follower\": {},");
+    REQUIRE(ReadFile(root.Path() / "prefabs/again.scene.json5") == expected);
+}
+
+TEST_CASE("A subtree save of an entity not live in the scene is refused, writing nothing", "[assets][scenes][subtree]")
+{
+    TempRoot root;
+    CopyImages(root);
+    DataApp test({root.Path()});
+    Fenrir::Scene& scene = test.app.CreateScene("Level");
+    BuildLevel(test, scene);
+    Fenrir::Scene& other = test.app.CreateScene("Other");
+    const Entity elsewhere = Spawn(other, "Elsewhere");
+
+    for (const Entity& subtree : {Entity(), elsewhere})
+    {
+        test.errors->clear();
+        const SceneSaveResult saved = test.store.SaveScene(scene, subtree, PlayerPath);
+        INFO("an empty root, and one of another scene, each fail with one logged error");
+        REQUIRE(saved.status == SaveStatus::Failed);
+        REQUIRE(saved.diagnostics.size() == 1);
+        REQUIRE(test.errors->size() == 1);
+    }
+    INFO("no file is written");
+    REQUIRE_FALSE(fs::exists(root.Path() / PlayerPath));
+}
+
+TEST_CASE("A subtree save of a Transient root is refused, writing nothing", "[assets][scenes][subtree]")
+{
+    TempRoot root;
+    CopyImages(root);
+    DataApp test({root.Path()});
+    Fenrir::Scene& scene = test.app.CreateScene("Level");
+    const Level level = BuildLevel(test, scene);
+    Entity(level.player).AddComponent<Fenrir::Transient>();
+
+    const SceneSaveResult saved = test.store.SaveScene(scene, level.player, PlayerPath);
+
+    INFO("a scene file never holds a Transient entity: the save fails with one error and writes no file");
+    REQUIRE(saved.status == SaveStatus::Failed);
+    REQUIRE(saved.diagnostics.size() == 1);
+    REQUIRE(saved.entitiesWritten == 0);
+    REQUIRE_FALSE(fs::exists(root.Path() / PlayerPath));
+}
+
+TEST_CASE("A subtree merged back into its own scene is given fresh ids, its references naming the copies",
+          "[assets][scenes][subtree][merge]")
+{
+    TempRoot root;
+    CopyImages(root);
+    DataApp test({root.Path()});
+    Fenrir::Scene& scene = test.app.CreateScene("Level");
+    const Level level = BuildLevel(test, scene);
+    REQUIRE(test.store.SaveScene(scene, level.player, PlayerPath).status == SaveStatus::Succeeded);
+
+    const SceneLoadResult merged = test.store.LoadSceneInto(scene, PlayerPath, level.level);
+
+    INFO("the merge succeeds with nothing to report, the copy going under the level after the sun");
+    REQUIRE(merged.status == LoadStatus::Succeeded);
+    REQUIRE(merged.diagnostics.empty());
+    REQUIRE(ChildNames(level.level) == std::vector<std::string>{"Player", "Sun", "Player"});
+    const Entity copy = merged.roots.at(0);
+    INFO("the originals keep their ids, and the copies, whose ids the scene had, are each minted another");
+    REQUIRE(IdOf(level.player) == "d4e5f");
+    REQUIRE(IdOf(level.sword) == "m9x1p");
+    REQUIRE_FALSE(IdOf(copy).empty());
+    REQUIRE(IdOf(copy) != "d4e5f");
+    Entity copiedSword;
+    copy.ForEachChild([&](const Entity& child) { copiedSword = child; });
+    REQUIRE(copiedSword.IsValid());
+    REQUIRE_FALSE(IdOf(copiedSword).empty());
+    REQUIRE(IdOf(copiedSword) != "m9x1p");
+    INFO("the copied sword follows the copied player, as the file's ids named it");
+    REQUIRE(copiedSword.GetComponent<AssetsTest::Follower>().target == copy);
+    REQUIRE(level.sword.GetComponent<AssetsTest::Follower>().target == level.player);
 }
