@@ -1,6 +1,7 @@
-// Saving scenes (ADR-0078, ADR-0079): SaveScene writes a scene built in code to a scene file in ADR-0078's layout, the
-// same scene as the same bytes, minting the entity ids it lacks, leaving out what a scene file never holds and
-// counting it. Every test saves into a temporary asset root of its own.
+// Saving and loading scenes (ADR-0078, ADR-0079): SaveScene writes a scene built in code to a scene file in ADR-0078's
+// layout, the same scene as the same bytes, minting the entity ids it lacks, leaving out what a scene file never holds
+// and counting it; LoadScene reads one back into a new scene in two passes, keeping what it cannot read as a component
+// and reporting the rest. Every test saves into, or loads from, a temporary asset root of its own.
 
 #include <cstddef>
 #include <filesystem>
@@ -13,8 +14,12 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "AssetsProbe.hpp"
 #include "DataAssetsTest.hpp"
+#include "FenrirECS/ComponentType.hpp"
+#include "FenrirECS/ComponentWatch.hpp"
 #include "FenrirECS/EntityId.hpp"
+#include "FenrirECS/EntityList.hpp"
 #include "FenrirECS/SceneComponents.hpp"
 #include "FenrirScene/Scene.hpp"
 
@@ -23,8 +28,11 @@ using AssetsTest::Fixtures;
 using AssetsTest::ReadFile;
 using AssetsTest::TempRoot;
 using Fenrir::Entity;
+using Fenrir::LoadStatus;
 using Fenrir::SaveStatus;
+using Fenrir::SceneLoadResult;
 using Fenrir::SceneSaveResult;
+using Fenrir::Serialisation::DiagnosticSeverity;
 
 namespace
 {
@@ -105,6 +113,58 @@ namespace
             GiveId(built.sun, "s3w8c");
         }
         return built;
+    }
+
+    // The scene fixture `name` under `fixtures/scenes/`, copied to LevelPath in `root` beside the images it names.
+    void CopyScene(const TempRoot& root, std::string_view name)
+    {
+        CopyImages(root);
+        root.Copy(Fixtures() / "scenes" / name, LevelPath);
+    }
+
+    // The first entity of `scene` named `name`, or the null entity.
+    Entity Named(Fenrir::Scene& scene, std::string_view name)
+    {
+        Fenrir::EntityList& entities = scene.GetEntityList();
+        Entity found;
+        entities.ForEachEntity([&](auto handle) {
+            const Entity entity = entities.GetEntity(static_cast<std::uint32_t>(handle));
+            if (!found.IsValid() && entity.HasComponent<Fenrir::Name>() &&
+                std::string_view(entity.GetComponent<Fenrir::Name>().Get()) == name)
+            {
+                found = entity;
+            }
+        });
+        return found;
+    }
+
+    // The names of `parent`'s children, in their sibling order.
+    std::vector<std::string> ChildNames(const Entity& parent)
+    {
+        std::vector<std::string> names;
+        parent.ForEachChild([&](const Entity& child) { names.emplace_back(child.GetComponent<Fenrir::Name>().Get()); });
+        return names;
+    }
+
+    // How many scenes `app` has.
+    std::size_t SceneCount(Fenrir::App& app)
+    {
+        std::size_t count = 0;
+        app.ForEachScene([&](Fenrir::Scene&) { ++count; });
+        return count;
+    }
+
+    // Whether every change in `changes` is an add.
+    bool AddsOnly(const std::vector<Fenrir::ComponentChange>& changes)
+    {
+        for (const Fenrir::ComponentChange& change : changes)
+        {
+            if (change.kind != Fenrir::ComponentChange::Kind::Added)
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     std::string IdOf(const Entity& entity)
@@ -354,4 +414,292 @@ TEST_CASE("A scene save to a path outside the asset root, absolute or naming a s
     REQUIRE_FALSE(fs::exists(root.Path().parent_path() / "outside.scene.json5"));
     REQUIRE_FALSE(fs::exists(root.Path() / "absolute.scene.json5"));
     REQUIRE_FALSE(fs::exists(root.Path() / "levels"));
+}
+
+TEST_CASE("The golden scene file loads into a new scene, and saving it gives the same bytes",
+          "[assets][scenes][golden]")
+{
+    TempRoot root;
+    CopyScene(root, "level1.scene.json5");
+    DataApp test({root.Path()});
+
+    const SceneLoadResult loaded = test.store.LoadScene(test.app, LevelPath, "Level");
+
+    INFO("the load succeeds with nothing to report, into a new scene of the name given");
+    REQUIRE(loaded.status == LoadStatus::Succeeded);
+    REQUIRE(loaded.diagnostics.empty());
+    REQUIRE(loaded.scene != nullptr);
+    REQUIRE(loaded.scene->GetName() == "Level");
+    INFO("four entities and their ten components are read, and nothing is kept, dropped, emptied or skipped");
+    REQUIRE(loaded.entities == 4);
+    REQUIRE(loaded.components == 10);
+    REQUIRE(loaded.unknownComponentsKept == 0);
+    REQUIRE(loaded.fieldsDropped == 0);
+    REQUIRE(loaded.referencesEmptied == 0);
+    REQUIRE(loaded.resourcesSkipped == 0);
+
+    Fenrir::Scene& scene = *loaded.scene;
+    const Entity level = Named(scene, "Level");
+    const Entity player = Named(scene, "Player");
+    const Entity sword = Named(scene, "Sword");
+    INFO("the level is the one root, holding the player then the sun, in the file's order; the player holds the sword");
+    REQUIRE(loaded.roots.size() == 1);
+    REQUIRE(loaded.roots[0] == level);
+    REQUIRE(ChildNames(level) == std::vector<std::string>{"Player", "Sun"});
+    REQUIRE(ChildNames(player) == std::vector<std::string>{"Sword"});
+    INFO("each entity has its block's id");
+    REQUIRE(IdOf(level) == "a7k2q");
+    REQUIRE(IdOf(sword) == "m9x1p");
+    INFO("the fields are the file's: the player's position, and its health read at version 2, the type's own");
+    REQUIRE(player.GetComponent<Fenrir::Transform>().pos.y == 2.0f);
+    REQUIRE(player.GetComponent<AssetsTest::Health>().current == 75.0f);
+    INFO("the sword follows the player, named by its id, and its icon loaded with the scene as owner");
+    const auto& follower = sword.GetComponent<AssetsTest::Follower>();
+    REQUIRE(follower.target == player);
+    REQUIRE(test.store.IsValid(follower.icon));
+    INFO("the sky resource is added, applied after the entities");
+    const auto* sky = scene.GetResource<AssetsTest::Sky>();
+    REQUIRE(sky != nullptr);
+    REQUIRE(sky->exposure == 1.5f);
+    REQUIRE(test.store.IsValid(sky->cubemap));
+
+    const SceneSaveResult saved = test.store.SaveScene(scene, "levels/again.scene.json5");
+    INFO("saving the loaded scene writes the golden file again, byte for byte");
+    REQUIRE(saved.status == SaveStatus::Succeeded);
+    REQUIRE(ReadFile(root.Path() / "levels/again.scene.json5") == Golden());
+}
+
+TEST_CASE("A loaded scene is named by its path when no name is given", "[assets][scenes]")
+{
+    TempRoot root;
+    CopyScene(root, "level1.scene.json5");
+    DataApp test({root.Path()});
+
+    const SceneLoadResult loaded = test.store.LoadScene(test.app, LevelPath);
+
+    INFO("the load succeeds, and the scene is named by the path as given");
+    REQUIRE(loaded.status == LoadStatus::Succeeded);
+    REQUIRE(loaded.scene->GetName() == LevelPath);
+}
+
+TEST_CASE("A watch drained after a load sees one add per component the file holds", "[assets][scenes]")
+{
+    TempRoot root;
+    CopyScene(root, "level1.scene.json5");
+    DataApp test({root.Path()});
+    Fenrir::Scene& scene = test.app.CreateScene("Level");
+    Fenrir::EntityList& entities = scene.GetEntityList();
+    Fenrir::ComponentWatch names = entities.Watch(Fenrir::ComponentType::Native<Fenrir::Name>());
+    Fenrir::ComponentWatch ids = entities.Watch(Fenrir::ComponentType::Native<Fenrir::EntityId>());
+    Fenrir::ComponentWatch healths = entities.Watch(Fenrir::ComponentType::Native<AssetsTest::Health>());
+    Fenrir::ComponentWatch followers = entities.Watch(Fenrir::ComponentType::Native<AssetsTest::Follower>());
+
+    const SceneLoadResult loaded = Fenrir::AssetsProbe::ReadSceneInto(test.store, scene, LevelPath);
+    INFO("the golden file loads into the watched scene");
+    REQUIRE(loaded.status == LoadStatus::Succeeded);
+
+    INFO("each of the four entities gains one Name, filled in place, and one EntityId, and nothing is removed");
+    const std::vector<Fenrir::ComponentChange> named = names.Drain();
+    const std::vector<Fenrir::ComponentChange> identified = ids.Drain();
+    REQUIRE(named.size() == 4);
+    REQUIRE(AddsOnly(named));
+    REQUIRE(identified.size() == 4);
+    REQUIRE(AddsOnly(identified));
+    INFO("the player's Health and the sword's Follower are each added once");
+    using Change = Fenrir::ComponentChange;
+    REQUIRE(healths.Drain() == std::vector<Change>{{Named(scene, "Player").GetId(), Change::Kind::Added}});
+    REQUIRE(followers.Drain() == std::vector<Change>{{Named(scene, "Sword").GetId(), Change::Kind::Added}});
+    INFO("the level's children are in the file's order");
+    REQUIRE(ChildNames(Named(scene, "Level")) == std::vector<std::string>{"Player", "Sun"});
+}
+
+TEST_CASE("A component type the registry lacks is kept with one warning, and written back unchanged on save",
+          "[assets][scenes][unknown]")
+{
+    TempRoot root;
+    CopyScene(root, "unknown-components.scene.json5");
+    DataApp test({root.Path()});
+
+    const SceneLoadResult loaded = test.store.LoadScene(test.app, LevelPath, "Level");
+
+    INFO("the load is Partial, keeping the level's Tint and the two Glow entries");
+    REQUIRE(loaded.status == LoadStatus::Partial);
+    REQUIRE(loaded.unknownComponentsKept == 3);
+    REQUIRE(loaded.entities == 4);
+    REQUIRE(loaded.components == 10);
+    INFO("one warning per type in this load, each located at its first entry, though two entities hold a Glow");
+    REQUIRE(loaded.diagnostics.size() == 2);
+    REQUIRE(loaded.diagnostics[0].severity == DiagnosticSeverity::Warning);
+    REQUIRE(loaded.diagnostics[0].message.find("`Mods::Tint` is no component type") != std::string::npos);
+    REQUIRE(loaded.diagnostics[0].line == 18);
+    REQUIRE(loaded.diagnostics[1].message.find("`Mods::Glow` is no component type") != std::string::npos);
+    REQUIRE(loaded.diagnostics[1].line == 48);
+    REQUIRE(AssetsTest::CountContaining(*test.warnings, "`Mods::Glow` is no component type") == 1);
+    INFO("the sun's Glow is held opaque with the version its entry recorded");
+    const Entity sun = Named(*loaded.scene, "Sun");
+    REQUIRE(sun.HasComponent<Fenrir::UnknownComponents>());
+    const auto& kept = sun.GetComponent<Fenrir::UnknownComponents>().components;
+    REQUIRE(kept.size() == 1);
+    REQUIRE(kept[0].typeName == "Mods::Glow");
+    REQUIRE(kept[0].version == 3);
+
+    const SceneSaveResult saved = test.store.SaveScene(*loaded.scene, "levels/again.scene.json5");
+    INFO("the save writes each kept entry back among its entity's entries as it was read, the Glow's leading version "
+         "and the Tint's trailing `version: 1` alike: the file comes back unchanged");
+    REQUIRE(saved.status == SaveStatus::Succeeded);
+    REQUIRE(saved.componentsWritten == 13);
+    REQUIRE(ReadFile(root.Path() / "levels/again.scene.json5") ==
+            ReadFile(Fixtures() / "scenes" / "unknown-components.scene.json5"));
+}
+
+TEST_CASE("An entity field naming an id no block has is left empty, with one located error, and counted",
+          "[assets][scenes][references]")
+{
+    TempRoot root;
+    CopyScene(root, "unknown-id.scene.json5");
+    DataApp test({root.Path()});
+
+    const SceneLoadResult loaded = test.store.LoadScene(test.app, LevelPath, "Level");
+
+    INFO("the load is Partial, with one reference emptied and the rest of the scene loaded");
+    REQUIRE(loaded.status == LoadStatus::Partial);
+    REQUIRE(loaded.referencesEmptied == 1);
+    REQUIRE(loaded.entities == 4);
+    REQUIRE(loaded.components == 10);
+    INFO("one error, located at the id's string");
+    REQUIRE(loaded.diagnostics.size() == 1);
+    REQUIRE(loaded.diagnostics[0].severity == DiagnosticSeverity::Error);
+    REQUIRE(loaded.diagnostics[0].line == 41);
+    REQUIRE(loaded.diagnostics[0].message.find("zzzzz") != std::string::npos);
+    INFO("the follower has no target, and keeps its icon");
+    const auto& follower = Named(*loaded.scene, "Sword").GetComponent<AssetsTest::Follower>();
+    REQUIRE_FALSE(follower.target.IsValid());
+    REQUIRE(test.store.IsValid(follower.icon));
+}
+
+TEST_CASE("A block repeating an earlier block's id loads, with one located error, and references name the first",
+          "[assets][scenes]")
+{
+    TempRoot root;
+    CopyScene(root, "duplicate-id.scene.json5");
+    DataApp test({root.Path()});
+
+    const SceneLoadResult loaded = test.store.LoadScene(test.app, LevelPath, "Level");
+
+    INFO("the load is Partial, and every entity still loads");
+    REQUIRE(loaded.status == LoadStatus::Partial);
+    REQUIRE(loaded.entities == 4);
+    REQUIRE(loaded.components == 10);
+    REQUIRE(loaded.referencesEmptied == 0);
+    INFO("one error, located at the sun's id");
+    REQUIRE(loaded.diagnostics.size() == 1);
+    REQUIRE(loaded.diagnostics[0].severity == DiagnosticSeverity::Error);
+    REQUIRE(loaded.diagnostics[0].line == 47);
+    REQUIRE(loaded.diagnostics[0].message.find("`d4e5f` is an earlier block's too") != std::string::npos);
+    INFO("the sword follows the player, the first block with the id");
+    Fenrir::Scene& scene = *loaded.scene;
+    REQUIRE(Named(scene, "Sword").GetComponent<AssetsTest::Follower>().target == Named(scene, "Player"));
+    INFO("the sun is still a child of the level, and loads with no id, so no two entities share one");
+    REQUIRE(ChildNames(Named(scene, "Level")) == std::vector<std::string>{"Player", "Sun"});
+    REQUIRE(IdOf(Named(scene, "Player")) == "d4e5f");
+    REQUIRE(IdOf(Named(scene, "Sun")).empty());
+    INFO("a save mints the sun an id of its own");
+    REQUIRE(test.store.SaveScene(scene, "levels/again.scene.json5").status == SaveStatus::Succeeded);
+    REQUIRE(IdOf(Named(scene, "Sun")).size() == 5);
+    REQUIRE(IdOf(Named(scene, "Sun")) != "d4e5f");
+}
+
+TEST_CASE("A scene file that does not parse fails, with its located diagnostics and no scene made", "[assets][scenes]")
+{
+    TempRoot root;
+    CopyScene(root, "unparsable.scene.json5");
+    DataApp test({root.Path()});
+    const std::size_t scenes = SceneCount(test.app);
+
+    const SceneLoadResult loaded = test.store.LoadScene(test.app, LevelPath, "Level");
+
+    INFO("the load fails, makes no scene and reads nothing");
+    REQUIRE(loaded.status == LoadStatus::Failed);
+    REQUIRE(loaded.scene == nullptr);
+    REQUIRE(SceneCount(test.app) == scenes);
+    REQUIRE(loaded.roots.empty());
+    REQUIRE(loaded.entities == 0);
+    REQUIRE(loaded.components == 0);
+    INFO("the text's own errors say where the file stopped, each located past the first line");
+    REQUIRE_FALSE(loaded.diagnostics.empty());
+    for (const Fenrir::Serialisation::Diagnostic& diagnostic : loaded.diagnostics)
+    {
+        REQUIRE(diagnostic.severity == DiagnosticSeverity::Error);
+        REQUIRE(diagnostic.line > 1);
+    }
+    INFO("the store's one error says the load failed");
+    REQUIRE(AssetsTest::CountContaining(*test.errors, "Could not load scene") == 1);
+}
+
+TEST_CASE("A file naming another type fails at its `type`, with no scene made", "[assets][scenes]")
+{
+    TempRoot root;
+    CopyScene(root, "wrong-type.scene.json5");
+    DataApp test({root.Path()});
+    const std::size_t scenes = SceneCount(test.app);
+
+    const SceneLoadResult loaded = test.store.LoadScene(test.app, LevelPath, "Level");
+
+    INFO("the load fails and makes no scene");
+    REQUIRE(loaded.status == LoadStatus::Failed);
+    REQUIRE(loaded.scene == nullptr);
+    REQUIRE(SceneCount(test.app) == scenes);
+    INFO("one error, at the `type`, says what was expected and found, logged once");
+    REQUIRE(loaded.diagnostics.size() == 1);
+    REQUIRE(loaded.diagnostics[0].line == 3);
+    REQUIRE(loaded.diagnostics[0].message == "expected `type` \"Fenrir::Scene\", found \"AssetsTest::WeaponData\"");
+    REQUIRE(AssetsTest::CountContaining(*test.errors, "AssetsTest::WeaponData") == 1);
+}
+
+TEST_CASE("A scene load from outside the asset root, of a sub-asset or of a missing file fails", "[assets][scenes]")
+{
+    TempRoot root;
+    CopyScene(root, "level1.scene.json5");
+    DataApp test({root.Path()});
+    const std::size_t scenes = SceneCount(test.app);
+
+    for (const std::string_view path :
+         {std::string_view("../outside.scene.json5"), std::string_view("levels/level1.scene.json5#part"),
+          std::string_view("levels/missing.scene.json5")})
+    {
+        test.errors->clear();
+        const SceneLoadResult loaded = test.store.LoadScene(test.app, path);
+        INFO(std::format("loading '{}' fails with one error and makes no scene", path));
+        REQUIRE(loaded.status == LoadStatus::Failed);
+        REQUIRE(loaded.scene == nullptr);
+        REQUIRE(loaded.diagnostics.size() == 1);
+        REQUIRE(test.errors->size() == 1);
+    }
+    REQUIRE(SceneCount(test.app) == scenes);
+}
+
+TEST_CASE("A kept component that cannot be written back is left out with a warning, and the save is Partial",
+          "[assets][scenes][unknown]")
+{
+    TempRoot root;
+    CopyImages(root);
+    DataApp test({root.Path()});
+    Fenrir::Scene& scene = test.app.CreateScene("Level");
+    const Level level = BuildLevel(test, scene);
+    Fenrir::UnknownComponents kept;
+    kept.components.push_back({"Mods::Broken", 1, {std::byte{0x00}, std::byte{0xFF}}});
+    Entity(level.sun).AddComponent<Fenrir::UnknownComponents>(std::move(kept));
+
+    const SceneSaveResult saved = test.store.SaveScene(scene, LevelPath);
+
+    INFO("the file is written, Partial, with one warning naming the entity and the type");
+    REQUIRE(saved.status == SaveStatus::Partial);
+    REQUIRE(saved.keptComponentsLost == 1);
+    REQUIRE(saved.diagnostics.size() == 1);
+    REQUIRE(saved.diagnostics[0].severity == DiagnosticSeverity::Warning);
+    REQUIRE(saved.diagnostics[0].message.find("entity `s3w8c`: the kept `Mods::Broken`") != std::string::npos);
+    INFO("the rest of the scene is the golden file, and the lost entry is counted as left out");
+    REQUIRE(ReadFile(root.Path() / LevelPath) == Golden());
+    REQUIRE(saved.componentsWritten == 10);
+    REQUIRE(saved.componentsSkipped == 10);
 }

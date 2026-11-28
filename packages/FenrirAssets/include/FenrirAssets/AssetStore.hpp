@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -23,6 +24,7 @@
 #include "FenrirAssets/ShaderContainer.hpp"
 #include "FenrirAssets/SkeletonData.hpp"
 #include "FenrirAssets/SpawnNodes.hpp"
+#include "FenrirECS/Entity.hpp"
 #include "FenrirMath/Colour.hpp"
 #include "FenrirMath/Math.hpp"
 #include "FenrirSerialisation/Diagnostic.hpp"
@@ -30,9 +32,11 @@
 
 namespace Fenrir
 {
+    class App;
     class ILogger;
     class Scene;
     class TypeRegistry;
+    struct FieldInfo;
     /** @brief FenrirAssets's tests' way inside the store (Tests/AssetsProbe.hpp): no part of its interface. */
     struct AssetsProbe;
 
@@ -42,6 +46,7 @@ namespace Fenrir
         struct AssetStoreState;
         struct AssetRecord;
         struct EnvelopeRead;
+        struct ReferenceRead;
 
         /** @brief An asset handle without its type: what the store's untyped core works with. */
         struct AssetSlot
@@ -322,21 +327,31 @@ namespace Fenrir
     {
         /**
          * @brief Succeeded when the file was written with every reference naming its target; Partial when it was
-         * written with references written `null` (`nullReferences`); Failed when nothing was written. Leaving out what
-         * a scene file never holds makes no save Partial.
+         * written with references written `null` (`nullReferences`), or with a component a load kept left out
+         * (`keptComponentsLost`); Failed when nothing was written. Leaving out what a scene file never holds makes no
+         * save Partial.
          */
         SaveStatus status = SaveStatus::Succeeded;
         /** @brief The entities written, one block apiece. */
         std::size_t entitiesWritten = 0;
-        /** @brief The components written, an entry apiece under their entities' `components`. */
+        /**
+         * @brief The components written, an entry apiece under their entities' `components`: the described ones, and
+         * each kept opaque in an `UnknownComponents` by a load, written back as it was read.
+         */
         std::size_t componentsWritten = 0;
         /** @brief The entities left out: each tagged `Transient`, and every entity below one. */
         std::size_t entitiesSkipped = 0;
         /**
          * @brief The components of written entities left out of `components`: undescribed ones, `Relationship`, those
-         * of a `@transient` type, and `EntityId` and `Instance`, which a block spells as its `id` and `instance`.
+         * of a `@transient` type, `EntityId` and `Instance`, which a block spells as its `id` and `instance`, and
+         * `UnknownComponents`, whose entries are written in its place, and each of those entries that could not be.
          */
         std::size_t componentsSkipped = 0;
+        /**
+         * @brief The components a load kept in an `UnknownComponents` that could not be written back, each with a
+         * warning: one whose name a component the entity has now holds, or whose bytes do not decode.
+         */
+        std::size_t keptComponentsLost = 0;
         /**
          * @brief The references written `null` for want of a target the file can name: an `entity` field naming an
          * entity outside the file, and an asset handle field naming an asset with no asset path a file can hold.
@@ -345,6 +360,51 @@ namespace Fenrir
         /**
          * @brief Each diagnostic of the save, already logged once, naming the file: why it was refused, or each
          * reference written `null`. Each is at line 1, column 1, as SaveResult's are.
+         */
+        std::vector<Serialisation::Diagnostic> diagnostics;
+    };
+
+    /**
+     * @brief What AssetStore::LoadScene gives back (ADR-0078): how it went, the scene it filled and its top-level
+     * entities, what it read and what it could not, and the located diagnostics.
+     */
+    struct SceneLoadResult
+    {
+        /**
+         * @brief Succeeded when the whole file loaded; Partial when the scene was made and filled with a diagnostic to
+         * report (a component kept unknown, a field dropped, a reference emptied, a resource skipped, a block that did
+         * not read whole); Failed when no scene was made: the file is missing, is not a scene envelope (it did not
+         * parse, or names another `type`, or a newer layout), or its path is outside the asset root.
+         */
+        LoadStatus status = LoadStatus::Succeeded;
+        /** @brief The scene made and filled; null when the load failed. */
+        Scene* scene = nullptr;
+        /** @brief The entities with no parent, in the file's order. */
+        std::vector<Entity> roots;
+        /** @brief The entities made, a block apiece. */
+        std::size_t entities = 0;
+        /** @brief The components added and filled, under the blocks' `components`. */
+        std::size_t components = 0;
+        /**
+         * @brief The components whose type the registry lacks as a component, kept opaque in their entity's
+         * `UnknownComponents` and written back unchanged by SaveScene.
+         */
+        std::size_t unknownComponentsKept = 0;
+        /**
+         * @brief The values of components and resources left at their defaults: keys naming no field (or a transient
+         * one), and values that could not be read.
+         */
+        std::size_t fieldsDropped = 0;
+        /**
+         * @brief The `entity` and asset handle values left empty: an id no block has, an asset path refused or naming
+         * nothing that loads as the field's target.
+         */
+        std::size_t referencesEmptied = 0;
+        /** @brief The `resources` entries whose type the registry lacks as a scene resource, dropped. */
+        std::size_t resourcesSkipped = 0;
+        /**
+         * @brief Every located diagnostic of the load, in the order found, each already logged once through the
+         * store's logger: the text's, the upgraders', the bridge's and the reader's own.
          */
         std::vector<Serialisation::Diagnostic> diagnostics;
     };
@@ -664,7 +724,8 @@ namespace Fenrir
          *   root), then `components`.
          * - `components` holds each described component the entity has, keyed by canonical name: `Fenrir::Name` and
          *   `Fenrir::Transform` first, then the rest in name order. One holding its type's defaults is written as
-         *   `{}`, so the file still says the entity has it.
+         *   `{}`, so the file still says the entity has it. Each component a load kept in the entity's
+         *   `UnknownComponents` is written back among them by its name, as it was read (ADR-0078 §9).
          * - An entry, in `resources` or `components`, is its type's fields in declaration order with its defaults left
          *   out, preceded by `version` only when its type's version is above 1.
          *
@@ -683,6 +744,34 @@ namespace Fenrir
          * climbing out of the root, or naming a sub-asset (`#`).
          */
         SceneSaveResult SaveScene(Scene& scene, std::string_view path);
+
+        /**
+         * @brief Reads the scene file `path`, an asset path relative to the asset root (`level1.scene.json5`), into a
+         * new scene named `name` (the path when empty), made through App::CreateScene; switching the active scene is
+         * the caller's. Synchronous, on the main thread, and within one frame (ADR-0078 §8).
+         *
+         * The file is read through the store's source, as a data asset's envelope is. It is refused, with no scene
+         * made, when it is missing, does not parse, has another `format`, names a `type` other than `Fenrir::Scene`
+         * or a layout `version` newer than this reader's, has no `data` object, or lies outside the asset root.
+         *
+         * The scene is filled in two passes. The first reserves an entity for every block and maps each block's id to
+         * it. The second walks the blocks in file order: it completes the entity, adds its `EntityId`, then adds each
+         * entry of `components` by canonical (or former) name, upgraded from the entry's `version` (1 when missing)
+         * and filled field by field, then appends the entity to its `parent` with AddChild, so sibling order is the
+         * file's. An `entity` field names the block of its id; an id no block has leaves it empty with one error. An
+         * asset handle field loads its asset with the scene as its owner. A ComponentWatch sees one add per component
+         * the file holds, and no event marks the load.
+         *
+         * Then each entry of `resources` is added to the scene by canonical name (or filled, when the scene already
+         * has one), so an `entity` field in a resource names an entity of the file.
+         *
+         * Tolerant past the envelope: a block that is not an object is left out; one with a bad id, or an id an
+         * earlier block has, loads with no `EntityId` and no place in the id map, so a save mints it one; one whose
+         * `parent` names no earlier block loads as a root. A component type the registry lacks is kept opaque in the
+         * entity's `UnknownComponents`, with one warning per type per load, and SaveScene writes it back unchanged.
+         * Each is reported in the result.
+         */
+        SceneLoadResult LoadScene(App& app, std::string_view path, std::string_view name = {});
 
         /** @brief Whether `handle` names a live asset: false for an empty or stale handle. */
         template <typename T>
@@ -946,6 +1035,18 @@ namespace Fenrir
         Detail::AssetSlot LoadDataSlot(std::string_view path, std::uint32_t owner, const TypeDescription& type,
                                        std::optional<LoadDiagnostic>& diagnostic,
                                        std::vector<Serialisation::Diagnostic>& diagnostics, bool& incomplete);
+        /**
+         * @brief LoadScene's read of the scene file `path`: checks its envelope, then fills the scene `makeScene`
+         * gives, called once the file is known to be a scene, so a refused file makes none.
+         */
+        SceneLoadResult ReadSceneFile(std::string_view path, const std::function<Scene&()>& makeScene);
+        /**
+         * @brief What the reference `reference` in the file `assetPath` names (ADR-0076 §2, §3): its target, loaded
+         * first for `owner`, of the kind `field` holds and, for a data asset, of a type extending the field's; or why
+         * it names none. A bare `#name` is a sub-asset of `assetPath`.
+         */
+        [[nodiscard]] Detail::ReferenceRead ReadFileReference(const std::string& assetPath, std::uint32_t owner,
+                                                              std::string_view reference, const FieldInfo& field);
         /**
          * @brief Reads the envelope `bytes` of the data asset file `fileKey` (its asset path `assetPath`), asking for
          * the entry `label` names (the top level when none) as `type`: each entry's slot is reserved for `owner`

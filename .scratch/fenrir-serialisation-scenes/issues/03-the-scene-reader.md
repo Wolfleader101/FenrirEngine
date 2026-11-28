@@ -24,9 +24,9 @@
 
 **Touches:** `packages/FenrirAssets/` (`include/FenrirAssets/AssetStore.hpp`, a new `src/SceneReader.cpp`, `src/Envelope.*`, `src/AssetStore.cpp`, `Tests/Scenes.cpp`, `fixtures/scenes/`)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Ticket 02's golden file loads, and saving the loaded scene gives the same bytes.
-- [ ] A `ComponentWatch` drained after the load shows one add per component, and children are in the file's order.
-- [ ] An unknown component type is kept with one diagnostic, and written back unchanged on save.
-- [ ] An unknown id, a duplicate id, an unparsable file and the wrong `type` each give their status, counts and located diagnostics.
+- [x] Ticket 02's golden file loads, and saving the loaded scene gives the same bytes.
+- [x] A `ComponentWatch` drained after the load shows one add per component, and children are in the file's order.
+- [x] An unknown component type is kept with one diagnostic, and written back unchanged on save.
+- [x] An unknown id, a duplicate id, an unparsable file and the wrong `type` each give their status, counts and located diagnostics.

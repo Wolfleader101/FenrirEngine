@@ -106,6 +106,72 @@ namespace Fenrir::Detail
         std::function<void(std::string_view label, const TypeDescription& type)> reading;
     };
 
+    /** @brief Moves every diagnostic of `from` onto the end of `to`, in order. */
+    void Append(std::vector<Serialisation::Diagnostic>& to, std::vector<Serialisation::Diagnostic>&& from);
+
+    /**
+     * @brief Logs `diagnostic`, a reader's or writer's own, once (an error as an error, a warning as a warning), and
+     * appends it to `diagnostics`.
+     */
+    void Record(Serialisation::Diagnostic diagnostic, ILogger& logger,
+                std::vector<Serialisation::Diagnostic>& diagnostics);
+
+    /** @brief How a diagnostic names what it found at `node`: its kind, with a string's or number's text; `none` for
+     * null. */
+    [[nodiscard]] std::string Found(const Serialisation::Value* node);
+
+    /**
+     * @brief A whole number from 1 up to `max` at `node`, as text reads it signed and code may build it unsigned; none
+     * for any other node, and for a missing one.
+     */
+    [[nodiscard]] std::optional<std::uint64_t> PositiveWhole(const Serialisation::Value* node, std::uint64_t max);
+
+    /**
+     * @brief A located diagnostic of an envelope reader's own, at `node`, or at `fallback` when the node is missing or
+     * built in code.
+     */
+    [[nodiscard]] Serialisation::Diagnostic LocatedAt(Serialisation::DiagnosticSeverity severity, std::string_view path,
+                                                      const Serialisation::Value* node,
+                                                      const Serialisation::Value& fallback, std::string message);
+
+    /**
+     * @brief A reference a file names that a read left empty, refused by the path rules or naming no fitting target:
+     * the address of its text, so its error is located at its string, and the error's message.
+     */
+    struct EmptiedReference
+    {
+        const char* text = nullptr;
+        std::string message;
+    };
+
+    /** @brief What one value's `readReference` (CheckedReferenceReader) found, for ReportEmptied after its read. */
+    struct ReferenceReading
+    {
+        /** @brief Each reference left empty, with the error to report at its string. */
+        std::vector<EmptiedReference> emptied;
+        /** @brief Each asset a reference named, by kind and slot, in the order read. */
+        std::vector<std::pair<AssetKind, AssetSlot>> named;
+        /** @brief Whether a reference was left empty for want of a store to ask, which no diagnostic names. */
+        bool unresolved = false;
+    };
+
+    /**
+     * @brief The `readReference` an envelope reader reads a value's references through (ADR-0076): a path refused by
+     * FilePathProblem is left empty, and so is one `read` names no target for (its problem said); each is recorded in
+     * `reading.emptied` after `where`, the prefix naming the value. With no `read`, every path is left empty and
+     * `reading.unresolved` set. `read`, `where` and `reading` must outlive it.
+     */
+    [[nodiscard]] std::function<std::optional<ReferenceValue>(std::string_view, const FieldInfo&)>
+    CheckedReferenceReader(const std::function<ReferenceRead(std::string_view, const FieldInfo&)>& read,
+                           const std::string& where, ReferenceReading& reading);
+
+    /**
+     * @brief Reports each of `reading.emptied`, a located error at its string under `data` (the tree the value was
+     * read from), logged once and appended to `diagnostics`, and clears it: how many there were.
+     */
+    std::size_t ReportEmptied(ReferenceReading& reading, const Serialisation::Value& data, std::string_view path,
+                              ILogger& logger, std::vector<Serialisation::Diagnostic>& diagnostics);
+
     /** @brief The envelope's file format version (ADR-0077 §2): the one this reader reads and the writers write. */
     inline constexpr std::uint64_t EnvelopeFormat = 1;
 
@@ -123,6 +189,13 @@ namespace Fenrir::Detail
 
     /** @brief The scene layout's version, a scene envelope's `version`: ADR-0078's layout is 1. */
     inline constexpr std::uint32_t SceneVersion = 1;
+
+    /**
+     * @brief The described components a scene block spells apart from its `components` (ADR-0078 §4, ADR-0080):
+     * `Relationship` as `parent` and the order, `EntityId` as `id`, and `Instance` as `instance`. The writer never
+     * writes them as entries, and the reader ignores an entry naming one.
+     */
+    inline constexpr std::string_view SpelledApart[] = {"Fenrir::Relationship", "Fenrir::EntityId", "Fenrir::Instance"};
 
     /**
      * @brief A `writeReference` that writes what `inner` names a reference by, unless it names no path or one a file
