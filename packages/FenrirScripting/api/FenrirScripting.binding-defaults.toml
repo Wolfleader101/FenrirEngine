@@ -17,6 +17,8 @@ tagged-union-attribute = "TaggedUnion"
 resource-attribute = "NativeResource"
 resource-interface = "IResource"
 read-only-resource-interface = "IReadOnlyResource"
+# Ref<T>'s and ReadOnlyRef<T>'s own members: a component's or resource's field named like one would be hidden there.
+component-ref-members = ["Value", "IsNull"]
 
 [registration]
 extension = "Fenrir::ScriptingExtension"

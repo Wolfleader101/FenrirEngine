@@ -827,6 +827,18 @@ internal sealed class Binding
                     $"{where}: C# cannot name a field {name} inside {name}; give it another name in [names] " +
                     $"(\"{type.Name}::{field.Name}\" = \"...\")");
             }
+
+            // The SDK reaches a component's or resource's fields as members of its reference to one, beside the
+            // reference's own: a field sharing one's name would be hidden there.
+            var member = MemberName(type, field.Name);
+            if ((type.Role == Role.Component || IsResource(type)) && !IsPrivate(type, field) &&
+                Config.CSharp.ComponentRefMembers.Contains(member))
+            {
+                throw new BindingException(
+                    $"{where}: {member} is a member of the SDK's reference to a component or resource " +
+                    $"([csharp] component-ref-members), which would hide the field; give it another name in [names] " +
+                    $"(\"{type.Name}::{field.Name}\" = \"...\")");
+            }
         }
     }
 }

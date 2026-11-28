@@ -58,6 +58,8 @@ tags = "[scripting][bindings]"
 "Fenrir::Entity" = "Entity"
 "Fenrir::Entity::m_entityId" = "value"
 "Fenrir::Entity::m_entityList" = "owner"
+# Not Value, which Ref<EntityId> already has.
+"Fenrir::EntityId::value" = "Id"
 "Fenrir::Name::name" = "Text"
 "Fenrir::Transform::pos" = "Position"
 "Fenrir::Transform::rot" = "Rotation"

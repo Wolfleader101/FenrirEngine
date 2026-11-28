@@ -21,7 +21,7 @@ internal static class Defaults
         [
             "component-attribute", "component-interface", "read-only-component-interface", "event-attribute", "event-interface",
             "tagged-union-attribute", "resource-attribute", "resource-interface", "read-only-resource-interface", "pointer-type",
-            "usings",
+            "usings", "component-ref-members",
         ],
         ["cpp"] = ["includes"],
         ["registration"] =

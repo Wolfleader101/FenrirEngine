@@ -67,6 +67,7 @@ tagged-union-attribute = "TaggedUnion"  # With a tagged union: its attribute.
 resource-attribute = "NativeResource"  # With a resource: its attribute and interfaces.
 resource-interface = "IResource"
 read-only-resource-interface = "IReadOnlyResource"
+component-ref-members = ["Value", "IsNull"]  # Optional: members of the SDK's reference to a component or resource; no field of one may share a name with them.
 pointer-type = "ulong"                 # Optional (ulong): the C# type of an opaque pointer field.
 readonly-events = true                 # Optional (false): events as readonly structs with readonly fields.
 readonly-structs = ["My::BodyState"]    # Optional: structs C# only reads, mirrored the same way.
@@ -177,7 +178,8 @@ rather than in every binding that holds it.
 **Names.** A type's C# name is the last segment of its C++ name, its registered name `Namespace.Type` (a component's
 or event's `RegisteredNamespace.Type` when `registered-namespace` is set: a mapping still names the C# type). A field's or
 enumerator's is its C++ name with the first letter upper-cased, unless `[names]` says otherwise. A C# field cannot share
-its struct's name, so that fails until `[names]` renames one.
+its struct's name, so that fails until `[names]` renames one; nor may a component's or resource's field take a name in
+`component-ref-members`, since the SDK's reference to it has a member of that name already.
 
 **Mirrors.** Fields in storage order, each with its doc comment as `<summary>` (later paragraphs as `<remarks>`) and an
 initialiser from its recorded default: `= 1;`, `= 0.05f;`, `= float.PositiveInfinity;`, `= Motion.Simulated;`,
@@ -300,7 +302,7 @@ thing:
 
 | Section | Keys a defaults file may state |
 | --- | --- |
-| `[csharp]` | `component-attribute`, `component-interface`, `read-only-component-interface`, `event-attribute`, `event-interface`, `tagged-union-attribute`, `resource-attribute`, `resource-interface`, `read-only-resource-interface`, `pointer-type`, `usings` |
+| `[csharp]` | `component-attribute`, `component-interface`, `read-only-component-interface`, `event-attribute`, `event-interface`, `tagged-union-attribute`, `resource-attribute`, `resource-interface`, `read-only-resource-interface`, `pointer-type`, `usings`, `component-ref-members` |
 | `[cpp]` | `includes` |
 | `[registration]` | `extension`, `make-component`, `make-read-only-component`, `make-event`, `make-shared-struct`, `make-scene-resource`, `make-read-only-scene-resource`, `make-app-resource`, `make-read-only-app-resource` |
 | `[tests]` | `includes`, `component` |

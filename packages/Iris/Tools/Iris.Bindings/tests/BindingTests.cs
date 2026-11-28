@@ -634,6 +634,9 @@ public sealed class BindingTests
     [InlineData("UnboundType", "Fixture::Quat is a bound type (")]
     [InlineData("FieldNamedAfterItsType",
                 "Fixture::SphereShape::sphereShape: C# cannot name a field SphereShape inside SphereShape; give it another name in [names]")]
+    [InlineData("ComponentFieldNamedLikeARefMember",
+                "Fixture::Body::value: Value is a member of the SDK's reference to a component or resource " +
+                "([csharp] component-ref-members), which would hide the field; give it another name in [names]")]
     [InlineData("OtherTarget", "the description is for another target")]
     public void WhatCannotBeBoundFailsSayingWhy(string problem, string diagnostic)
     {
@@ -650,6 +653,9 @@ public sealed class BindingTests
                     break;
                 case "FieldNamedAfterItsType":
                     Field(root, "Fixture::SphereShape", "radius")["name"] = "sphereShape";
+                    break;
+                case "ComponentFieldNamedLikeARefMember":
+                    Field(root, "Fixture::Body", "mass")["name"] = "value";
                     break;
                 case "OtherTarget":
                     root["pointerSize"] = 4;
