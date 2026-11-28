@@ -1,0 +1,17 @@
+{
+  zero: 0,
+  small: 7,
+  negative: -42,
+  widest: 9223372036854775807,
+  narrowest: -9223372036854775808,
+  unsigned: 18446744073709551615,
+  hex: 0xFF,
+  half: 0.5,
+  third: 0.3333333333333333,
+  big: 1e300,
+  negativeZero: -0,
+  infinity: Infinity,
+  minusInfinity: -Infinity,
+  nan: NaN,
+  list: [1, -1, 2.5],
+}

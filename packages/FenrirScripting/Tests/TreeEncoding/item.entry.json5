@@ -1,0 +1,53 @@
+{
+  name: "Fenrir.ScriptFixture.ItemData",
+  version: 1,
+  formerly: ["Fenrir.ScriptFixture.Thing"],
+  base: null,
+  transient: false,
+  editorOnly: false,
+  fields: [
+    {
+      name: "Name",
+      type: {kind: "string"},
+    },
+    {
+      name: "Weight",
+      type: {kind: "f32"},
+      range: [0, 100],
+      step: 0.5,
+      units: "kg",
+    },
+    {
+      name: "Price",
+      type: {kind: "u32"},
+      display: "Value (gold)",
+      group: "Economy",
+    },
+    {
+      name: "Rarity",
+      type: {
+        kind: "enum",
+        target: "Fenrir.ScriptFixture.Rarity",
+      },
+    },
+  ],
+  structs: [],
+  enums: [
+    {
+      name: "Fenrir.ScriptFixture.Rarity",
+      kind: "u8",
+      enumerators: [
+        {name: "Common", value: 0},
+        {name: "Rare", value: 1},
+        {name: "Epic", value: 2},
+      ],
+    },
+  ],
+  upgraders: [],
+  default: {
+    Name: "item",
+    Weight: 1,
+    Price: 10,
+    Rarity: "Common",
+  },
+}

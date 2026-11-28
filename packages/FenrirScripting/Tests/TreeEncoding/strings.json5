@@ -1,0 +1,10 @@
+{
+  empty: "",
+  ascii: "hello",
+  escapes: "quote \" backslash \\ tab \t newline \n",
+  greek: "π Ω",
+  emoji: "😀",
+  loneSurrogate: "\uD800",
+  "spaced key": "value",
+  "": "empty key",
+}

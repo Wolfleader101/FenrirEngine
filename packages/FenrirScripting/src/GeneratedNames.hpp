@@ -41,6 +41,12 @@ namespace Fenrir::Detail::GeneratedNames
     /** @brief The full name of the table that reports the script's C#-only events. */
     constexpr std::string_view EventTable = "Fenrir.Scripting.Generated.EventTable";
 
+    /**
+     * @brief The full name of the table that registers the codecs of the script's data asset types with
+     * `DataAssetCodecs`, bases first (ADR-0083).
+     */
+    constexpr std::string_view DataAssetTable = "Fenrir.Scripting.Generated.DataAssetTable";
+
     /** @brief `static void Register()` on each table: calls the reporting natives once per type. */
     constexpr std::string_view Register = "Register";
 } // namespace Fenrir::Detail::GeneratedNames

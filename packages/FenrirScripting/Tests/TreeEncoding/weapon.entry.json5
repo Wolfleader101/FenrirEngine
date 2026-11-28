@@ -1,0 +1,226 @@
+{
+  name: "Fenrir.ScriptFixture.WeaponData",
+  version: 3,
+  formerly: [],
+  base: "Fenrir.ScriptFixture.ItemData",
+  transient: false,
+  editorOnly: false,
+  fields: [
+    {
+      name: "I8",
+      type: {kind: "i8"},
+    },
+    {
+      name: "I16",
+      type: {kind: "i16"},
+    },
+    {
+      name: "I32",
+      type: {kind: "i32"},
+    },
+    {
+      name: "I64",
+      type: {kind: "i64"},
+    },
+    {
+      name: "U8",
+      type: {kind: "u8"},
+    },
+    {
+      name: "U16",
+      type: {kind: "u16"},
+    },
+    {
+      name: "U32",
+      type: {kind: "u32"},
+    },
+    {
+      name: "U64",
+      type: {kind: "u64"},
+    },
+    {
+      name: "F64",
+      type: {kind: "f64"},
+    },
+    {
+      name: "Sharp",
+      type: {kind: "bool"},
+    },
+    {
+      name: "Letter",
+      type: {kind: "char16"},
+    },
+    {
+      name: "Element",
+      type: {
+        kind: "enum",
+        target: "Fenrir.ScriptFixture.Element",
+      },
+    },
+    {
+      name: "Description",
+      type: {kind: "string"},
+      formerly: ["Title"],
+      multiline: true,
+    },
+    {
+      name: "Icon",
+      type: {kind: "path"},
+    },
+    {
+      name: "Combo",
+      type: {
+        kind: "list",
+        element: {kind: "i32"},
+      },
+    },
+    {
+      name: "Levels",
+      type: {
+        kind: "list",
+        element: {
+          kind: "struct",
+          target: "Fenrir.ScriptFixture.Stats",
+        },
+      },
+    },
+    {
+      name: "Charges",
+      type: {
+        kind: "optional",
+        element: {kind: "i32"},
+      },
+    },
+    {
+      name: "Bonus",
+      type: {
+        kind: "optional",
+        element: {
+          kind: "struct",
+          target: "Fenrir.ScriptFixture.Stats",
+        },
+      },
+    },
+    {
+      name: "Base",
+      type: {
+        kind: "struct",
+        target: "Fenrir.ScriptFixture.Stats",
+      },
+    },
+    {
+      name: "Offset",
+      type: {
+        kind: "struct",
+        target: "Fenrir::Math::Vec3",
+      },
+    },
+    {
+      name: "Grip",
+      type: {
+        kind: "struct",
+        target: "Fenrir::Math::Quat",
+      },
+    },
+    {
+      name: "Pose",
+      type: {
+        kind: "struct",
+        target: "Fenrir::Math::Mat4",
+      },
+    },
+    {
+      name: "Model",
+      type: {
+        kind: "reference",
+        target: "Fenrir::Mesh",
+      },
+    },
+    {
+      name: "Ammo",
+      type: {
+        kind: "reference",
+        target: "Fenrir.ScriptFixture.ItemData",
+      },
+    },
+    {
+      name: "Secret",
+      type: {kind: "i32"},
+      hidden: true,
+      readonly: true,
+    },
+  ],
+  structs: [
+    {
+      name: "Fenrir.ScriptFixture.Stats",
+      fields: [
+        {
+          name: "Strength",
+          type: {kind: "i32"},
+        },
+        {
+          name: "Speed",
+          type: {kind: "f32"},
+          range: [0, 10],
+        },
+        {
+          name: "Tags",
+          type: {
+            kind: "list",
+            element: {kind: "string"},
+          },
+        },
+      ],
+    },
+  ],
+  enums: [
+    {
+      name: "Fenrir.ScriptFixture.Element",
+      kind: "i32",
+      enumerators: [
+        {name: "Fire", value: -1},
+        {name: "Ice", value: 2},
+      ],
+    },
+  ],
+  upgraders: [1, 2],
+  default: {
+    Name: "item",
+    Weight: 1,
+    Price: 10,
+    Rarity: "Common",
+    I8: -1,
+    I16: -2,
+    I32: -3,
+    I64: -9223372036854775808,
+    U8: 1,
+    U16: 2,
+    U32: 3,
+    U64: 18446744073709551615,
+    F64: 0.25,
+    Sharp: true,
+    Letter: 119,
+    Element: "Ice",
+    Description: "",
+    Icon: "icons/sword.png",
+    Combo: [1, 2, 3],
+    Levels: [],
+    Charges: null,
+    Bonus: {
+      Strength: 2,
+      Speed: 1.5,
+      Tags: [],
+    },
+    Base: {
+      Strength: 0,
+      Speed: 1.5,
+      Tags: [],
+    },
+    Offset: [0, 1, 0],
+    Grip: [0, 0, 0, 1],
+    Pose: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+    Model: null,
+    Ammo: null,
+    Secret: 0,
+  },
+}

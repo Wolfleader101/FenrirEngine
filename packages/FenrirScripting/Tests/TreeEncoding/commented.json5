@@ -1,0 +1,14 @@
+// A file of comments: leading, trailing and closing ones, which the C# reader skips.
+{
+  // Before a member.
+  name: "commented", // after it
+  list: [
+    1, // an element's
+    /* before an element */ 2,
+    // closing the list
+  ],
+  nested: {
+    // closing an object
+  },
+  // closing the root
+}

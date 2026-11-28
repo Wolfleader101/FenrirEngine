@@ -36,8 +36,8 @@
 
 **Touches:** `packages/FenrirScripting/Managed/` (`Fenrir.Scripting/`, `Fenrir.Scripting.Generators/`, the generator tests and compile-fail projects), `packages/FenrirScripting/Tests/` (encoding fixtures shared with C++)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A fixture class extending another C# class, with every allowed kind, round-trips through its codecs, and a field missing from the tree takes its default.
-- [ ] `TreeWriter` output equals `EncodeTree`'s for the shared fixtures, and `TreeReader` reads `EncodeTree`'s back.
-- [ ] Each diagnostic fires at the member it names, and each compile-fail case fails as expected.
+- [x] A fixture class extending another C# class, with every allowed kind, round-trips through its codecs, and a field missing from the tree takes its default.
+- [x] `TreeWriter` output equals `EncodeTree`'s for the shared fixtures, and `TreeReader` reads `EncodeTree`'s back.
+- [x] Each diagnostic fires at the member it names, and each compile-fail case fails as expected.

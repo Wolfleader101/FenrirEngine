@@ -8,6 +8,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using static Fenrir.Scripting.Generators.GeneratorSymbols;
 
 namespace Fenrir.Scripting.Generators;
 
@@ -235,14 +236,6 @@ public sealed class ComponentFieldsGenerator : IIncrementalGenerator
         ["Fenrir.Math.Ray"] = "Fenrir::Math::Ray",
     };
 
-    private static readonly DiagnosticDescriptor FixedStringNotBytes = new(
-        "FENRIR0006", "[FixedString] needs a byte buffer",
-        "Field '{0}' of '{1}' is marked [FixedString], but only a fixed byte buffer or an [InlineArray] struct of one byte field holds UTF-8 text",
-        "Fenrir.Scripting", DiagnosticSeverity.Error, isEnabledByDefault: true);
-
-    private static bool HasAttribute(ISymbol symbol, string attribute) =>
-        symbol.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == attribute);
-
     private static string FieldArray(string fields) =>
         fields.Length == 0
             ? "global::System.ReadOnlySpan<global::Fenrir.Scripting.ScriptField>.Empty"
@@ -251,8 +244,6 @@ public sealed class ComponentFieldsGenerator : IIncrementalGenerator
     // A ref to the variable `expression` names: the probe itself, or a field below it, which may be readonly.
     private static string RefTo(string expression) =>
         expression == Probe ? "ref " + Probe : "ref global::System.Runtime.CompilerServices.Unsafe.AsRef(in " + expression + ")";
-
-    private static string Literal(string text) => SymbolDisplay.FormatLiteral(text, quote: true);
 
     // The kind of a plain value, as the API description spells it; null for anything that is not one.
     private static string? PlainKind(ITypeSymbol type)
@@ -429,7 +420,7 @@ public sealed class ComponentFieldsGenerator : IIncrementalGenerator
         private string? Refuse(INamedTypeSymbol owner, IFieldSymbol field)
         {
             LocationInfo at = LocationInfo.From(field.Locations[0]);
-            m_diagnostics.Add(new DiagnosticInfo(FixedStringNotBytes, at, new[] { field.Name, owner.Name }));
+            m_diagnostics.Add(new DiagnosticInfo(SharedDiagnostics.FixedStringNotBytes, at, new[] { field.Name, owner.Name }));
             return null;
         }
     }
@@ -444,30 +435,12 @@ public sealed class ComponentFieldsGenerator : IIncrementalGenerator
     // Nested structs are named after their containers so two structs never share a class name.
     private static string ClassName(INamedTypeSymbol symbol) => string.Join("_", Chain(symbol).Select(static s => s.Name)) + "_Fields";
 
-    // The struct and the types around it, outermost first.
-    private static IEnumerable<INamedTypeSymbol> Chain(INamedTypeSymbol symbol)
-    {
-        var chain = new List<INamedTypeSymbol>();
-        for (INamedTypeSymbol? current = symbol; current != null; current = current.ContainingType)
-            chain.Insert(0, current);
-        return chain;
-    }
-
     private static bool IsPubliclyVisible(INamedTypeSymbol symbol) =>
         Chain(symbol).All(static s => s.DeclaredAccessibility == Accessibility.Public);
-
-    // A top-level accessors class cannot name a type nested in something private or protected.
-    private static bool HasHiddenContainer(INamedTypeSymbol symbol) =>
-        Chain(symbol).Any(static s => s.DeclaredAccessibility is Accessibility.Private or Accessibility.Protected or Accessibility.ProtectedAndInternal);
 
     private static bool ContainsPointer(ITypeSymbol type) =>
         type.TypeKind is TypeKind.Pointer or TypeKind.FunctionPointer ||
         (type is INamedTypeSymbol named && named.TypeArguments.Any(ContainsPointer));
-
-    private static string Identifier(string name) =>
-        SyntaxFacts.GetKeywordKind(name) != SyntaxKind.None || SyntaxFacts.GetContextualKeywordKind(name) != SyntaxKind.None
-            ? "@" + name
-            : name;
 
     // A struct a component holds, reported once by the table: its key (its display name) and the call that reports it.
     private sealed record NestedReport(string Key, string Code);

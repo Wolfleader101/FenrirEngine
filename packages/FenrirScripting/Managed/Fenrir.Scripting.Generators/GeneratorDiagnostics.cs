@@ -24,3 +24,13 @@ internal sealed record DiagnosticInfo(DiagnosticDescriptor Descriptor, LocationI
 
     public override int GetHashCode() => (Descriptor.Id, Location).GetHashCode();
 }
+
+/// <summary>Diagnostics more than one generator reports, declared once so each id has one descriptor.</summary>
+internal static class SharedDiagnostics
+{
+    /// <summary>[FixedString] on anything but a byte buffer: a component's field, or any data asset's.</summary>
+    public static readonly DiagnosticDescriptor FixedStringNotBytes = new(
+        "FENRIR0006", "[FixedString] needs a byte buffer",
+        "Field '{0}' of '{1}' is marked [FixedString], but only a fixed byte buffer or an [InlineArray] struct of one byte field holds UTF-8 text",
+        "Fenrir.Scripting", DiagnosticSeverity.Error, isEnabledByDefault: true);
+}
