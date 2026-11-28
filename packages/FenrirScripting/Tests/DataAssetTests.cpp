@@ -1,6 +1,7 @@
 // C# data asset types (ADR-0083) and the tree encoding in C# (ADR-0085 §2): the fixture's TreeReader and TreeWriter
 // against FenrirSerialisation's EncodeTree and DecodeTree over the shared fixtures in TreeEncoding/, byte for byte; and
-// the generated codecs of the fixture's data asset classes, their trees and their description entries.
+// the generated codecs of the fixture's data asset classes, their trees and their description entries; and their
+// admission to the type registry.
 
 #include "FixtureCalls.hpp"
 #include "HeadlessApp.hpp"
@@ -24,7 +25,9 @@
 #include "FenrirScripting/Scripting.hpp"
 #include "FenrirSerialisation/Encoding.hpp"
 #include "FenrirSerialisation/Text.hpp"
+#include "FenrirSerialisation/Upgrade.hpp"
 #include "FenrirSerialisation/Value.hpp"
+#include "FenrirTypes/TypeRegistry.hpp"
 
 namespace
 {
@@ -356,4 +359,79 @@ TEST_CASE("a C# data asset round-trips through its generated codecs", "[scriptin
 TEST_CASE("a C# data asset's tree and description entry are what C++ reads", "[scripting][data-assets]")
 {
     ADataAssetsTreeAndEntryAreWhatCPlusPlusReads();
+}
+
+// Admission of the fixture's data asset types (ADR-0083): the engine finds the generated DataAssetTable, its Register,
+// Upgrade and Forget by the names GeneratedNames.hpp spells, so a drift from the generator's GeneratedNames.cs fails
+// here.
+namespace
+{
+    constexpr const char* ItemName = "Fenrir.ScriptFixture.ItemData";
+    constexpr const char* WeaponName = "Fenrir.ScriptFixture.WeaponData";
+
+    void TheFixturesDataAssetTypesAreRegisteredWhileItRuns()
+    {
+        FixtureApp app;
+        const auto& types = app.headless.Get().GetResource<TypeRegistry>();
+        const TypeDescription* weapon = types.Find(WeaponName);
+        const TypeDescription* item = types.Find(ItemName);
+        INFO("Both data asset types should be tree-backed descriptions, the subtype is-a its C# base");
+        REQUIRE((weapon != nullptr && item != nullptr));
+        REQUIRE((weapon->treeBacked && weapon->role == Role::DataAsset && weapon->version == 3 &&
+                 weapon->base == ItemName));
+        REQUIRE(types.IsA(WeaponName, ItemName));
+        REQUIRE(types.Find("Fenrir.ScriptFixture.Thing") == item);
+        INFO("Its struct and enums should be described beside it");
+        REQUIRE((types.Find("Fenrir.ScriptFixture.Stats") != nullptr &&
+                 types.Find("Fenrir.ScriptFixture.Stats")->treeBacked));
+        REQUIRE((types.Find("Fenrir.ScriptFixture.Element") != nullptr &&
+                 types.Find("Fenrir.ScriptFixture.Element")->role == Role::Enum));
+    }
+
+    void ItsUpgradersRunTheScripts()
+    {
+        FixtureApp app;
+        const auto& types = app.headless.Get().GetResource<TypeRegistry>();
+        const auto* upgraders = types.Attachment<UpgradersTag>(WeaponName);
+        INFO("WeaponData should have its two upgraders registered");
+        REQUIRE((upgraders != nullptr && upgraders->size() == 2));
+        Value tree = Object{};
+        tree.AsObject().Add("Dmg", 8);
+        const auto upgraded = Upgrade(types, WeaponName, 1, tree, "weapon.asset.json5",
+                                      const_cast<RecordingLogger&>(app.headless.Logger()));
+        INFO("Upgrading from version 1 should run From1 (Dmg to I32) and From2 in the script");
+        REQUIRE(upgraded.status == UpgradeStatus::Succeeded);
+        REQUIRE((tree.AsObject().Find("I32") != nullptr && tree.AsObject().Find("Dmg") == nullptr));
+        REQUIRE(tree.AsObject().Find("I32")->AsNumber().AsSigned() == 8);
+    }
+
+    void StoppingUnregistersThem()
+    {
+        HeadlessApp headless;
+        const auto& types = headless.Get().GetResource<TypeRegistry>();
+        {
+            Scripting scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+            INFO("The fixture did not load: " + Errors(headless));
+            REQUIRE((scripting.HasScripts() && types.Find(WeaponName) != nullptr));
+        }
+        INFO("Stopping should unregister the types and their upgraders");
+        REQUIRE((types.Find(WeaponName) == nullptr && types.Find(ItemName) == nullptr &&
+                 types.Find("Fenrir.ScriptFixture.Stats") == nullptr));
+    }
+} // namespace
+
+TEST_CASE("the fixture's C# data asset types are registered while it runs", "[scripting][data-assets]")
+{
+    TheFixturesDataAssetTypesAreRegisteredWhileItRuns();
+}
+
+TEST_CASE("the fixture's data asset upgraders run the script's, through the table's Upgrade",
+          "[scripting][data-assets]")
+{
+    ItsUpgradersRunTheScripts();
+}
+
+TEST_CASE("stopping the fixture unregisters its data asset types", "[scripting][data-assets]")
+{
+    StoppingUnregistersThem();
 }

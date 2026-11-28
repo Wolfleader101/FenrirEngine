@@ -1,7 +1,6 @@
 using Fenrir.Assets;
 using Fenrir.Math;
 using Fenrir.Scripting;
-using Fenrir.Scripting.Generated;
 
 // FenrirAssets' handle and asset kinds, which this package's fixture cannot reference (FenrirAssets' contract is built on
 // this one): stand-ins of the same names, which the data asset generator recognises by name, as it does the real ones.
@@ -131,12 +130,12 @@ namespace Fenrir.ScriptFixture
         }
     }
 
-    // The data asset codecs from C#: each check gives null when it holds, or what went wrong.
+    // The data asset codecs from C#: each check gives null when it holds, or what went wrong. The engine ran
+    // DataAssetTable.Register as the fixture loaded, so the codecs are registered.
     public static class DataAssets
     {
         private static DataAssetCodec<WeaponData> Weapons()
         {
-            DataAssetTable.Register();
             TreeReferences.Resolver = new FakeResolver();
             return DataAssetCodecs.Find<WeaponData>() ?? throw new InvalidOperationException("WeaponData has no codecs");
         }

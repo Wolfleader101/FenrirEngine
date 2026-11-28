@@ -297,12 +297,19 @@ generation (`src/ScriptTypes.hpp`), one constructor slot each (a description's `
 
 A script assembly's load is an *admission* (`src/ScriptData.hpp`). In order: the script report is discovered and checked;
 every native component's, event's, shared struct's and resource's mapping is checked against its C# struct; the script's
-components and events are registered, and its components described to the type registry; and only then is the previous generation's script data that no longer matches
+components and events are registered, and its components and C# data asset types described to the type registry (each
+data asset type tree-backed, with the structs and enums it holds and its upgraders bound to the script's generated
+`DataAssetTable.Upgrade`); and only then is the previous generation's script data that no longer matches
 dropped and the queues of new events made. If any step fails, the assembly is released and **nothing** from that load is
 registered: no registry entries, and no storage beyond what an earlier generation already owned. (The checks today are a
 malformed report, a name that clashes with a native component or another script component, two names that would share a
 storage, a native mismatch, and a component whose description cannot be made: a name a registered type holds, a field
-outside its type or of the wrong size, or a struct neither the script nor the engine describes. Systems will join the order when they exist.) The error says which.
+outside its type or of the wrong size, or a struct neither the script nor the engine describes; and a data asset type
+whose name is taken, whose base is not a registered or earlier data asset type, that holds an entity or another refused
+kind, whose reference names neither a data asset type nor an asset kind, or whose upgraders are not consecutive below its
+version. Systems will join the order when they exist.) The error says which. A refused load's data asset codecs are
+dropped again, and a stop drops them, removes the upgraders and unregisters the types, keeping one the asset store's
+records still hold, with a warning.
 
 ## Tagged unions
 
@@ -623,7 +630,10 @@ which the app lists in `ScriptingConfig::extensions`. FenrirScripting never name
   beside `Fenrir.Scripting.dll`, where the build deploys a package's contract (`fenrir_deploy_scripting(<target>
   EXTENSIONS Physics)`, say);
 - **extension stages**: named parts of its own C++ work that C# stage systems join (ADR-0039), with how it places and
-  removes them (see "Hosting stages").
+  removes them (see "Hosting stages");
+- **asset kinds and a type-held check**: for the asset store's extension, the canonical names of its asset kinds
+  (`assetKinds`), which a C# data asset's reference may target, and `typeHeld`, which says why live records still hold a
+  type, so a stop keeps that C# data asset type registered.
 
 Extensions are the only way to give scripting anything, so the app's own components, resources, events and contract go in
 an extension of its own, just as a package's do:

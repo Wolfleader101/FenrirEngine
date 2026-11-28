@@ -108,11 +108,24 @@ namespace Fenrir::Testing::ScriptFixture
 
     constexpr std::uint32_t NullEntity = 0xFFFFFFFFU;
 
-    // Every test starts from the same config, so a field added to ScriptingConfig later is not a warning each time.
+    // The asset kind the fixture's stand-in Fenrir.Assets.Mesh names, which a C# data asset's reference may target: in
+    // an extension of its own, as FenrirAssets' extension lists the store's kinds, since this package's tests have no
+    // store.
+    inline ScriptingExtension FixtureAssetKinds()
+    {
+        ScriptingExtension kinds;
+        kinds.name = "test asset kinds";
+        kinds.assetKinds = {"Fenrir::Mesh"};
+        return kinds;
+    }
+
+    // Every test starts from the same config, so a field added to ScriptingConfig later is not a warning each time. It
+    // lists the fixture's asset kinds, so the fixture's data asset types are admitted.
     inline ScriptingConfig ConfigFor(const std::filesystem::path& scriptAssembly)
     {
         ScriptingConfig config;
         config.scriptAssembly = scriptAssembly;
+        config.extensions.push_back(FixtureAssetKinds());
         return config;
     }
 

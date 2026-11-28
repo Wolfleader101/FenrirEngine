@@ -21,8 +21,8 @@
 
 **Touches:** `packages/FenrirScripting/Managed/` (`Fenrir.Scripting/ScriptDataAssets.cs`, the table's `Upgrade`), `packages/FenrirScripting/src/` (`ScriptComponents.hpp`, `ScriptData.*`, the binding by name), `packages/FenrirScripting/Tests/` (`Rules/ScriptDataTests.cpp`, the end-to-end tests pinning `GeneratedNames`)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A fixture script's C# data asset types are in the registry after admission, a subtype `IsA` its C# base, and its upgraders are found by `Upgrade`.
-- [ ] Each refusal case refuses the whole report and leaves the registry unchanged.
-- [ ] `Forget` removes the types and upgraders, and a reload with a changed shape registers the new shape.
+- [x] A fixture script's C# data asset types are in the registry after admission, a subtype `IsA` its C# base, and its upgraders are found by `Upgrade`.
+- [x] Each refusal case refuses the whole report and leaves the registry unchanged.
+- [x] `Forget` removes the types and upgraders, and a reload with a changed shape registers the new shape.

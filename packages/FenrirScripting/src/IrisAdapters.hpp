@@ -120,7 +120,8 @@ namespace Fenrir::Detail
     /**
      * @brief The script assembly as a loaded Iris component: it reports what it defines by running the tables the
      * SDK's generator wrote into it (through the engine context's reporting slot, which the natives fill), reads its
-     * types for fingerprints, and holds the C# structs the native components are checked against.
+     * types for fingerprints, holds the C# structs the native components are checked against, and binds its data asset
+     * table's `Upgrade` and `Forget` by name.
      */
     class IrisScriptAssembly final : public ScriptAssembly
     {
@@ -131,6 +132,7 @@ namespace Fenrir::Detail
         [[nodiscard]] Iris::CallResult<void> Report(ScriptReport& report) override;
         [[nodiscard]] std::string Fingerprint(const ScriptComponentDescription& description) override;
         [[nodiscard]] Iris::CallResult<void> CheckNativeAgainstCSharp(const ComponentRegistry& registry) override;
+        [[nodiscard]] Iris::CallResult<DataAssetTableCalls> FindDataAssetTable() override;
 
       private:
         EngineContext& m_context;

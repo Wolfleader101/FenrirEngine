@@ -43,10 +43,23 @@ namespace Fenrir::Detail::GeneratedNames
 
     /**
      * @brief The full name of the table that registers the codecs of the script's data asset types with
-     * `DataAssetCodecs`, bases first (ADR-0083).
+     * `DataAssetCodecs` and reports each type's description entry, bases first (ADR-0083).
      */
     constexpr std::string_view DataAssetTable = "Fenrir.Scripting.Generated.DataAssetTable";
 
     /** @brief `static void Register()` on each table: calls the reporting natives once per type. */
     constexpr std::string_view Register = "Register";
+
+    /**
+     * @brief `static byte[]? Upgrade(string name, int fromVersion, byte[] tree)` on the data asset table: the tree, in
+     * the tree encoding, of a value of the script's data asset type `name` written at `fromVersion`, upgraded one
+     * version by that type's upgrader; null when the script defines no such type.
+     */
+    constexpr std::string_view Upgrade = "Upgrade";
+
+    /**
+     * @brief `static void Forget()` on the data asset table: drops the script's codecs from `DataAssetCodecs`, so
+     * nothing there keeps the collectible assembly alive once its generation is refused or stops.
+     */
+    constexpr std::string_view Forget = "Forget";
 } // namespace Fenrir::Detail::GeneratedNames

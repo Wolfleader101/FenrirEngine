@@ -200,8 +200,10 @@ namespace Fenrir::Detail
             const char* noun;
             std::string_view type;
         };
+        // The data asset table reports each type's description entry, bases first, as it registers its codecs.
         constexpr Table tables[] = {{"component", GeneratedNames::ComponentTable},
-                                    {"event", GeneratedNames::EventTable}};
+                                    {"event", GeneratedNames::EventTable},
+                                    {"data asset", GeneratedNames::DataAssetTable}};
         for (const auto& [noun, type] : tables)
         {
             const auto table = m_component.FindType(type);
@@ -237,6 +239,75 @@ namespace Fenrir::Detail
     std::string IrisScriptAssembly::Fingerprint(const ScriptComponentDescription& description)
     {
         return FingerprintOf(m_component, description);
+    }
+
+    Iris::CallResult<DataAssetTableCalls> IrisScriptAssembly::FindDataAssetTable()
+    {
+        using Found = Iris::CallResult<DataAssetTableCalls>;
+        using Bytes = Iris::Array<std::uint8_t>;
+        const auto table = m_component.FindType(GeneratedNames::DataAssetTable);
+        if (!table.Succeeded())
+        {
+            return Found{table.status, std::nullopt, "the data asset table could not be read: " + table.diagnostic,
+                         false};
+        }
+        const auto upgradeMethod =
+            table.value->FindMethod<std::optional<Bytes>(std::string_view, std::int32_t, const Bytes&)>(
+                GeneratedNames::Upgrade);
+        const auto forget = table.value->FindMethod<void()>(GeneratedNames::Forget);
+        if (!upgradeMethod.Succeeded() || !forget.Succeeded())
+        {
+            return Found{upgradeMethod.Succeeded() ? forget.status : upgradeMethod.status, std::nullopt,
+                         "the data asset table is missing a method: " + upgradeMethod.diagnostic + forget.diagnostic,
+                         false};
+        }
+        // The method and the component stay good while the generation is loaded, longer than the upgraders bound here.
+        const Iris::Component* component = &m_component;
+        DataAssetUpgrade upgrade = [component, call = *upgradeMethod.value](
+                                       std::string_view type, std::uint32_t fromVersion,
+                                       std::span<const std::byte> tree) -> Iris::CallResult<std::vector<std::byte>> {
+            using Upgraded = Iris::CallResult<std::vector<std::byte>>;
+            // A failed Iris call, as this step's failure.
+            const auto failed = [](const auto& call) {
+                return Upgraded{call.status, std::nullopt, call.diagnostic, call.diagnosticTruncated};
+            };
+            auto in = Bytes::Create(*component, tree.size());
+            if (!in.Succeeded())
+            {
+                return failed(in);
+            }
+            const std::span<const std::uint8_t> raw(reinterpret_cast<const std::uint8_t*>(tree.data()), tree.size());
+            if (const auto copied = in.value->CopyIn(0, raw); !copied.Succeeded())
+            {
+                return failed(copied);
+            }
+            const auto ran = call.Invoke(type, static_cast<std::int32_t>(fromVersion), *in.value);
+            if (!ran.Succeeded())
+            {
+                return failed(ran);
+            }
+            if (!ran.value->has_value())
+            {
+                return Upgraded{Iris::CallStatus::NotFound, std::nullopt,
+                                "the script defines no data asset type '" + std::string(type) + "'", false};
+            }
+            const Bytes& out = **ran.value;
+            const auto length = out.Length();
+            if (!length.Succeeded())
+            {
+                return failed(length);
+            }
+            std::vector<std::byte> bytes(*length.value);
+            const std::span<std::uint8_t> room(reinterpret_cast<std::uint8_t*>(bytes.data()), bytes.size());
+            if (const auto copied = out.CopyOut(0, room); !copied.Succeeded())
+            {
+                return failed(copied);
+            }
+            return Upgraded{Iris::CallStatus::Success, std::move(bytes), {}, false};
+        };
+        // A failure leaves the codecs registered, which keeps the assembly from unloading; the lifecycle reports that.
+        std::function<void()> drop = [call = *forget.value] { (void)call.Invoke(); };
+        return Found{Iris::CallStatus::Success, DataAssetTableCalls{std::move(upgrade), std::move(drop)}, {}, false};
     }
 
     Result IrisScriptAssembly::CheckNativeAgainstCSharp(const ComponentRegistry& registry)

@@ -64,8 +64,10 @@ add_executable(FenrirScriptingRulesTests
     TestExtension.hpp
 )
 # GenerationLifecycle.hpp includes FenrirCore's reload watcher, which FenrirScripting links privately.
-target_link_libraries(FenrirScriptingRulesTests PRIVATE FenrirScripting FenrirCore FenrirScriptingTestSupport
-                      Catch2::Catch2WithMain)
+# Its data asset cases write their report entries as JSON5 and encode them with FenrirSerialisation, which FenrirScripting
+# links privately too.
+target_link_libraries(FenrirScriptingRulesTests PRIVATE FenrirScripting FenrirCore FenrirSerialisation
+                      FenrirScriptingTestSupport Catch2::Catch2WithMain)
 target_include_directories(FenrirScriptingRulesTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src"
     "${CMAKE_CURRENT_SOURCE_DIR}")
 add_test(NAME FenrirScriptingRules COMMAND FenrirScriptingRulesTests --order decl)

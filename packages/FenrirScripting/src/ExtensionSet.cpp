@@ -138,6 +138,14 @@ namespace Fenrir::Detail
                 set.m_stages.push_back({extension.name, std::move(extension.stages), std::move(extension.placeStages),
                                         std::move(extension.removeStages)});
             }
+            for (auto& kind : extension.assetKinds)
+            {
+                set.m_assetKinds.push_back(std::move(kind));
+            }
+            if (extension.typeHeld)
+            {
+                set.m_typeHolders.push_back(std::move(extension.typeHeld));
+            }
         }
         return Result{Iris::CallStatus::Success, std::move(set), {}, false};
     }

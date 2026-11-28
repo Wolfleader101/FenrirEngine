@@ -403,6 +403,12 @@ namespace Fenrir
         using RemoveStages = std::function<void(App& app)>;
 
         /**
+         * @brief Why live data the extension keeps still holds the type named `typeName` (a record of it, or of a type
+         * extending it, points at its description), or empty when none does.
+         */
+        using TypeHeld = std::function<std::optional<std::string>(App& app, std::string_view typeName)>;
+
+        /**
          * @brief Gives the extension its extension state: the object its native functions of the form
          * `R F(const CallContext&, State&, Args...)` receive. One state per extension; setting it again replaces it.
          * Scripting keeps it alive until it shuts down.
@@ -482,6 +488,20 @@ namespace Fenrir
 
         /** @brief Removes what placeStages placed. Required when `stages` is not empty. */
         RemoveStages removeStages;
+
+        /**
+         * @brief The canonical names of the asset kinds its asset handles target (`Fenrir::Mesh`): a `reference` field
+         * of a C# data asset type may name one of these, as well as a registered or reported type. The asset store's
+         * extension lists its kinds; any other lists none.
+         */
+        std::vector<std::string> assetKinds;
+
+        /**
+         * @brief Asked before a script generation's C# data asset types are unregistered (ADR-0083): a type it holds is
+         * kept, with a warning, until a later generation's end finds it free. The asset store's extension gives the
+         * store's check; any other gives none.
+         */
+        TypeHeld typeHeld;
 
       private:
         friend class Detail::ExtensionSet;
