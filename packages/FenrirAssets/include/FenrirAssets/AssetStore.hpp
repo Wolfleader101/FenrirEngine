@@ -43,6 +43,11 @@ namespace Fenrir
     /** @brief FenrirAssets's tests' way inside the store (Tests/AssetsProbe.hpp): no part of its interface. */
     struct AssetsProbe;
 
+    namespace Serialisation
+    {
+        class Value;
+    } // namespace Serialisation
+
     namespace Detail
     {
         /** @brief What the store set up. Defined in FenrirAssets's private headers; nothing else can use it. */
@@ -907,6 +912,25 @@ namespace Fenrir
         SceneLoadResult LoadSceneInto(Scene& scene, std::string_view path, Entity parent = {});
 
         /**
+         * @brief Copies `scene` into a new scene named `name`, made through App::CreateScene, with no disk (ADR-0082):
+         * the play-in-editor copy. It is exactly what saving `scene` with SaveScene and loading the file with
+         * LoadScene would give, since it runs the same writer into a value tree and the same reader out of it.
+         *
+         * So the copy drops what a scene file never holds: entities tagged `Transient` and what is below them,
+         * transient and undescribed components, and transient fields. An instance copies as an instance, its source
+         * expanded afresh and the diff the writer finds applied to it; an `entity` field naming an entity the copy
+         * does not hold is left empty, and an asset handle field loads its asset again with the copy as its owner. As
+         * a save does, it mints an `EntityId` for every copied entity of `scene` that lacks one, so the call changes
+         * `scene` and both scenes give each entity the same id.
+         *
+         * No file is written, and the scene is not read from the store's source; an instance's source still is, as
+         * any expansion reads one. Nothing is recorded for hot reload: the copy is no file's scene. What the write and
+         * read report is logged, under `scene`'s name as the path. As LoadScene, a `name` another scene has already
+         * makes a second scene of that name. Synchronous, on the main thread.
+         */
+        Scene& CopyScene(App& app, Scene& scene, std::string_view name);
+
+        /**
          * @brief Places the scene or model file `path` into `scene` as one instance (ADR-0080): its entities, made
          * under `parent` (or at the top when it is empty), below a root marked with `Instance { path }`, so SaveScene
          * writes the whole instance as one block. The host scene owns what it made, the model's assets included.
@@ -1238,6 +1262,27 @@ namespace Fenrir
          * `path`.
          */
         SceneSaveResult WriteSceneFile(Scene& scene, std::optional<Entity> root, std::string_view path);
+        /**
+         * @brief The writer behind SaveScene and CopyScene: writes the subtree `root` tops, or the whole scene when
+         * `root` is empty, into `envelope` as a scene file's whole tree, reporting under `named`. Failed, with
+         * `envelope` untouched, when `root` is no live entity of the scene or is tagged `Transient`.
+         */
+        SceneSaveResult WriteSceneTree(Scene& scene, std::optional<Entity> root, const std::string& named,
+                                       Serialisation::Value& envelope);
+        /** @brief Logs that saving `scene` to `named` failed for `message`, and records it in `result` as Failed. */
+        void FailSceneWrite(const Scene& scene, const std::string& named, std::string message, SceneSaveResult& result);
+        /**
+         * @brief The reader behind ReadSceneFile and CopyScene: checks the scene envelope `tree`, then fills the
+         * scene `makeScene` gives as ReadSceneFile does. `assetPath` is the file read, which a bare `#name` reference
+         * names and which goes on the chain of scene files being read; empty for a tree no file holds. Diagnostics are
+         * located at `fileKey`, and a refusal is logged naming `named`. `result` holds what came before, the parse's
+         * diagnostics.
+         */
+        SceneLoadResult ReadSceneTree(Serialisation::Value& tree, std::string_view named, const std::string& assetPath,
+                                      const std::string& fileKey, const std::function<Scene&()>& makeScene,
+                                      Entity parent, Detail::SceneRead read, SceneLoadResult result);
+        /** @brief Logs that loading the scene `named` failed for `diagnostic`, and records it in `result` as Failed. */
+        void FailSceneRead(std::string_view named, Serialisation::Diagnostic diagnostic, SceneLoadResult& result);
         /**
          * @brief What the reference `reference` in the file `assetPath` names (ADR-0076 §2, §3): its target, loaded
          * first for `owner`, of the kind `field` holds and, for a data asset, of a type extending the field's; or why

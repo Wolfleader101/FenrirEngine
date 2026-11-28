@@ -2,21 +2,25 @@
 // ADR-0078's layout, the same scene as the same bytes, minting the entity ids it lacks, leaving out what a scene file
 // never holds and counting it; LoadScene reads one back into a new scene in two passes, keeping what it cannot read as
 // a component and reporting the rest. LoadSceneInto merges a file into a scene that exists, under a parent, leaving the
-// scene's resources standing; the subtree SaveScene writes a selection as its own file. Every test saves into, or loads
-// from, a temporary asset root of its own.
+// scene's resources standing; the subtree SaveScene writes a selection as its own file. CopyScene runs the writer and
+// the reader through a tree in memory, so a copy is what a save and a load would give, with no file. Every test saves
+// into, or loads from, a temporary asset root of its own.
 
 #include <cstddef>
 #include <filesystem>
 #include <format>
+#include <memory>
 #include <optional>
 #include <set>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include "AssetsProbe.hpp"
+#include "CountingSource.hpp"
 #include "DataAssetsTest.hpp"
 #include "FenrirECS/ComponentType.hpp"
 #include "FenrirECS/ComponentWatch.hpp"
@@ -25,6 +29,7 @@
 #include "FenrirECS/SceneComponents.hpp"
 #include "FenrirScene/Scene.hpp"
 
+using AssetsTest::CountingSource;
 using AssetsTest::DataApp;
 using AssetsTest::Fixtures;
 using AssetsTest::ReadFile;
@@ -191,6 +196,30 @@ namespace
     {
         return entity.HasComponent<Fenrir::EntityId>() ? Fenrir::SpellEntityId(entity.GetComponent<Fenrir::EntityId>())
                                                        : std::string();
+    }
+
+    // Makes `test`'s store read through a counting source over `root`, and gives the count.
+    std::shared_ptr<std::size_t> CountReads(DataApp& test, const TempRoot& root)
+    {
+        auto reads = std::make_shared<std::size_t>(0);
+        Fenrir::AssetsProbe::UseSource(
+            test.store, std::make_unique<CountingSource>(
+                            Fenrir::Detail::MakeDirectorySource(root.Path(), test.store.Logger()), reads));
+        return reads;
+    }
+
+    // Every file under `root`, relative to it.
+    std::set<std::string> FilesUnder(const TempRoot& root)
+    {
+        std::set<std::string> files;
+        for (const fs::directory_entry& entry : fs::recursive_directory_iterator(root.Path()))
+        {
+            if (entry.is_regular_file())
+            {
+                files.insert(fs::relative(entry.path(), root.Path()).generic_string());
+            }
+        }
+        return files;
     }
 } // namespace
 
@@ -982,4 +1011,148 @@ TEST_CASE("A subtree merged back into its own scene is given fresh ids, its refe
     INFO("the copied sword follows the copied player, as the file's ids named it");
     REQUIRE(copiedSword.GetComponent<AssetsTest::Follower>().target == copy);
     REQUIRE(level.sword.GetComponent<AssetsTest::Follower>().target == level.player);
+}
+
+TEST_CASE("A copy of a scene built in code saves to the same bytes as the original", "[assets][scenes][copy]")
+{
+    TempRoot root;
+    CopyImages(root);
+    DataApp test({root.Path()});
+    Fenrir::Scene& scene = test.app.CreateScene("Level");
+    const Level level = BuildLevel(test, scene);
+    const std::size_t scenes = SceneCount(test.app);
+
+    Fenrir::Scene& copy = test.store.CopyScene(test.app, scene, "Play");
+
+    INFO("the copy is a new scene of the name given, apart from the original");
+    REQUIRE(&copy != &scene);
+    REQUIRE(copy.GetName() == "Play");
+    REQUIRE(SceneCount(test.app) == scenes + 1);
+    INFO("it holds the level's entities, with their ids, parents and fields, the sword following the copied player");
+    const Entity player = Named(copy, "Player");
+    const Entity sword = Named(copy, "Sword");
+    REQUIRE(player.IsValid());
+    REQUIRE(player != level.player);
+    REQUIRE(ChildNames(Named(copy, "Level")) == std::vector<std::string>{"Player", "Sun"});
+    REQUIRE(IdOf(sword) == "m9x1p");
+    REQUIRE(player.GetComponent<AssetsTest::Health>().current == 75.0f);
+    REQUIRE(sword.GetComponent<AssetsTest::Follower>().target == player);
+    INFO("and the sky resource");
+    REQUIRE(copy.GetResource<AssetsTest::Sky>() != nullptr);
+    REQUIRE(copy.GetResource<AssetsTest::Sky>()->exposure == 1.5f);
+
+    INFO("saving the copy writes the golden file, the bytes the original saves to");
+    REQUIRE(test.store.SaveScene(copy, "levels/copy.scene.json5").status == SaveStatus::Succeeded);
+    REQUIRE(test.store.SaveScene(scene, LevelPath).status == SaveStatus::Succeeded);
+    REQUIRE(ReadFile(root.Path() / "levels/copy.scene.json5") == Golden());
+    REQUIRE(ReadFile(root.Path() / LevelPath) == Golden());
+}
+
+TEST_CASE("A copy gives the original's entities that lack one the ids it mints, as a save does",
+          "[assets][scenes][copy]")
+{
+    TempRoot root;
+    CopyImages(root);
+    DataApp test({root.Path()});
+    Fenrir::Scene& scene = test.app.CreateScene("Level");
+    const Level level = BuildLevel(test, scene, false);
+
+    Fenrir::Scene& copy = test.store.CopyScene(test.app, scene, "Play");
+
+    INFO("each original entity now has an id, and its copy has the same one");
+    REQUIRE(IdOf(level.player).size() == 5);
+    REQUIRE(IdOf(Named(copy, "Player")) == IdOf(level.player));
+    REQUIRE(IdOf(Named(copy, "Sword")) == IdOf(level.sword));
+}
+
+TEST_CASE("A copy leaves out Transient entities, transient and undescribed components", "[assets][scenes][copy]")
+{
+    TempRoot root;
+    CopyImages(root);
+    DataApp test({root.Path()});
+    Fenrir::Scene& scene = test.app.CreateScene("Level");
+    const Level level = BuildLevel(test, scene);
+    Entity camera = Spawn(scene, "Camera");
+    camera.AddComponent<Fenrir::Transient>();
+    Spawn(scene, "Camera rig", camera);
+    Entity(level.player).AddComponent<AssetsTest::FrameCounter>().frames = 12;
+    Entity(level.player).AddComponent<Wobble>().phase = 0.5f;
+    // A reference to the Transient camera, which the copy does not hold.
+    Entity(level.sword).GetComponent<AssetsTest::Follower>().target = camera;
+
+    Fenrir::Scene& copy = test.store.CopyScene(test.app, scene, "Play");
+
+    INFO("the Transient camera and the rig below it are not copied");
+    REQUIRE_FALSE(Named(copy, "Camera").IsValid());
+    REQUIRE_FALSE(Named(copy, "Camera rig").IsValid());
+    INFO("the copied player has neither the transient FrameCounter nor the undescribed Wobble");
+    const Entity player = Named(copy, "Player");
+    REQUIRE(player.IsValid());
+    REQUIRE_FALSE(player.HasComponent<AssetsTest::FrameCounter>());
+    REQUIRE_FALSE(player.HasComponent<Wobble>());
+    INFO("the sword's field naming the camera is left empty");
+    REQUIRE_FALSE(Named(copy, "Sword").GetComponent<AssetsTest::Follower>().target.IsValid());
+    INFO("the original is untouched");
+    REQUIRE(Named(scene, "Camera").IsValid());
+    REQUIRE(level.player.HasComponent<Wobble>());
+    REQUIRE(level.sword.GetComponent<AssetsTest::Follower>().target == camera);
+}
+
+TEST_CASE("A copy writes no file and reads none for the scene", "[assets][scenes][copy]")
+{
+    TempRoot root;
+    CopyImages(root);
+    DataApp test({root.Path()});
+    Fenrir::Scene& scene = test.app.CreateScene("Level");
+    BuildLevel(test, scene);
+    const std::set<std::string> before = FilesUnder(root);
+    const std::shared_ptr<std::size_t> reads = CountReads(test, root);
+
+    Fenrir::Scene& copy = test.store.CopyScene(test.app, scene, "Play");
+
+    INFO("the asset root holds the same files, and the store's source was not read");
+    REQUIRE(FilesUnder(root) == before);
+    REQUIRE(*reads == 0);
+    INFO("the copy's assets are its own: they outlive the original");
+    test.app.DestroyScene("Level");
+    const Entity sword = Named(copy, "Sword");
+    REQUIRE(test.store.IsValid(sword.GetComponent<AssetsTest::Follower>().icon));
+    REQUIRE(test.store.IsValid(copy.GetResource<AssetsTest::Sky>()->cubemap));
+}
+
+TEST_CASE("An instance copies as an instance, with what it changes of its source", "[assets][scenes][copy][instance]")
+{
+    TempRoot root;
+    CopyImages(root);
+    root.Copy(Fixtures() / "scenes" / "player.scene.json5", PlayerPath);
+    DataApp test({root.Path()});
+    Fenrir::Scene& scene = test.app.CreateScene("Level");
+    const Entity level = Spawn(scene, "Level");
+    GiveId(level, "a7k2q");
+    const Fenrir::InstanceResult placed = test.store.Instantiate(scene, PlayerPath, level);
+    REQUIRE(placed.root.IsValid());
+    GiveId(placed.root, "p4tr1");
+    // An override inside the instance, and an entity tagged Transient below it, which the copy leaves out.
+    Entity sword = placed.entities.at(Fenrir::ParseEntityId("m9x1p")->value);
+    sword.GetComponent<AssetsTest::Follower>().speed = 3.0f;
+    Entity marker = Spawn(scene, "Marker", sword);
+    marker.AddComponent<Fenrir::Transient>();
+
+    Fenrir::Scene& copy = test.store.CopyScene(test.app, scene, "Play");
+
+    INFO("the copied player is an instance of the same source, below the copied level");
+    const Entity player = Named(copy, "Player");
+    REQUIRE(player.IsValid());
+    REQUIRE(player.HasComponent<Fenrir::Instance>());
+    REQUIRE(std::string_view(player.GetComponent<Fenrir::Instance>().source) == PlayerPath);
+    REQUIRE(player.GetComponent<Fenrir::Relationship>().parent == Named(copy, "Level"));
+    INFO("the source's entities are there, the override applied, and the Transient marker is not");
+    REQUIRE(Named(copy, "Sword").GetComponent<AssetsTest::Follower>().speed == 3.0f);
+    REQUIRE(Named(copy, "Shield").IsValid());
+    REQUIRE_FALSE(Named(copy, "Marker").IsValid());
+
+    INFO("the copy and the original save to the same bytes");
+    REQUIRE(test.store.SaveScene(scene, LevelPath).status == SaveStatus::Succeeded);
+    REQUIRE(test.store.SaveScene(copy, "levels/copy.scene.json5").status == SaveStatus::Succeeded);
+    REQUIRE(ReadFile(root.Path() / "levels/copy.scene.json5") == ReadFile(root.Path() / LevelPath));
 }

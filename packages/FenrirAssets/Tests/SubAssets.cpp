@@ -12,11 +12,12 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
-#include "AssetSource.hpp"
 #include "AssetsProbe.hpp"
+#include "CountingSource.hpp"
 #include "DataAssetsTest.hpp"
 
 using AssetsTest::CountContaining;
+using AssetsTest::CountingSource;
 using AssetsTest::DataApp;
 using AssetsTest::FindDiagnostic;
 using AssetsTest::Fixtures;
@@ -27,31 +28,6 @@ using Catch::Matchers::WithinAbs;
 namespace
 {
     constexpr std::string_view SheathedSword = "data/sheathed-sword.asset.json5";
-
-    // The directory source over the fixtures, counting how many times it reads each file.
-    class CountingSource : public Fenrir::Detail::AssetSource
-    {
-      public:
-        CountingSource(std::unique_ptr<Fenrir::Detail::AssetSource> inner, std::shared_ptr<std::size_t> reads)
-            : m_inner(std::move(inner)), m_reads(std::move(reads))
-        {
-        }
-
-        bool Exists(std::string_view path) override
-        {
-            return m_inner->Exists(path);
-        }
-
-        std::optional<std::vector<std::byte>> Read(std::string_view path) override
-        {
-            ++*m_reads;
-            return m_inner->Read(path);
-        }
-
-      private:
-        std::unique_ptr<Fenrir::Detail::AssetSource> m_inner;
-        std::shared_ptr<std::size_t> m_reads;
-    };
 
     // Makes `test`'s store read through a counting source, and gives the count.
     std::shared_ptr<std::size_t> CountReads(DataApp& test)

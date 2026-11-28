@@ -822,6 +822,25 @@ namespace Fenrir
         return ReadSceneFile(path, [&]() -> Scene& { return scene; }, parent, Detail::SceneRead::Merge);
     }
 
+    Scene& AssetStore::CopyScene(App& app, Scene& scene, std::string_view name)
+    {
+        // The writer and the reader a save then a load would run, joined by the tree in memory: no file, no read of
+        // the store's source for the scene, and nothing recorded for hot reload.
+        const std::string named(scene.GetName());
+        Ser::Value envelope;
+        WriteSceneTree(scene, std::nullopt, named, envelope);
+        Scene* made = nullptr;
+        ReadSceneTree(envelope, named, {}, named,
+                      [&]() -> Scene& {
+                          made = &app.CreateScene(std::string(name));
+                          return *made;
+                      },
+                      {}, Detail::SceneRead::Load, {});
+        // The whole scene always writes, and the reader accepts what the writer writes; were either to refuse, the
+        // copy is the new scene left empty, the refusal logged.
+        return made != nullptr ? *made : app.CreateScene(std::string(name));
+    }
+
     InstanceResult AssetStore::Instantiate(Scene& scene, std::string_view path, Entity parent)
     {
         InstanceResult result = ExpandInstance(scene, path);
@@ -956,9 +975,7 @@ namespace Fenrir
             Detail::WholeFileLoadProblem(m_state->root, path, assetPath, fileKey);
         // The load fails with `diagnostic`, logged here once, and no scene made.
         const auto fail = [&](Ser::Diagnostic diagnostic) -> SceneLoadResult {
-            m_state->logger->Error("Could not load scene '{}': {}", path, Ser::FormatDiagnostic(diagnostic));
-            result.status = LoadStatus::Failed;
-            result.diagnostics.push_back(std::move(diagnostic));
+            FailSceneRead(path, std::move(diagnostic), result);
             return std::move(result);
         };
         const auto failWith = [&](std::string message) {
@@ -986,11 +1003,28 @@ namespace Fenrir
             return result;
         }
         Append(result.diagnostics, std::move(tree.diagnostics));
+        return ReadSceneTree(*tree.tree, path, assetPath, fileKey, makeScene, parent, read, std::move(result));
+    }
+
+    void AssetStore::FailSceneRead(std::string_view named, Ser::Diagnostic diagnostic, SceneLoadResult& result)
+    {
+        m_state->logger->Error("Could not load scene '{}': {}", named, Ser::FormatDiagnostic(diagnostic));
+        result.status = LoadStatus::Failed;
+        result.diagnostics.push_back(std::move(diagnostic));
+    }
+
+    SceneLoadResult AssetStore::ReadSceneTree(Ser::Value& tree, std::string_view named, const std::string& assetPath,
+                                              const std::string& fileKey, const std::function<Scene&()>& makeScene,
+                                              Entity parent, Detail::SceneRead read, SceneLoadResult result)
+    {
         Ser::Value* data = nullptr;
-        if (std::optional<EnvelopeProblem> problem = CheckSceneEnvelope(*tree.tree, data))
+        if (std::optional<EnvelopeProblem> problem = CheckSceneEnvelope(tree, data))
         {
-            return fail(Detail::LocatedAt(Ser::DiagnosticSeverity::Error, fileKey, problem->node, *tree.tree,
-                                          std::move(problem->message)));
+            FailSceneRead(named,
+                          Detail::LocatedAt(Ser::DiagnosticSeverity::Error, fileKey, problem->node, tree,
+                                            std::move(problem->message)),
+                          result);
+            return result;
         }
 
         Scene& scene = makeScene();
@@ -1044,8 +1078,13 @@ namespace Fenrir
                 chain.pop_back();
             }
         };
-        m_state->scenesReading.push_back(assetPath);
-        const OnChain onChain{m_state->scenesReading};
+        // A copy made in memory is no file, so there is nothing to put on the chain.
+        std::optional<OnChain> onChain;
+        if (!assetPath.empty())
+        {
+            m_state->scenesReading.push_back(assetPath);
+            onChain.emplace(m_state->scenesReading);
+        }
         filler.FillScene(*data);
         result.status = result.diagnostics.empty() ? LoadStatus::Succeeded : LoadStatus::Partial;
         return result;
