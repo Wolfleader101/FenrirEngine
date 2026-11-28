@@ -20,6 +20,7 @@ add_executable(FenrirScriptingTests
     NativeTests.cpp
     ResourceTests.cpp
     StageTests.cpp
+    DataAssetTests.cpp
     TestExtension.cpp
     FixtureCalls.hpp
     ScriptingApp.hpp
@@ -31,6 +32,11 @@ target_include_directories(FenrirScriptingTests PRIVATE "${CMAKE_CURRENT_SOURCE_
 include("${CMAKE_CURRENT_LIST_DIR}/../../../cmake/FenrirCatch2.cmake")
 fenrir_add_catch2()
 target_link_libraries(FenrirScriptingTests PRIVATE FenrirScripting FenrirScriptingTestSupport Catch2::Catch2WithMain)
+# The data asset tests check the C# tree reader and writer against FenrirSerialisation's encoding, over the JSON5 fixtures
+# in TreeEncoding/, and the generated codecs' trees and entries against goldens there.
+target_link_libraries(FenrirScriptingTests PRIVATE FenrirSerialisation)
+target_compile_definitions(FenrirScriptingTests
+                           PRIVATE FENRIR_TREE_ENCODING_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/TreeEncoding")
 # Puts nethost, the Iris bridge and the contract next to the executable, which is where Scripting looks by default.
 fenrir_deploy_scripting(FenrirScriptingTests)
 
@@ -165,11 +171,16 @@ set_tests_properties(FenrirScripting PROPERTIES TIMEOUT 120 ENVIRONMENT
 # rule and not a broken setup), and every misuse must fail with its own diagnostic and no other error (except one the compiler adds on its own, named as the third argument). The SDK is built
 # by the FenrirScriptingContract target (part of ALL), so build everything before running these.
 set(fenrir_compile_fail_work "${CMAKE_CURRENT_BINARY_DIR}/compile-fail")
-# An optional third argument is one more error the case may also report (the compiler's own, beside the expected one).
+# An optional third argument is one more error the case may also report (the compiler's own, beside the expected one),
+# and an optional fourth the line of the case's file the expected error must be at.
 function(fenrir_expect_compile case expect)
     set(also "")
     if(ARGC GREATER 2)
         set(also "${ARGV2}")
+    endif()
+    set(at "")
+    if(ARGC GREATER 3)
+        set(at "${ARGV3}")
     endif()
     add_test(NAME "RefCompile-${case}"
         COMMAND "${CMAKE_COMMAND}"
@@ -180,6 +191,7 @@ function(fenrir_expect_compile case expect)
             "-DWORK=${fenrir_compile_fail_work}"
             "-DEXPECT=${expect}"
             "-DALSO=${also}"
+            "-DAT=${at}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/../cmake/ExpectCompile.cmake")
     set_tests_properties("RefCompile-${case}" PROPERTIES TIMEOUT 120)
 endfunction()
@@ -266,6 +278,20 @@ fenrir_expect_compile(TaggedUnionWrittenConversion FENRIR0037)  # the generator 
 fenrir_expect_compile(TaggedUnionWrittenExpect FENRIR0037)      # the generator writes Expect
 fenrir_expect_compile(TaggedUnionNoZero FENRIR0038)             # new() makes the kind with tag value 0, and there is none
 fenrir_expect_compile(TaggedUnionDuplicateValue FENRIR0038)     # two tag members with one value: the message could not say which it is
+# A data asset class gets its codecs and description from the generator (ADR-0083), which refuses at the member what no
+# data asset may be or hold. The last argument is the line the error must be at.
+fenrir_expect_compile(DataAssetControl OK)                      # every kind, a base, metadata and an upgrader
+fenrir_expect_compile(DataAssetStruct FENRIR0007 "" 6)          # a struct IDataAsset
+fenrir_expect_compile(DataAssetBase FENRIR0008 "" 11)           # a base that is no data asset
+fenrir_expect_compile(DataAssetKind FENRIR0009 "" 8)            # a dictionary
+fenrir_expect_compile(DataAssetEntity FENRIR0017 "" 9)          # an Entity
+fenrir_expect_compile(DataAssetClassByValue FENRIR0018 "" 13)   # another data asset held by value
+fenrir_expect_compile(DataAssetNonStaticUpgrader FENRIR0019 "" 12)  # an upgrader that is not static
+fenrir_expect_compile(DataAssetTwoUpgraders FENRIR0027 "" 15)   # two upgraders from one version
+fenrir_expect_compile(DataAssetFixedString FENRIR0006 "" 8)     # [FixedString] on a string
+fenrir_expect_compile(DataAssetGeneric FENRIR0028 "" 6)         # a generic data asset
+fenrir_expect_compile(DataAssetHidden FENRIR0029 "" 8)          # one nested in a private class
+fenrir_expect_compile(DataAssetAbstract FENRIR0039 "" 6)        # one no new T() makes
 
 # Its registration against its description: each described type, default-constructed through its registered
 # description, holds the defaults api/FenrirScripting.api.json records (tools/generate-type-registry writes the test).

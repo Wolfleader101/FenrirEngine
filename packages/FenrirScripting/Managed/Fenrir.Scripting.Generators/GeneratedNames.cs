@@ -38,6 +38,12 @@ internal static class GeneratedNames
     /// <summary>The table that reports the script's C#-only events as the assembly loads.</summary>
     public const string EventTable = "EventTable";
 
+    /// <summary>
+    /// The table that registers the codecs of the script's data asset types with <c>DataAssetCodecs</c>, bases first
+    /// (ADR-0083).
+    /// </summary>
+    public const string DataAssetTable = "DataAssetTable";
+
     /// <summary><c>static void Register()</c> on each table.</summary>
     public const string Register = "Register";
 

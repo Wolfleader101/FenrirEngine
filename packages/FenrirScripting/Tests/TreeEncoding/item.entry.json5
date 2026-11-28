@@ -1,0 +1,39 @@
+{
+  name: "Fenrir.ScriptFixture.ItemData",
+  version: 1,
+  formerly: ["Fenrir.ScriptFixture.Thing"],
+  base: null,
+  transient: false,
+  editorOnly: false,
+  fields: [
+    {
+      name: "Name",
+      type: {kind: "string"},
+    },
+    {
+      name: "Weight",
+      type: {kind: "f32"},
+      range: [0, 100],
+      step: 0.5,
+      units: "kg",
+    },
+    {
+      name: "Price",
+      type: {kind: "u32"},
+      display: "Value (gold)",
+      group: "Economy",
+    },
+    {
+      name: "Rarity",
+      type: {kind: "u8"},
+    },
+  ],
+  structs: [],
+  upgraders: [],
+  default: {
+    Name: "item",
+    Weight: 1,
+    Price: 10,
+    Rarity: 0,
+  },
+}

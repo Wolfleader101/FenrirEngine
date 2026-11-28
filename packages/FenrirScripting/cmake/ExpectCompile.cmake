@@ -1,10 +1,11 @@
 # Builds one case of the CompileFail project and checks the result. Run by CTest in script mode:
 #   cmake -DDOTNET=... -DPROJECT=... -DSDK=<sdk dir>/ -DCASE=<name> -DWORK=<dir> -DEXPECT=<OK|error code> [-DALSO=<error code>]
-#       [-DPROPERTY=<Name>=<value>] -P ExpectCompile.cmake
+#       [-DPROPERTY=<Name>=<value>] [-DAT=<line>] -P ExpectCompile.cmake
 # PROPERTY, when set, is one more MSBuild property the project needs (an extension's contract folder, say).
 # EXPECT=OK means the case must compile. An error code (CS8345) means the build must fail, and every error it reports
 # must be that one (or ALSO, one error the compiler adds on its own beside it), so a case cannot pass because something
-# unrelated broke.
+# unrelated broke. AT, when set, is the line of <CASE>.cs the expected error must be reported at, so a diagnostic is
+# pinned to the member it names.
 foreach(required DOTNET PROJECT SDK CASE WORK EXPECT)
     if(NOT DEFINED ${required})
         message(FATAL_ERROR "ExpectCompile: ${required} is not set")
@@ -42,6 +43,11 @@ else()
     endif()
     if(NOT errors STREQUAL "error ${EXPECT}")
         message(FATAL_ERROR "The case '${CASE}' should fail with only ${EXPECT} (and ALSO, if given), but reported: ${errors}\n${everything}")
+    endif()
+    if(DEFINED AT AND NOT AT STREQUAL "")
+        if(NOT everything MATCHES "${CASE}\\.cs\\(${AT},[0-9]+\\): error ${EXPECT}")
+            message(FATAL_ERROR "The case '${CASE}' reported ${EXPECT}, but not at line ${AT}:\n${everything}")
+        endif()
     endif()
 endif()
 message(STATUS "${CASE}: ${EXPECT} as expected")

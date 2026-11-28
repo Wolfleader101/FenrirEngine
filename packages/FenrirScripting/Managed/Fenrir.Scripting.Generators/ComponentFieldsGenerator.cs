@@ -235,10 +235,7 @@ public sealed class ComponentFieldsGenerator : IIncrementalGenerator
         ["Fenrir.Math.Ray"] = "Fenrir::Math::Ray",
     };
 
-    private static readonly DiagnosticDescriptor FixedStringNotBytes = new(
-        "FENRIR0006", "[FixedString] needs a byte buffer",
-        "Field '{0}' of '{1}' is marked [FixedString], but only a fixed byte buffer or an [InlineArray] struct of one byte field holds UTF-8 text",
-        "Fenrir.Scripting", DiagnosticSeverity.Error, isEnabledByDefault: true);
+    private static DiagnosticDescriptor FixedStringNotBytes => SharedDiagnostics.FixedStringNotBytes;
 
     private static bool HasAttribute(ISymbol symbol, string attribute) =>
         symbol.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == attribute);

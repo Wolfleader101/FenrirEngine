@@ -4,10 +4,10 @@ namespace Fenrir.Scripting;
 // command's meaning and nothing more. The Fenrir.Scripting source generator reads them into the description it reports.
 
 /// <summary>
-/// <c>@transient</c>. On a component: the component is never written to a scene file. On a component's field: the field
+/// <c>@transient</c>. On a type: it is never written to a file. On a field: the field
 /// is kept in the layout but never written, so a file read back leaves it at its default.
 /// </summary>
-[AttributeUsage(AttributeTargets.Struct | AttributeTargets.Class | AttributeTargets.Field, AllowMultiple = false, Inherited = false)]
+[AttributeUsage(AttributeTargets.Struct | AttributeTargets.Class | AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
 public sealed class TransientAttribute : Attribute
 {
 }
