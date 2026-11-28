@@ -1487,7 +1487,10 @@ namespace Fenrir
         {
             LogKept(*m_state->logger, Detail::AssetKind::Model,
                     RootRelative(m_state->root, Utf8Path(fileKey)).value_or(fileKey), problem);
+            return;
         }
+        // The model is replaced under its handle; its instances in recorded scenes re-spawn from it (ADR-0081 §4).
+        RepatchInstancesOf(fileKey);
     }
 
     void AssetStore::ReloadDataFile(const std::string& fileKey)

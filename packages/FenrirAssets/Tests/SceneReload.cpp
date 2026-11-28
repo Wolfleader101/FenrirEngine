@@ -3,11 +3,13 @@
 // in the file is added, and one whose id the file no longer has is destroyed with its children; an entity with no id,
 // and a component the file does not write, is left alone, and the file's resources are rewritten. A file that does not
 // read changes nothing and says why once, and a destroyed scene is never patched. Every test runs on a temporary asset
-// root of its own, with both reload intervals at zero, and rewrites the scene file between RunFrame calls. No fixture
-// holds a tagged union.
+// root of its own, with both reload intervals at zero, and rewrites the scene file between RunFrame calls. The instance
+// re-patch's tests (ADR-0081 §4) follow the patch's, rewriting a scene or model source instead. No fixture holds a
+// tagged union.
 
 #include <cstddef>
 #include <filesystem>
+#include <format>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -510,4 +512,315 @@ TEST_CASE("With hotReload off, a rewritten scene file patches nothing", "[assets
     RunFrames(test, 2);
 
     REQUIRE(EntityCount(scene) == entities);
+}
+
+// The instance re-patch (ADR-0081 §4): a scene LoadScene filled follows the sources its instances expanded. A changed
+// scene source is read again into each of its instances by source id, with the host block's diff reapplied on top, a
+// run-time child left where it is and the host file never written; a changed model re-spawns its instances under
+// their roots; and a source that does not read changes nothing and says why once.
+namespace
+{
+    constexpr std::string_view CratePath = "prefabs/crate.scene.json5";
+    constexpr std::string_view YardPath = "levels/yard.scene.json5";
+    constexpr std::string_view PropPath = "models/prop.obj";
+    constexpr std::string_view LampPath = "prefabs/lamp.scene.json5";
+
+    // The crate prefab: a crate at `health` with a lid, and `extra`, more blocks.
+    std::string Crate(std::string_view health, std::string_view extra = {})
+    {
+        return SceneText(std::string(R"(      {
+        id: "c8r4t",
+        components: { "Fenrir::Name": { name: "Crate" }, "AssetsTest::Health": { version: 2, current: )") +
+                         std::string(health) + R"( } },
+      },
+      { id: "k1d0a", parent: "c8r4t", components: { "Fenrir::Name": { name: "Lid" } } },
+)" + std::string(extra));
+    }
+
+    // The yard: two crates, the first at x 1 and the second at x 2 and 10 health; `secondComponents` and
+    // `firstComponents` replace each crate's root components when given.
+    std::string Yard(
+        std::string_view secondComponents =
+            R"("Fenrir::Transform": { pos: [2, 0, 0] }, "AssetsTest::Health": { version: 2, current: 10 })",
+        std::string_view firstComponents = R"("Fenrir::Transform": { pos: [1, 0, 0] })")
+    {
+        return SceneText(std::string(R"(      { id: "a1a1a", instance: "prefabs/crate.scene.json5", components: { )") +
+                         std::string(firstComponents) + R"( } },
+      { id: "b2b2b", instance: "prefabs/crate.scene.json5", components: { )" +
+                         std::string(secondComponents) + R"( } },
+)");
+    }
+
+    // The child of `parent` named `name`, or the null entity.
+    Entity ChildNamed(const Entity& parent, std::string_view name)
+    {
+        Entity found;
+        parent.ForEachChild([&](const Entity& child) {
+            if (!found.IsValid() && std::string_view(child.GetComponent<Fenrir::Name>().Get()) == name)
+            {
+                found = child;
+            }
+        });
+        return found;
+    }
+
+    // An OBJ model of the objects `names`, each one triangle.
+    std::string Prop(const std::vector<std::string>& names)
+    {
+        std::string text;
+        for (std::size_t index = 0; index < names.size(); ++index)
+        {
+            const std::size_t first = index * 3 + 1;
+            text +=
+                std::format("o {}\nv 0 0 0\nv 1 0 0\nv 0 1 0\nf {} {} {}\n", names[index], first, first + 1, first + 2);
+        }
+        return text;
+    }
+} // namespace
+
+TEST_CASE("An edited scene source re-patches each instance of it, each host's overrides kept",
+          "[assets][scenes][reload][instances]")
+{
+    TempRoot root;
+    root.Write(CratePath, Crate("50"));
+    root.Write(YardPath, Yard());
+    DataApp test(Watching(root));
+    Fenrir::Scene& scene = Load(test, YardPath, "Yard");
+    const Entity first = WithId(scene, "a1a1a");
+    const Entity second = WithId(scene, "b2b2b");
+    const Entity firstLid = ChildNamed(first, "Lid");
+    REQUIRE(first.GetComponent<AssetsTest::Health>().current == 50.0f);
+    REQUIRE(second.GetComponent<AssetsTest::Health>().current == 10.0f);
+    const std::string yard = AssetsTest::ReadFile(root.Path() / YardPath);
+
+    // The crate is sturdier now, and gains a hinge under its lid.
+    root.Write(CratePath,
+               Crate("80", R"(      { id: "h1ng3", parent: "k1d0a", components: { "Fenrir::Name": { name: "Hinge" } } },
+)"));
+    RunFrames(test, 2);
+
+    INFO("the instances are the same entities, where their hosts put them");
+    REQUIRE(Alive(scene, first));
+    REQUIRE(Alive(scene, second));
+    REQUIRE(first.GetComponent<Fenrir::Transform>().pos.x == 1.0f);
+    REQUIRE(second.GetComponent<Fenrir::Transform>().pos.x == 2.0f);
+    INFO("the crate the host left alone takes the edit, and the one it overrode keeps its override");
+    REQUIRE(first.GetComponent<AssetsTest::Health>().current == 80.0f);
+    REQUIRE(second.GetComponent<AssetsTest::Health>().current == 10.0f);
+    INFO("each lid is the same entity, with the new hinge under it");
+    REQUIRE(Alive(scene, firstLid));
+    REQUIRE(ChildNamed(first, "Lid") == firstLid);
+    REQUIRE(ChildNames(firstLid) == std::vector<std::string>{"Hinge"});
+    REQUIRE(ChildNames(ChildNamed(second, "Lid")) == std::vector<std::string>{"Hinge"});
+    INFO("six entities: two crates, two lids, two hinges");
+    REQUIRE(EntityCount(scene) == 6);
+    INFO("the host file is untouched, and nothing was logged");
+    REQUIRE(AssetsTest::ReadFile(root.Path() / YardPath) == yard);
+    REQUIRE(test.errors->empty());
+    REQUIRE(test.warnings->empty());
+
+    // The hinge goes again.
+    root.Write(CratePath, Crate("80"));
+    RunFrames(test, 2);
+    INFO("an entity the source no longer has goes from every instance");
+    REQUIRE(ChildNames(firstLid).empty());
+    REQUIRE(EntityCount(scene) == 4);
+}
+
+TEST_CASE("An instance re-patch leaves a run-time child of the instance where it is",
+          "[assets][scenes][reload][instances]")
+{
+    TempRoot root;
+    root.Write(CratePath, Crate("50"));
+    root.Write(YardPath, Yard());
+    DataApp test(Watching(root));
+    Fenrir::Scene& scene = Load(test, YardPath, "Yard");
+    const Entity first = WithId(scene, "a1a1a");
+    const Entity lid = ChildNamed(first, "Lid");
+
+    // At run time a coin goes in the crate, and a fly sits on its lid.
+    Entity coin = scene.GetEntityList().CreateEntity();
+    coin.GetComponent<Fenrir::Name>().Set("Coin");
+    first.AddChild(coin);
+    Entity fly = scene.GetEntityList().CreateEntity();
+    fly.GetComponent<Fenrir::Name>().Set("Fly");
+    lid.AddChild(fly);
+
+    root.Write(CratePath, Crate("80"));
+    RunFrames(test, 2);
+
+    REQUIRE(first.GetComponent<AssetsTest::Health>().current == 80.0f);
+    INFO("the coin and the fly survive, under the crate and its lid");
+    REQUIRE(Alive(scene, coin));
+    REQUIRE(ParentOf(coin) == first);
+    REQUIRE(Alive(scene, fly));
+    REQUIRE(ParentOf(fly) == lid);
+    REQUIRE(test.errors->empty());
+}
+
+TEST_CASE("An edit to a host's instance diff is reapplied over its source", "[assets][scenes][reload][instances]")
+{
+    TempRoot root;
+    root.Write(CratePath, Crate("50"));
+    root.Write(YardPath, Yard());
+    DataApp test(Watching(root));
+    Fenrir::Scene& scene = Load(test, YardPath, "Yard");
+    const Entity first = WithId(scene, "a1a1a");
+    const Entity second = WithId(scene, "b2b2b");
+
+    // The second crate is mended to 20, and the first goes back to where its source puts it.
+    root.Write(
+        YardPath,
+        Yard(R"("Fenrir::Transform": { pos: [2, 0, 0] }, "AssetsTest::Health": { version: 2, current: 20 })", ""));
+    RunFrames(test, 2);
+
+    INFO("both crates are the same entities");
+    REQUIRE(Alive(scene, first));
+    REQUIRE(Alive(scene, second));
+    INFO("the second crate takes its new override");
+    REQUIRE(second.GetComponent<AssetsTest::Health>().current == 20.0f);
+    INFO("the first crate, its transform override gone, is where its source puts it, at the source's health");
+    REQUIRE(first.GetComponent<Fenrir::Transform>().pos.x == 0.0f);
+    REQUIRE(first.GetComponent<AssetsTest::Health>().current == 50.0f);
+    INFO("nothing was logged");
+    REQUIRE(test.errors->empty());
+}
+
+TEST_CASE("An instance a host added inside another is re-patched when its own source changes",
+          "[assets][scenes][reload][instances]")
+{
+    TempRoot root;
+    root.Write(CratePath, Crate("50"));
+    root.Write(
+        LampPath,
+        SceneText(
+            R"(      { id: "m4mp1", components: { "Fenrir::Name": { name: "Lamp" }, "AssetsTest::Health": { version: 2, current: 5 } } },
+)"));
+    root.Write(YardPath, SceneText(R"(      { id: "a1a1a", instance: "prefabs/crate.scene.json5" },
+      { id: "q7q7q", parent: "a1a1a/k1d0a", instance: "prefabs/lamp.scene.json5" },
+)"));
+    DataApp test(Watching(root));
+    Fenrir::Scene& scene = Load(test, YardPath, "Yard");
+    const Entity lamp = WithId(scene, "q7q7q");
+    INFO("the lamp hangs from the crate's lid");
+    REQUIRE(ParentOf(lamp) == ChildNamed(WithId(scene, "a1a1a"), "Lid"));
+
+    root.Write(
+        LampPath,
+        SceneText(
+            R"(      { id: "m4mp1", components: { "Fenrir::Name": { name: "Lamp" }, "AssetsTest::Health": { version: 2, current: 9 } } },
+)"));
+    RunFrames(test, 2);
+
+    INFO("the lamp is the same entity, under the lid still, and takes its source's edit");
+    REQUIRE(Alive(scene, lamp));
+    REQUIRE(ParentOf(lamp) == ChildNamed(WithId(scene, "a1a1a"), "Lid"));
+    REQUIRE(lamp.GetComponent<AssetsTest::Health>().current == 9.0f);
+    INFO("nothing was logged");
+    REQUIRE(test.errors->empty());
+}
+
+TEST_CASE("A rewritten model source re-spawns its instances under their roots", "[assets][scenes][reload][instances]")
+{
+    TempRoot root;
+    root.Write(PropPath, Prop({"Panel", "Marker"}));
+    root.Write(
+        YardPath,
+        SceneText(
+            R"(      { id: "a1a1a", instance: "models/prop.obj", components: { "Fenrir::Transform": { pos: [1, 0, 0] } } },
+      { id: "b2b2b", instance: "models/prop.obj" },
+)"));
+    DataApp test(Watching(root));
+    Fenrir::Scene& scene = Load(test, YardPath, "Yard");
+    const Entity first = WithId(scene, "a1a1a");
+    const Entity second = WithId(scene, "b2b2b");
+    INFO("each root holds the model's nodes");
+    REQUIRE(ChildNames(first) == std::vector<std::string>{"Panel", "Marker"});
+    const Entity oldPanel = ChildNamed(first, "Panel");
+    // A run-time child of the panel, which the model keeps, and another prop attached to the marker at run time,
+    // whose nodes hold the same numbered ids as the model's own.
+    Entity sticker = scene.GetEntityList().CreateEntity();
+    sticker.GetComponent<Fenrir::Name>().Set("Sticker");
+    oldPanel.AddChild(sticker);
+    const Fenrir::InstanceResult attached = test.store.Instantiate(scene, PropPath, ChildNamed(first, "Marker"));
+    REQUIRE(attached.root.IsValid());
+    const std::vector<std::string> attachedNodes = ChildNames(attached.root);
+
+    // An edit to the host alone leaves the model's entities as they are.
+    root.Write(
+        YardPath,
+        SceneText(
+            R"(      { id: "a1a1a", instance: "models/prop.obj", components: { "Fenrir::Transform": { pos: [1, 0, 0] } } },
+      { id: "b2b2b", instance: "models/prop.obj", components: { "Fenrir::Transform": { pos: [3, 0, 0] } } },
+)"));
+    RunFrames(test, 2);
+    INFO("a host edit moves the second prop and re-spawns nothing");
+    REQUIRE(second.GetComponent<Fenrir::Transform>().pos.x == 3.0f);
+    REQUIRE(ChildNamed(first, "Panel") == oldPanel);
+
+    root.Write(PropPath, Prop({"Panel", "Marker", "Beacon"}));
+    RunFrames(test, 2);
+
+    INFO("each root is the same entity, where its host put it, with the new model's nodes under it");
+    REQUIRE(Alive(scene, first));
+    REQUIRE(Alive(scene, second));
+    REQUIRE(first.GetComponent<Fenrir::Transform>().pos.x == 1.0f);
+    REQUIRE(ChildNames(first) == std::vector<std::string>{"Panel", "Marker", "Beacon"});
+    REQUIRE(ChildNames(second) == std::vector<std::string>{"Panel", "Marker", "Beacon"});
+    INFO("the run-time child moved to the new panel, and the attached prop to the new marker, its nodes whole");
+    REQUIRE(Alive(scene, sticker));
+    REQUIRE(ParentOf(sticker) == ChildNamed(first, "Panel"));
+    REQUIRE(Alive(scene, attached.root));
+    REQUIRE(ParentOf(attached.root) == ChildNamed(first, "Marker"));
+    REQUIRE(ChildNames(attached.root) == attachedNodes);
+    INFO("two roots of four nodes, a sticker, and the attached prop's root and its three nodes");
+    REQUIRE(EntityCount(scene) == 12);
+    INFO("nothing was logged");
+    REQUIRE(test.errors->empty());
+}
+
+TEST_CASE("A broken scene source changes none of its instances and says why once",
+          "[assets][scenes][reload][instances]")
+{
+    TempRoot root;
+    root.Write(CratePath, Crate("50"));
+    root.Write(YardPath, Yard());
+    DataApp test(Watching(root));
+    Fenrir::Scene& scene = Load(test, YardPath, "Yard");
+    const Entity first = WithId(scene, "a1a1a");
+    const Entity lid = ChildNamed(first, "Lid");
+    const std::size_t entities = EntityCount(scene);
+
+    root.Write(CratePath, "{\n  format: 1,\n  type: \"Fenrir::Scene\",\n  data: { entities: [ { id: \"c8r");
+    RunFrames(test, 5);
+
+    INFO("the instances are as they were");
+    REQUIRE(EntityCount(scene) == entities);
+    REQUIRE(Alive(scene, lid));
+    REQUIRE(first.GetComponent<AssetsTest::Health>().current == 50.0f);
+    INFO("one error names the source, once over five frames");
+    REQUIRE(CountContaining(*test.errors, "Could not re-patch the instances of 'prefabs/crate.scene.json5'") == 1);
+
+    // Mended, it re-patches them.
+    root.Write(CratePath, Crate("80"));
+    RunFrames(test, 2);
+    INFO("mended, the source re-patches its instances");
+    REQUIRE(first.GetComponent<AssetsTest::Health>().current == 80.0f);
+}
+
+TEST_CASE("A destroyed scene's instance sources are no longer watched", "[assets][scenes][reload][instances]")
+{
+    TempRoot root;
+    root.Write(CratePath, Crate("50"));
+    root.Write(YardPath, Yard());
+    DataApp test(Watching(root));
+    (void)Load(test, YardPath, "Yard");
+    test.app.DestroyScene("Yard");
+
+    fs::remove(root.Path() / CratePath);
+    RunFrames(test, 2);
+
+    INFO("no scene instances the crate, so its going is not warned about");
+    REQUIRE(test.errors->empty());
+    REQUIRE(test.warnings->empty());
 }

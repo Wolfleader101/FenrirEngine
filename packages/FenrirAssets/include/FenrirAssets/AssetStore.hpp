@@ -97,6 +97,14 @@ namespace Fenrir
              * added as a load adds it, and the file's resources are rewritten.
              */
             Patch,
+            /**
+             * @brief The instance re-patch (ADR-0081 §4): an instance's source read again into the instance, its root
+             * the merge's parent. A block whose id an entity below the root holds, of the ids the source's last read
+             * gave out, fills that entity as a patch does; the source's single root block fills the root itself; any
+             * other block is added as an instance read adds it, keeping its id; and the source's resources are
+             * skipped, as an instance's are.
+             */
+            Repatch,
         };
 
         /**
@@ -1258,7 +1266,7 @@ namespace Fenrir
          * naming one on the chain is refused.
          */
         SceneLoadResult ReadSceneFile(std::string_view path, const std::function<Scene&()>& makeScene, Entity parent,
-                                      Detail::SceneRead read);
+                                      Detail::SceneRead read, std::unordered_set<std::uint64_t>* fileIds = nullptr);
         /**
          * @brief Instantiate's work, and an instance block's in the reader: expands the source `path` at the top of
          * `scene` and marks its root, which the caller then places.
@@ -1290,7 +1298,8 @@ namespace Fenrir
         SceneLoadResult ReadSceneTree(Serialisation::Value& tree, std::string_view named, const std::string& assetPath,
                                       const std::string& fileKey, const std::function<Scene&()>& makeScene,
                                       Entity parent, Detail::SceneRead read, SceneLoadResult result,
-                                      std::unordered_set<std::uint64_t>* fileIds = nullptr);
+                                      std::unordered_set<std::uint64_t>* fileIds = nullptr,
+                                      std::optional<std::uint64_t>* rootId = nullptr);
         /** @brief Logs that loading the scene `named` failed for `diagnostic`, and records it in `result` as Failed. */
         void FailSceneRead(std::string_view named, Serialisation::Diagnostic diagnostic, SceneLoadResult& result);
         /**
@@ -1321,6 +1330,31 @@ namespace Fenrir
          * does not read as a scene, changes nothing and says why once.
          */
         void PatchSceneFile(const std::string& fileKey);
+        /**
+         * @brief Re-patches every instance of the source `sourceKey`, a scene or model file, in every scene a LoadScene
+         * recorded (ADR-0081 §4): each top-level instance holding one, nested or not, is read again from its source and
+         * given its host block's diff on top. The host files are read, never written.
+         */
+        void RepatchInstancesOf(const std::string& sourceKey);
+        /**
+         * @brief Reads the instance `root` tops, in `scene`, again from its source: a scene file patched in by source
+         * id, a model re-spawned under the root. What is below the root that is not the source's is left where it is.
+         * Its host's diff is the caller's to apply. Whether the source read; when it did not, nothing changed.
+         */
+        bool RepatchInstance(Scene& scene, Entity root);
+        /**
+         * @brief For each of `chains`, an instance of a changed source in `scene` and the instances holding it out to
+         * the top, re-patches the nearest the host file's `tree` (its asset path `assetPath`, its key `fileKey`) still
+         * writes as a block of the same source, then reapplies that block's diff on top.
+         */
+        void RepatchHostInstances(Scene& scene, Serialisation::Value& tree, const std::string& assetPath,
+                                  const std::string& fileKey, const std::vector<std::vector<Entity>>& chains);
+        /**
+         * @brief The tree of the scene file `assetPath` (its key `fileKey`) for this patch run, read and checked once,
+         * or null when it does not read as a scene, said once, prefixed `what`.
+         */
+        [[nodiscard]] const Serialisation::Value* SceneSourceTree(const std::string& assetPath,
+                                                                  const std::string& fileKey, std::string_view what);
         /**
          * @brief Re-imports the image, cubemap, font or shader container file `fileKey` and replaces its one asset
          * under its handle, or keeps it and says why.
