@@ -42,7 +42,7 @@ public unsafe struct Described : IComponent
 [Transient]
 public struct Scratch : IComponent
 {
-    public int Value;
+    public int Count;
 }
 
 [EditorOnly]
