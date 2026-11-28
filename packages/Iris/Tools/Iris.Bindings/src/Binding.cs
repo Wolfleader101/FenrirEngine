@@ -55,6 +55,15 @@ internal sealed class Binding
     public IEnumerable<DescribedType> Mirrored => Types.Where(type => type.Category != Category.BoundType && !IsUsed(type));
 
     /// <summary>
+    /// The types that get a mirror with a layout here: every mirrored type but the data assets and the nested structs
+    /// only they reach, which C# holds by member (<see cref="DescribedType.ByMember" />).
+    /// </summary>
+    public IEnumerable<DescribedType> Laid => Mirrored.Where(type => !type.ByMember);
+
+    /// <summary>The data assets this binding generates a class for, bases first as the descriptions order them.</summary>
+    public IEnumerable<DescribedType> DataAssets => Mirrored.Where(type => type.Role == Role.DataAsset);
+
+    /// <summary>
     /// The types the defaults test covers: components, events, resources and shared structs mirrored here, but for an
     /// <c>internal</c> mirror, which a test's public method cannot return.
     /// </summary>
@@ -150,11 +159,12 @@ internal sealed class Binding
         }
     }
 
-    /// <summary>The described types a type's fields, tag and kinds name, by C++ name.</summary>
+    /// <summary>The described types a type's base, fields, tag and kinds name, by C++ name.</summary>
     public static IEnumerable<string?> Named(DescribedType type) =>
         type.Fields.SelectMany(field => new[] { field.Kind.Type, field.Kind.ElementType })
             .Concat(type.Kinds.Select(kind => kind.Kind.Type))
-            .Append(type.Tag?.Kind.Type);
+            .Append(type.Tag?.Kind.Type)
+            .Append(type.Base);
 
     /// <summary>Whether the type is a scene or app resource.</summary>
     public static bool IsResource(DescribedType type) => type.Role is Role.SceneResource or Role.AppResource;
@@ -188,6 +198,24 @@ internal sealed class Binding
     /// <summary>The attribute on a tagged union's mirror (<c>[csharp] tagged-union-attribute</c>).</summary>
     public string TaggedUnionAttribute(DescribedType type) =>
         Sdk(Config.CSharp.TaggedUnionAttribute, type, "tagged union", "csharp", "tagged-union-attribute");
+
+    /// <summary>The interface a data asset's class implements (<c>[csharp] data-asset-interface</c>).</summary>
+    public string DataAssetInterface(DescribedType type) =>
+        Sdk(Config.CSharp.DataAssetInterface, type, "data asset", "csharp", "data-asset-interface");
+
+    /// <summary>The attribute naming a data asset's C++ type on its class (<c>[csharp] data-asset-attribute</c>).</summary>
+    public string DataAssetAttribute(DescribedType type) =>
+        Sdk(Config.CSharp.DataAssetAttribute, type, "data asset", "csharp", "data-asset-attribute");
+
+    /// <summary>
+    /// The generic asset handle a reference to a data asset is (<c>[csharp] asset-handle</c>): no <c>[bound-types]</c>
+    /// entry states <c>Fenrir::AssetHandle&lt;T&gt;</c> for a type a binding generates (ADR-0075).
+    /// </summary>
+    public string AssetHandle(DescribedType holder) =>
+        Sdk(Config.CSharp.AssetHandle, holder, "data asset holding a reference to a data asset", "csharp", "asset-handle");
+
+    /// <summary>Whether a reference's target is a described data asset, whose handle names its class rather than a bound type.</summary>
+    public bool IsDataAssetTarget(string target) => Find(target) is { Role: Role.DataAsset };
 
     /// <summary>The factory a listed component is registered by: the read-only one when it is in <c>read-only</c>.</summary>
     public string MakeComponent(RegistrationConfig registration, DescribedType type) =>
@@ -295,6 +323,9 @@ internal sealed class Binding
 
     private bool HasZeroDefaults(DescribedType type) => type.Fields.All(field => IsZero(field.Kind, field.Default));
 
+    /// <summary>Whether a field's recorded default is C#'s <c>default</c>, so its member needs no initialiser.</summary>
+    public bool IsZeroDefault(Field field) => IsZero(field.Kind, field.Default);
+
     /// <summary>Whether a recorded default is all zero bytes, so C#'s <c>default</c> already holds it.</summary>
     private bool IsZero(FieldKind kind, JsonElement value)
     {
@@ -304,7 +335,13 @@ internal sealed class Binding
                 var element = new FieldKind(kind.ElementKind!, kind.ElementType, null, null, 0);
                 return value.EnumerateArray().All(item => IsZero(element, item));
             case "pointer":
+            case "optional":
                 return value.ValueKind == JsonValueKind.Null;
+            case "string":
+            case "path":
+            case "list":
+                // C#'s default is null: an empty text or list is an initialiser.
+                return false;
             case "bool":
                 return value.ValueKind == JsonValueKind.False;
             case "f32":
@@ -315,7 +352,8 @@ internal sealed class Binding
             case "enum":
                 return Type(kind.Type!).Values.First(enumerator => enumerator.Name == value.GetString()).Value == 0;
             case "struct":
-                return IsZero(Type(kind.Type!), value);
+                // A reference to a data asset names a handle no description describes: its only default is empty.
+                return kind.Target is { } target && IsDataAssetTarget(target) || IsZero(Type(kind.Type!), value);
             default:
                 return value.ValueKind == JsonValueKind.Number && value.GetRawText() == "0";
         }
@@ -539,7 +577,7 @@ internal sealed class Binding
             var references = type.Fields.Select(field => (field.Name, field.Kind))
                                  .Concat(type.Kinds.Select(kind => (kind.Name, kind.Kind)))
                                  .Where(member => member.Kind.Target is not null);
-            foreach (var (member, kind) in references)
+            foreach (var (member, kind) in references.Where(member => !IsDataAssetTarget(member.Kind.Target!)))
             {
                 var handle = Description.HandleType(kind.Target!);
                 if (!types.ContainsKey(handle))
@@ -659,6 +697,29 @@ internal sealed class Binding
         foreach (var type in Mirrored)
         {
             CheckType(type);
+        }
+
+        foreach (var type in DataAssets)
+        {
+            CheckDataAsset(type);
+        }
+    }
+
+    // A data asset's base is a described data asset, and what it holds is what its codecs write: DataAssetWriter.Shape
+    // refuses the rest, naming the field. The SDK's names its class needs are present.
+    private void CheckDataAsset(DescribedType type)
+    {
+        _ = DataAssetInterface(type);
+        _ = DataAssetAttribute(type);
+        if (type.Base is { } name && Find(name) is not { Role: Role.DataAsset })
+        {
+            throw new BindingException(
+                $"{type.Source}: {type.Name} extends {name}, which no description read describes as a data asset");
+        }
+
+        foreach (var field in type.Fields)
+        {
+            _ = DataAssetWriter.Shape(this, type, field.Kind, $"{type.Source}: {type.Name}::{field.Name}");
         }
     }
 

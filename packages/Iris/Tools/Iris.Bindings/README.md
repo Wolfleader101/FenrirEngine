@@ -74,6 +74,9 @@ immutable-structs = ["My::Link"]       # Optional: read-only structs C# assigns 
 private-fields = ["My::Link::m_owner"]  # Optional: fields mirrored private, for hand-written members to reach.
 fixed-buffers = ["My::Label::text"]     # Optional: arrays of numbers mirrored as fixed buffers, not [InlineArray] structs.
 internal-structs = ["My::ShapeOptions"]  # Optional: structs mirrored internal, for the contract's own use.
+data-asset-interface = "IDataAsset"     # With a data asset: the interface its class implements, and the attribute
+data-asset-attribute = "NativeDataAsset"  # naming its C++ type (the SDK's tree and codec types are in `usings` too).
+asset-handle = "AssetHandle"           # With a reference to a data asset: the generic handle it is (in `usings`).
 
 [cpp]
 mappings = "src/Generated/MyPhysicsMappings.hpp"
@@ -105,6 +108,7 @@ includes = ["MyTestApp.hpp"]
 setup = "MyTestApp app;"               # The first statement of every test case.
 component = "app.Component()"          # A const Iris::Component* holding that class.
 tags = "[physics][bindings]"
+data-asset-check = "My::Testing::CheckDataAssetDefaults"  # Optional: the C++ check of each data asset's trees (below).
 
 [natives]                              # Optional: native functions, from <Name>.natives.json beside this file.
 sources = ["src/MyPhysicsScripting.cpp"]  # The source reader's (where the natives are defined, in order); not read here.
@@ -150,7 +154,10 @@ Step = { name = "My.Physics.Step", summary = "Inside each physics step, before c
 A type in `exclude` gets none of these: no mirror, mapping, registration or test case. It is for a type the binding
 carries in another form, such as a struct C# holds with a smaller handle than C++'s, which the binding then describes
 itself and binds from that description.
-| `[tests] cpp` and `csharp` | A Catch2 case per component, event, resource and shared struct, and the C# class with one `T()` method returning `new T()` for each. A mirror in `internal-structs` has none: a public test method cannot return it. Its layout is checked when the extension registers it, unless it is in `by-hand` too, when only the mappings' size assert checks it. |
+| `[tests] cpp` and `csharp` | A Catch2 case per component, event, resource and shared struct, and the C# class with one `T()` method returning `new T()` for each. A mirror in `internal-structs` has none: a public test method cannot return it. Its layout is checked when the extension registers it, unless it is in `by-hand` too, when only the mappings' size assert checks it. With `data-asset-check`, each data asset has a case too, calling `<data-asset-check><T>(component, DefaultsClass, "<Type>")`, and a C# method `byte[] <Type>(bool full)` giving the tree encoding of its `new T()` through its codec, every field when `full`, else those at their defaults left out; the check (the binding's own, since it needs the C++ bridge) compares them with C++'s `T{}`. Without the key a data asset has no case. |
+| `<generated>/<Type>.cs` for a data asset | `[<data-asset-attribute>("Cpp::Name")] public partial class <Type> : <base's class or data-asset-interface>` (ADR-0083 §3): one public read-write property per field, initialised to its recorded default when C#'s is not it, and documented from the description; a `string` or `path` as `string`, a `list` as `List<T>`, an `optional` of a value type as `T?`, a `reference` as its handle (the bound type `Fenrir::AssetHandle<target>`'s C# type, or `<asset-handle><Class>` when the target is a data asset, with no `[bound-types]` entry), and a nested struct as its mirror. Its `static DataAssetCodec<Type> Codec` (`new` in a subtype) holds its description entry and the codecs, which write and read the store's tree as C++'s bridge does: its base's fields first, a field at its default left out, an absent one defaulted and an unknown one dropped. |
+| `<generated>/<Struct>.cs` for a struct only data assets reach | A mirror of public fields with no mapping, test or layout, which may hold the owning kinds. |
+| `<generated>/NativeDataAssets.cs` | With a data asset: an internal class whose `[ModuleInitializer]` registers every data asset's codecs, and a `ValueCodec<T>` for every struct they hold, with `DataAssetCodecs` as the contract loads; and those structs' codecs. |
 
 **Other bindings' types.** A binding in `uses` is read with the descriptions its own `descriptions` names. A type it
 mirrors that this binding's descriptions also describe (another package's type a field holds, which a description records
@@ -201,13 +208,17 @@ it. A pointer is `pointer-type` at its offset, an empty struct an empty struct. 
 bind as the shapes they hold: an `entity` as the mirror of `Fenrir::Entity` (the built-in binding's, from FenrirECS's
 description), a `fixed-string` as the array of `u8` its bytes are (a `fixed` buffer when `fixed-buffers` names it, its
 default text as those bytes), and a `reference` as the bound type `Fenrir::AssetHandle<target>`, which a description read
-must describe and `[bound-types]` bind; one no description describes fails naming the field. A `data-asset` or
-`settings` type is skipped, with every nested type and enum that nothing but such types reaches, generating nothing and logging
-nothing, until the C# spec binds them. With them go the owning kinds (`string`, `list`, `optional`, `path`), which only
-such types (and nested types only they reach) may hold: an owning kind in any type it binds fails naming the field. They
-are skipped rather than refused because descriptions hold them for the type registration
-(`tools/generate-type-registry`), so a binding over a description with an `Install` config or a data asset still
-generates and the dirty-tree check passes before C# has mirrors for them.
+must describe and `[bound-types]` bind; one no description describes fails naming the field. A `data-asset` type gets a
+class over the store's tree (above), and a nested struct that data assets reach and no type with a layout does gets a
+mirror of fields with no mapping; the owning kinds (`string`, `list`, `optional`, `path`) are held only there, and an
+owning kind in any other type it binds fails naming the field. A data asset's field that its codecs do not write yet
+fails naming the field: an entity (which no data asset holds, ADR-0075), a pointer, an array or fixed string, a bound
+type other than a handle, a tagged union, an optional of a string or list, and a struct whose mirror is read-only or has
+private fields; so does a base no description describes as a data asset. A `settings` type is skipped, with every nested
+type and enum that nothing but settings types reaches, generating nothing and logging nothing, until the settings spec
+binds them; skipped rather than refused because descriptions hold them for the type registration
+(`tools/generate-type-registry`), so a binding over a description with an `Install` config still generates and the
+dirty-tree check passes before C# has classes for them.
 
 **Tagged unions.** The mirror holds the storage only, as the scripting SDK's tagged-union generator consumes it:
 `[TaggedUnion]`, `[StructLayout(LayoutKind.Explicit)]`, `[FieldOffset(0)] private Tag _type;` and one
@@ -300,7 +311,7 @@ thing:
 
 | Section | Keys a defaults file may state |
 | --- | --- |
-| `[csharp]` | `component-attribute`, `component-interface`, `read-only-component-interface`, `event-attribute`, `event-interface`, `tagged-union-attribute`, `resource-attribute`, `resource-interface`, `read-only-resource-interface`, `pointer-type`, `usings` |
+| `[csharp]` | `component-attribute`, `component-interface`, `read-only-component-interface`, `event-attribute`, `event-interface`, `tagged-union-attribute`, `resource-attribute`, `resource-interface`, `read-only-resource-interface`, `pointer-type`, `usings`, `data-asset-interface`, `data-asset-attribute`, `asset-handle` |
 | `[cpp]` | `includes` |
 | `[registration]` | `extension`, `make-component`, `make-read-only-component`, `make-event`, `make-shared-struct`, `make-scene-resource`, `make-read-only-scene-resource`, `make-app-resource`, `make-read-only-app-resource` |
 | `[tests]` | `includes`, `component` |
@@ -379,9 +390,13 @@ assemblies, with `shares` after the contract, and a maker with no natives, no st
 maker, fails saying so; the registration zeroes a
 native's output (and both of a native with two) and nothing of a native with inputs only, an output span or a pointer
 read and written, and a native added with an output is declared and registered so; running
-twice rewrites nothing and a mirror no longer described is deleted; each diagnostic above; the generated C# compiles
+twice rewrites nothing and a mirror no longer described is deleted; two data assets, one extending the other, give
+their classes, the mirror of the struct only they hold and the class registering their codecs, a reference to a data
+asset is its `asset-handle` with no `[bound-types]` entry, and a `data-asset-check` gives each a defaults case; each
+diagnostic above; the generated C# compiles
 against stand-ins for the SDK (`tests/Checks/Stubs.cs`) and, when FenrirEngine's scripting SDK is beside Iris, against it
-with its source generators (`tests/Checks/Sdk`). The `BindingDefaults` CTest builds the fixture's C# assembly
+with its source generators (`tests/Checks/Sdk`), which alone compiles the data assets' classes and codecs: they need the
+SDK's tree. The `BindingDefaults` CTest builds the fixture's C# assembly
 (`tests/Checks/Runtime`) and runs the fixture's generated defaults test against it. The fixture is itself a binding, so
 the bindings target regenerates its outputs. Its natives' C# class has no bodies without the SDK's generator, so only the
 SDK check compiles it and the facade parts that call it (the mirror `Body`'s methods call it too, so the checks without

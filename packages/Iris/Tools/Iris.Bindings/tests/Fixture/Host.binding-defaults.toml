@@ -13,6 +13,8 @@ tagged-union-attribute = "TaggedUnion"
 resource-attribute = "NativeResource"
 resource-interface = "IResource"
 read-only-resource-interface = "IReadOnlyResource"
+data-asset-interface = "IDataAsset"
+data-asset-attribute = "NativeDataAsset"
 
 [registration]
 extension = "Host::Extension"

@@ -11,9 +11,10 @@
 
   <ItemGroup>
     <!-- The natives' class has no bodies until the SDK's generator writes them, and the facade parts (Bodies, Hits) call
-         it: the SDK check compiles them. Body's methods call it too, so NativeStubs.cs stands in for the natives they call. -->
+         it: the SDK check compiles them, and the data assets' classes and codecs (WeaponData, Sword, NativeDataAssets),
+         which need the SDK's tree. Body's methods call it too, so NativeStubs.cs stands in for the natives they call. -->
     <Compile Include="../../Fixture/Contract/**/*.cs"
-             Exclude="../../Fixture/Contract/Generated/FixtureNative.cs;../../Fixture/Contract/Generated/Bodies.cs;../../Fixture/Contract/Generated/Hits.cs" />
+             Exclude="../../Fixture/Contract/Generated/FixtureNative.cs;../../Fixture/Contract/Generated/Bodies.cs;../../Fixture/Contract/Generated/Hits.cs;../../Fixture/Contract/Generated/WeaponData.cs;../../Fixture/Contract/Generated/Sword.cs;../../Fixture/Contract/Generated/NativeDataAssets.cs" />
     <Compile Include="../../Fixture/Uses/Contract/**/*.cs" />
     <Compile Include="../../Fixture/Tests/Generated/*.cs" />
     <Compile Include="../Stubs.cs" />

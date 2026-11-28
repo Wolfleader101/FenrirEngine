@@ -15,8 +15,22 @@ fenrir_scripting_tests(Assets
         InstanceLists.cpp
         MeshLods.cpp
         SceneComponents.cpp
+        DataAssets.cpp
+        DataAssetTrees.hpp
+        Generated/DataAssetsTestDefaultsTests.cpp
+        Generated/DataAssetsTestMappings.hpp
 )
 fenrir_script_fixture(Assets)
+# The data asset test package's generated classes (Fixture/DataAssets, from DataAssetsTest.binding.toml) are in the fixture
+# too, in a folder of their own since the binding owns every .cs in it.
+file(GLOB data_asset_classes CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/DataAssets/*.cs")
+add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/fixture/Fenrir.AssetsScriptFixture.dll" APPEND
+    DEPENDS ${data_asset_classes})
+# The data asset tests check C# against the C++ types and registration of FenrirAssets' data asset test package, which
+# both real tools wrote.
+target_sources(FenrirAssetsScriptingTests PRIVATE ../../Tests/Package/Generated/DataAssetsTestPackageTypes.hpp
+                                                  ../../Tests/Package/Generated/DataAssetsTestPackageTypes.cpp)
+target_link_libraries(FenrirAssetsScriptingTests PRIVATE FenrirAssetsDataTestPackage)
 target_compile_definitions(FenrirAssetsScriptingTests PRIVATE
     FENRIR_ASSETS_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/../../Tests/fixtures")
 target_compile_definitions(FenrirAssetsScriptingRulesTests PRIVATE

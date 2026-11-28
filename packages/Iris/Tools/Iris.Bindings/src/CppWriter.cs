@@ -38,7 +38,8 @@ internal static class CppWriter
         text.Line();
         text.Line("#include <cstdint>");
         text.Line("#include <string_view>");
-        foreach (var type in binding.Types.Where(type => !binding.IsUsed(type)))
+        // A data asset and what only data assets reach are held by member, with no layout to map.
+        foreach (var type in binding.Types.Where(type => !binding.IsUsed(type) && !type.ByMember))
         {
             text.Line();
             if (type.Category != Category.BoundType)
@@ -427,6 +428,19 @@ internal static class CppWriter
             text.Indent();
             text.Line(tests.Setup);
             text.Line($"CheckDefaults<{type.Name}>({tests.Component}, \"{binding.CSharpName(type)}\");");
+            text.Outdent();
+            text.Line("}");
+        }
+
+        // A data asset's case: its trees from C#'s codec beside C++'s bridge's, through the binding's check.
+        foreach (var type in tests.DataAssetCheck == null ? [] : binding.DataAssets)
+        {
+            text.Line();
+            text.Line($"TEST_CASE(\"C#'s new {binding.CSharpName(type)}() writes C++'s {type.Name}{{}} tree, byte for byte\", \"{tests.Tags}\")");
+            text.Line("{");
+            text.Indent();
+            text.Line(tests.Setup);
+            text.Line($"{tests.DataAssetCheck}<{type.Name}>({tests.Component}, DefaultsClass, \"{binding.CSharpName(type)}\");");
             text.Outdent();
             text.Line("}");
         }

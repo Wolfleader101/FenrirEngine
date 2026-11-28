@@ -22,6 +22,7 @@ internal enum Role
     SceneResource,
     AppResource,
     Nested,
+    DataAsset,
 }
 
 /// <summary>
@@ -37,10 +38,23 @@ internal sealed record FieldKind(string Kind, string? Type, string? ElementKind,
     /// handle no description describes is diagnosed as the reference's.
     /// </summary>
     public string? Target { get; init; }
+
+    /// <summary>
+    /// What a <c>list</c> or <c>optional</c> holds: its element's kind, read from the element keys or the
+    /// <c>element</c> object. Null for every other kind.
+    /// </summary>
+    public FieldKind? Element { get; init; }
 }
 
 /// <summary>A struct field, or a tagged union's tag (its default is the tag value of the default kind).</summary>
-internal sealed record Field(string Name, int Offset, FieldKind Kind, JsonElement Default, string? Doc);
+internal sealed record Field(string Name, int Offset, FieldKind Kind, JsonElement Default, string? Doc)
+{
+    /// <summary>The names the field had before (<c>@formerly</c>), which a file may still spell.</summary>
+    public IReadOnlyList<string> Formerly { get; init; } = [];
+
+    /// <summary>The inspector's metadata (<c>@range</c>, <c>@display</c>, ...) as the description records it; null for none.</summary>
+    public JsonElement? Metadata { get; init; }
+}
 
 /// <summary>One kind of a tagged union: the union member, the tag value that selects it, and what it holds.</summary>
 internal sealed record UnionKind(string Name, string Tag, FieldKind Kind, string? Doc);
@@ -67,7 +81,32 @@ internal sealed record DescribedType(
     IReadOnlyList<UnionKind> Kinds,
     string? DefaultKind,
     string? Underlying,
-    IReadOnlyList<EnumValue> Values);
+    IReadOnlyList<EnumValue> Values)
+{
+    /// <summary>For a data asset extending another: the C++ name of the data asset it extends.</summary>
+    public string? Base { get; init; }
+
+    /// <summary>The version a file writes it at (<c>@version</c>): 1 unless the description says otherwise.</summary>
+    public int Version { get; init; } = 1;
+
+    /// <summary>The C++ names the type had before (<c>@formerly</c>).</summary>
+    public IReadOnlyList<string> Formerly { get; init; } = [];
+
+    /// <summary>Whether the type is <c>@transient</c>.</summary>
+    public bool Transient { get; init; }
+
+    /// <summary>Whether the type is <c>@editor-only</c>.</summary>
+    public bool EditorOnly { get; init; }
+
+    /// <summary>
+    /// Whether the type is a nested struct that only data assets reach: C# holds it in data asset classes and in no
+    /// mirror with a layout, so it gets a mirror with no mapping, and may hold the owning kinds.
+    /// </summary>
+    public bool DataOnly { get; init; }
+
+    /// <summary>Whether the type is a data asset or a nested struct only data assets reach: neither has a layout C# mirrors.</summary>
+    public bool ByMember => Role == Role.DataAsset || DataOnly;
+}
 
 /// <summary>Reads API descriptions (<c>docs/api-description.md</c>): the input the generator accepts.</summary>
 internal static class Description
@@ -122,34 +161,40 @@ internal static class Description
         return Bound(types, skipped);
     }
 
-    // The data asset and settings roles, which the C# spec binds; until then a binding skips them and what only they
-    // hold.
-    private static bool IsSkippedRole(string role) => role is "data-asset" or "settings";
+    // The settings role, which the settings spec binds; until then a binding skips it and what only it holds.
+    private static bool IsSkippedRole(string role) => role is "settings";
 
-    // describe-api's owning kinds (SCHEMA.md of the input format, "Owning kinds"), which only skipped types hold.
-    private static bool IsOwningKind(string kind) => kind is "string" or "list" or "optional" or "path";
+    // describe-api's owning kinds (SCHEMA.md of the input format, "Owning kinds"), which only data assets, skipped types
+    // and the nested structs only they reach hold.
+    internal static bool IsOwningKind(string kind) => kind is "string" or "list" or "optional" or "path";
 
     // The types a binding binds: all but the nested types and enums that a skipped type reaches and no selected type
-    // does (a data asset's table row, a settings type's mode), each checked to hold no owning kind and to have a layout.
-    // An enum a selection names for a native and only a skipped type holds is dropped too: a description does not say
-    // which enums were selected.
+    // does (a settings type's mode). An enum a selection names for a native and only a skipped type holds is dropped too:
+    // a description does not say which enums were selected. A nested struct that data assets reach and no type with a
+    // layout does is marked data-only (DescribedType.DataOnly): it and the data assets are reached by member, so they may
+    // hold the owning kinds and record no layout. Every other type is checked to hold no owning kind and to have one.
     private static List<DescribedType> Bound(List<DescribedType> types, IEnumerable<string> namedBySkipped)
     {
         var byName = types.ToDictionary(type => type.Name, StringComparer.Ordinal);
         var fromSkipped = Reached(namedBySkipped);
-        var fromSelected = Reached(types.Where(type => type.Role is not (Role.Nested or Role.None))
-                                        .SelectMany(Binding.Named)
-                                        .OfType<string>());
-        var bound = types.Where(type => type.Role is not (Role.Nested or Role.None) || fromSelected.Contains(type.Name) ||
-                                        !fromSkipped.Contains(type.Name))
+        var fromFixed = Reached(types.Where(type => type.Role is not (Role.Nested or Role.None or Role.DataAsset))
+                                     .SelectMany(Binding.Named)
+                                     .OfType<string>());
+        var fromData = Reached(types.Where(type => type.Role == Role.DataAsset).SelectMany(Binding.Named).OfType<string>());
+        var bound = types.Where(type => type.Role is not (Role.Nested or Role.None) || fromFixed.Contains(type.Name) ||
+                                        fromData.Contains(type.Name) || !fromSkipped.Contains(type.Name))
+                         .Select(type => type.Role == Role.Nested && type.Category != Category.BoundType &&
+                                         fromData.Contains(type.Name) && !fromFixed.Contains(type.Name)
+                                             ? type with { DataOnly = true }
+                                             : type)
                          .ToList();
-        foreach (var type in bound)
+        foreach (var type in bound.Where(type => !type.ByMember))
         {
             foreach (var field in type.Fields.Where(field => IsOwningKind(field.Kind.Kind)))
             {
                 throw new BindingException(
-                    $"{type.Source}: {type.Name}::{field.Name}: a {field.Kind.Kind}, an owning kind, which a binding skips " +
-                    "only in a data asset or settings type and what only they hold");
+                    $"{type.Source}: {type.Name}::{field.Name}: a {field.Kind.Kind}, an owning kind, which a binding binds " +
+                    "only in a data asset and the nested structs only data assets reach");
             }
 
             if (type.Size < 0)
@@ -286,6 +331,7 @@ internal static class Description
                            "scene-resource" => Role.SceneResource,
                            "app-resource" => Role.AppResource,
                            "nested" => Role.Nested,
+                           "data-asset" => Role.DataAsset,
                            var other => throw new BindingException($"{where}: unknown role '{other}'"),
                        };
 
@@ -321,12 +367,20 @@ internal static class Description
                          .ToList();
         }
 
-        // A type reached by member records no layout; Bound refuses one a binding keeps.
+        // A type reached by member records no layout; Bound refuses one a binding keeps, but for a data asset and what
+        // only data assets reach.
         var reachedByMember = !type.TryGetProperty("size", out _);
         return new DescribedType(name, category, role, reachedByMember ? -1 : Integer(type, "size", where),
                                  reachedByMember ? -1 : Integer(type, "alignment", where),
                                  OptionalString(type, "doc"), path, fields, tag, unionOffset, kinds, defaultKind,
-                                 underlying, values);
+                                 underlying, values)
+        {
+            Base = OptionalString(type, "base"),
+            Version = type.TryGetProperty("version", out _) ? Integer(type, "version", where) : 1,
+            Formerly = Names(type, "formerly", where),
+            Transient = Flag(type, "transient"),
+            EditorOnly = Flag(type, "editorOnly"),
+        };
     }
 
     private static Field ReadField(JsonElement field, string where)
@@ -348,8 +402,24 @@ internal static class Description
         };
         // A field of a type reached by member records no offset; Bound refuses one a binding keeps.
         var offset = field.TryGetProperty("offset", out _) ? Integer(field, "offset", where) : -1;
-        return new Field(name, offset, ReadKind(field, subject), value, OptionalString(field, "doc"));
+        return new Field(name, offset, ReadKind(field, subject), value, OptionalString(field, "doc"))
+        {
+            Formerly = Names(field, "formerly", subject),
+            Metadata = field.TryGetProperty("metadata", out var metadata) && metadata.ValueKind == JsonValueKind.Object
+                           ? metadata.Clone()
+                           : null,
+        };
     }
+
+    // A list of names (`formerly`); none when the key is absent.
+    private static IReadOnlyList<string> Names(JsonElement element, string key, string where) =>
+        !element.TryGetProperty(key, out var names) ? []
+        : names.ValueKind == JsonValueKind.Array && names.EnumerateArray().All(name => name.ValueKind == JsonValueKind.String)
+            ? names.EnumerateArray().Select(name => name.GetString()!).ToList()
+            : throw new BindingException($"{where}: '{key}' is not a list of strings");
+
+    private static bool Flag(JsonElement element, string key) =>
+        element.TryGetProperty(key, out var flag) && flag.ValueKind == JsonValueKind.True;
 
     // describe-api's fixed-layout kinds are read as the shapes they bind as (SCHEMA.md of the input format, "Kinds"): an
     // `entity` as the engine's entity, the built-in binding's mirror of FenrirECS's `Fenrir::Entity`; a `fixed-string` as
@@ -387,12 +457,35 @@ internal static class Description
                 return new FieldKind("struct", HandleType(target), null, null, 0) { Target = target };
             case "fixed-string":
                 return new FieldKind("array", null, "u8", null, Integer(field, "length", where));
+            case "list" or "optional":
+                // A list or optional names one type at most, its innermost element's, kept as the type Binding.Named
+                // reaches through it; its element is read whole for a data asset's codecs.
+                return new FieldKind(kind, NamesIn(field).SingleOrDefault(), null, null, 0) { Element = ElementOf(field, where) };
             case var owning when IsOwningKind(owning):
-                // Read only to be dropped or refused (Bound). A list or optional names one type at most, its innermost
-                // element's, kept as the type Binding.Named reaches through it.
-                return new FieldKind(kind, NamesIn(field).SingleOrDefault(), null, null, 0);
+                return new FieldKind(kind, null, null, null, 0);
             default:
                 return new FieldKind(kind, OptionalString(field, "type"), null, null, 0);
+        }
+    }
+
+    // A list's or optional's element: the `element` object when the element has keys of its own, else the element keys.
+    private static FieldKind ElementOf(JsonElement field, string where)
+    {
+        if (field.TryGetProperty("element", out var element) && element.ValueKind == JsonValueKind.Object)
+        {
+            return ReadKind(element, where);
+        }
+
+        var kind = String(field, "elementKind", where);
+        switch (kind)
+        {
+            case "entity":
+                return new FieldKind("struct", EntityType, null, null, 0);
+            case "reference":
+                var target = String(field, "elementTarget", where);
+                return new FieldKind("struct", HandleType(target), null, null, 0) { Target = target };
+            default:
+                return new FieldKind(kind, OptionalString(field, "elementType"), null, null, 0);
         }
     }
 
