@@ -1,0 +1,55 @@
+{
+  format: 1,
+  type: "Fenrir::Scene",
+  version: 1,
+  data: {
+    resources: {},
+    entities: [
+      {
+        id: "k33p0",
+        components: {
+          "Fenrir::Name": {name: "Keep"},
+          "Fenrir::Transform": {},
+        },
+      },
+      {
+        id: "t1nst",
+        parent: "k33p0",
+        instance: "prefabs/tower.scene.json5",
+        components: {
+          "Fenrir::Transform": {
+            pos: [10, 0, 0],
+          },
+        },
+        overrides: {
+          g4te1: {
+            components: {
+              "AssetsTest::Follower": {
+                target: "k33p0",
+                speed: 4,
+              },
+            },
+          },
+          f1ag0: {
+            removed: ["AssetsTest::Health"],
+          },
+          "p4tr1/m9x1p": {
+            components: {
+              "AssetsTest::Follower": {speed: 6},
+            },
+          },
+        },
+        removedEntities: ["g0ard"],
+      },
+      {
+        id: "b4nnr",
+        parent: "t1nst/f1ag0",
+        components: {
+          "Fenrir::Name": {name: "Banner"},
+          "Fenrir::Transform": {},
+          "AssetsTest::Follower": {target: "t1nst/g4te1"},
+        },
+      },
+    ],
+  },
+}

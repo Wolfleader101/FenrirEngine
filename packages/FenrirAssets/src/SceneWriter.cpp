@@ -35,6 +35,7 @@
 #include "FenrirTypes/TypeDescription.hpp"
 #include "FenrirTypes/TypeRegistry.hpp"
 #include "FenrirTypes/ValueRef.hpp"
+#include "SceneInstances.hpp"
 
 namespace Fenrir
 {
@@ -93,23 +94,45 @@ namespace Fenrir
             return size;
         }
 
-        // Appends the entities of the subtree `entity` roots that the file holds to `written`, depth-first with each
-        // entity's children after it in their sibling order; a Transient entity is left out with its children, and
-        // counted in `skipped`. An instance's root is written as its one block, so what is below it is its source's.
-        void CollectWritten(const Entity& entity, std::vector<Entity>& written, std::size_t& skipped)
+        // The source an instance's root names.
+        std::string SourceOf(const Entity& root)
         {
-            if (entity.HasComponent<Transient>())
-            {
-                skipped += SubtreeSize(entity);
-                return;
-            }
-            written.push_back(entity);
-            if (entity.HasComponent<Instance>())
-            {
-                return;
-            }
-            entity.ForEachChild([&](const Entity& child) { CollectWritten(child, written, skipped); });
+            return std::string(root.GetComponent<Instance>().source);
         }
+
+        // The entities one save writes, and how each instance among them matches its source.
+        struct Collector
+        {
+            Detail::InstanceBaselines& baselines;
+            // Depth-first, each entity's children after it in their sibling order; the entities a host added inside an
+            // instance after the instance's block, in the order the instance holds them.
+            std::vector<Entity> written;
+            // The entities left out: each tagged Transient, and every entity below one.
+            std::size_t skipped = 0;
+            // Each instance's match with its baseline, by its root's entity id.
+            std::unordered_map<std::uint32_t, Detail::InstanceMatch> matches;
+
+            // Appends the subtree `entity` roots. An instance's root is one block; what is below it is its source's,
+            // written as the block's diff, but for the entities a host added, which are blocks of their own.
+            void Collect(const Entity& entity)
+            {
+                if (entity.HasComponent<Transient>())
+                {
+                    skipped += SubtreeSize(entity);
+                    return;
+                }
+                written.push_back(entity);
+                if (entity.HasComponent<Instance>())
+                {
+                    const Detail::InstanceBaseline* baseline = baselines.For(SourceOf(entity));
+                    Detail::InstanceMatch match =
+                        Detail::MatchInstance(entity, baseline, [&](const Entity& added) { Collect(added); });
+                    matches.emplace(entity.GetId(), std::move(match));
+                    return;
+                }
+                entity.ForEachChild([&](const Entity& child) { Collect(child); });
+            }
+        };
 
         // Records in `paths` the slash path of each entity inside the instance `root` tops, whose own path is
         // `prefix` (ADR-0080 §5): the path, `/`, and the entity's id in the source, chained through each nested
@@ -157,6 +180,216 @@ namespace Fenrir
             }
             return entry;
         }
+
+        // Sorts `entries` into a block's order: Name, then Transform, then the rest by name.
+        void SortEntries(std::vector<Ser::Member>& entries)
+        {
+            std::ranges::stable_sort(entries, [](const Ser::Member& a, const Ser::Member& b) {
+                const int rankA = Rank(a.key);
+                const int rankB = Rank(b.key);
+                return rankA != rankB ? rankA < rankB : a.key < b.key;
+            });
+        }
+
+        // Takes the diff of an instance against its baseline (ADR-0080 §4), as trees, so a value equal to the source's
+        // is never written: each entity of the instance is compared with the baseline's entity of its key, component
+        // by component and field by field.
+        struct Differ
+        {
+            const TypeRegistry& registry;
+            const std::vector<WrittenType>& types;
+            // The host scene's entities, and the baselines'.
+            EntityList& live;
+            EntityList& base;
+            // How the file writes what a field names: an entity by its id or slash path, an asset by its path.
+            const Ser::Resolvers& file;
+            // How an asset is named for a comparison: by its path, with no warning.
+            const Ser::Resolvers& assetPaths;
+            // The prefix naming the entry being written, for the file's warnings.
+            std::string& where;
+            ILogger& logger;
+            std::string_view path;
+            std::vector<Ser::Diagnostic>& diagnostics;
+
+            // How a comparison names what an `entity` field holds: `@` for the instance's root, `@/<key>` for an
+            // entity of the instance, and anything else by a spelling the other side never has, so a field naming
+            // the same place in both compares equal, though each names an entity of its own scene.
+            static Ser::Resolvers Relative(const Ser::Resolvers& assetPaths, EntityList& list, Entity root,
+                                           const std::unordered_map<std::uint32_t, std::string>& keys,
+                                           std::string_view elsewhere)
+            {
+                Ser::Resolvers relative;
+                relative.writeReference = assetPaths.writeReference;
+                relative.writeEntity = [&list, root, &keys, elsewhere](EntityValue target,
+                                                                       const FieldInfo&) -> std::string {
+                    if (target.list == static_cast<void*>(&list))
+                    {
+                        if (target.id == root.GetId())
+                        {
+                            return "@";
+                        }
+                        if (const auto found = keys.find(target.id); found != keys.end())
+                        {
+                            return "@/" + found->second;
+                        }
+                    }
+                    return std::format("{}{}", elsewhere, target.id);
+                };
+                return relative;
+            }
+
+            // Writes into `entry` what `liveEntity` changes of `baseEntity`: `components`, each entry the entity has
+            // that the baseline's lacks whole, or that differs only by its differing fields; then `removed`, the
+            // types of the baseline's it lacks. `label` names the entity in warnings. How many entries it wrote.
+            std::size_t DiffEntity(const Entity& liveEntity, const Entity& baseEntity, const Ser::Resolvers& liveNames,
+                                   const Ser::Resolvers& baseNames, const std::string& label, Ser::Object& entry)
+            {
+                std::vector<Ser::Member> entries;
+                Ser::Array removed;
+                for (const WrittenType& type : types)
+                {
+                    const void* liveValue = live.Get(type.component, liveEntity.GetId());
+                    const void* baseValue = base.Get(type.component, baseEntity.GetId());
+                    if (liveValue == nullptr)
+                    {
+                        if (baseValue != nullptr)
+                        {
+                            removed.Add(std::string(type.type->name));
+                        }
+                        continue;
+                    }
+                    where = std::format("entity `{}`, `{}`: ", label, type.type->name);
+                    if (baseValue == nullptr)
+                    {
+                        entries.push_back(
+                            {std::string(type.type->name),
+                             Entry(type.type->version, Ser::ToTree(liveValue, *type.type, registry, file))});
+                        continue;
+                    }
+                    const Ser::Value liveTree = Ser::ToTree(liveValue, *type.type, registry, liveNames);
+                    const Ser::Value baseTree = Ser::ToTree(baseValue, *type.type, registry, baseNames);
+                    if (liveTree == baseTree)
+                    {
+                        continue;
+                    }
+                    // Against the baseline's value, the fields that differ in bytes; one naming an entity always does,
+                    // since the two are of different scenes, so it is kept only when the comparison's trees differ.
+                    Ser::Value changed = Ser::ToTree(liveValue, *type.type, registry, file, nullptr, baseValue);
+                    std::erase_if(changed.AsObject().members, [&](const Ser::Member& member) {
+                        const Ser::Value* was = baseTree.AsObject().Find(member.key);
+                        const Ser::Value* is = liveTree.AsObject().Find(member.key);
+                        return was == nullptr ? is == nullptr : is != nullptr && *is == *was;
+                    });
+                    if (!changed.AsObject().members.empty())
+                    {
+                        entries.push_back(
+                            {std::string(type.type->name), Entry(type.type->version, std::move(changed))});
+                    }
+                }
+                DiffUnknown(liveEntity, baseEntity, label, entries, removed);
+                const std::size_t count = entries.size();
+                if (!entries.empty())
+                {
+                    SortEntries(entries);
+                    Ser::Object components;
+                    components.members = std::move(entries);
+                    entry.Add("components", std::move(components));
+                }
+                if (!removed.elements.empty())
+                {
+                    entry.Add("removed", std::move(removed));
+                }
+                return count;
+            }
+
+            // Adds to `entries` each component a load kept opaque on `liveEntity` that `baseEntity` does not hold as
+            // it is, as it was read, and to `removed` each `baseEntity` holds and `liveEntity` does not.
+            void DiffUnknown(const Entity& liveEntity, const Entity& baseEntity, const std::string& label,
+                             std::vector<Ser::Member>& entries, Ser::Array& removed)
+            {
+                static const std::vector<UnknownComponent> none;
+                const std::vector<UnknownComponent>& liveKept =
+                    liveEntity.HasComponent<UnknownComponents>()
+                        ? liveEntity.GetComponent<UnknownComponents>().components
+                        : none;
+                const std::vector<UnknownComponent>& baseKept =
+                    baseEntity.HasComponent<UnknownComponents>()
+                        ? baseEntity.GetComponent<UnknownComponents>().components
+                        : none;
+                for (const UnknownComponent& kept : liveKept)
+                {
+                    const auto was = std::ranges::find(baseKept, kept.typeName, &UnknownComponent::typeName);
+                    if ((was != baseKept.end() && was->tree == kept.tree) ||
+                        std::ranges::find(entries, kept.typeName, &Ser::Member::key) != entries.end())
+                    {
+                        continue;
+                    }
+                    Ser::ReadTreeResult tree = Ser::DecodeTree(kept.tree, path, logger);
+                    if (!tree.tree)
+                    {
+                        Detail::Record({.severity = Ser::DiagnosticSeverity::Warning,
+                                        .path = std::string(path),
+                                        .message = std::format("entity `{}`: the kept `{}` is not one whole tree "
+                                                               "encoding; it is left out",
+                                                               label, kept.typeName)},
+                                       logger, diagnostics);
+                        continue;
+                    }
+                    entries.push_back({kept.typeName, std::move(*tree.tree)});
+                }
+                for (const UnknownComponent& kept : baseKept)
+                {
+                    if (std::ranges::find(liveKept, kept.typeName, &UnknownComponent::typeName) == liveKept.end())
+                    {
+                        removed.Add(kept.typeName);
+                    }
+                }
+            }
+
+            // Writes into `block`, the instance `root`'s, its diff against `match`'s baseline: the root's
+            // `components` and `removed`, then `overrides` by key, then `removedEntities`. `label` is the root's id
+            // in the file. How many entries it wrote, the root's in `rootEntries`.
+            std::size_t Diff(Ser::Object& block, const Entity& root, const Detail::InstanceMatch& match,
+                             const std::string& label, std::size_t& rootEntries)
+            {
+                const Detail::InstanceBaseline& baseline = *match.baseline;
+                const Ser::Resolvers liveNames = Relative(assetPaths, live, root, match.keyOf, "live#");
+                const Ser::Resolvers baseNames = Relative(assetPaths, base, baseline.root, baseline.keyOf, "source#");
+                rootEntries = DiffEntity(root, baseline.root, liveNames, baseNames, label, block);
+                std::size_t written = rootEntries;
+
+                Ser::Object overrides;
+                for (const auto& [key, baseEntity] : baseline.keyed)
+                {
+                    const auto liveEntity = match.liveByKey.find(key);
+                    if (liveEntity == match.liveByKey.end() || match.quiet.contains(key))
+                    {
+                        continue;
+                    }
+                    Ser::Object entry;
+                    written += DiffEntity(liveEntity->second, baseEntity, liveNames, baseNames,
+                                          std::format("{}/{}", label, key), entry);
+                    if (!entry.members.empty())
+                    {
+                        overrides.Add(key, std::move(entry));
+                    }
+                }
+                if (!overrides.members.empty())
+                {
+                    block.Add("overrides", std::move(overrides));
+                }
+                if (!match.removed.empty())
+                {
+                    Ser::Array removed;
+                    for (const std::string& key : match.removed)
+                    {
+                        removed.Add(key);
+                    }
+                    block.Add("removedEntities", std::move(removed));
+                }
+                return written;
+            }
+        };
     } // namespace
 
     SceneSaveResult AssetStore::SaveScene(Scene& scene, std::string_view path)
@@ -199,11 +432,14 @@ namespace Fenrir
         }
 
         // The entities the file holds: the subtree's, or every root's in the order of their entity ids, so a scene
-        // saved twice lists them alike.
-        std::vector<Entity> written;
+        // saved twice lists them alike. Each instance's source is expanded fresh, once a save, to diff it against.
+        Detail::InstanceBaselines baselines(
+            [this](Scene& into, std::string_view source) { return ExpandInstance(into, source); });
+        Collector collector{baselines};
+        std::vector<Entity>& written = collector.written;
         if (root)
         {
-            CollectWritten(*root, written, result.entitiesSkipped);
+            collector.Collect(*root);
         }
         else
         {
@@ -219,9 +455,10 @@ namespace Fenrir
             std::ranges::sort(roots);
             for (const std::uint32_t top : roots)
             {
-                CollectWritten(entities.GetEntity(top), written, result.entitiesSkipped);
+                collector.Collect(entities.GetEntity(top));
             }
         }
+        result.entitiesSkipped = collector.skipped;
 
         // Every entity the file holds has an id unique within it before any block is written, so an `entity` field
         // names one written after its own block too. An id is kept by the first entity in file order that has it; a
@@ -285,8 +522,8 @@ namespace Fenrir
             }
             Detail::WarnWrittenNull(
                 std::format("{}`{}` names an entity the file does not hold (one tagged Transient or "
-                            "below one, one outside the subtree saved, one inside an instance with no id in its "
-                            "source, one destroyed, or one of another scene); it is written null",
+                            "below one, one outside the subtree saved, one destroyed, or one of another scene); it "
+                            "is written null",
                             where, field.name),
                 named, *m_state->logger, result.diagnostics, result.nullReferences);
             return {};
@@ -315,6 +552,11 @@ namespace Fenrir
         }
 
         const std::vector<WrittenType> types = WrittenTypes(registry);
+        Differ differ{registry,  types,
+                      entities,  baselines.GetScene().GetEntityList(),
+                      resolvers, assetPaths,
+                      where,     *m_state->logger,
+                      named,     result.diagnostics};
         Ser::Array blocks;
         for (const Entity& entity : written)
         {
@@ -326,13 +568,32 @@ namespace Fenrir
             {
                 block.Add("parent", ids.at(parent.GetId()));
             }
-            // An instance is its source: the block names it, and its components and inner entities are not written.
+            // An instance is its source and a diff: the block names the source, and holds only what the instance
+            // changes of a fresh expansion of it (ADR-0080 §4).
             if (entity.HasComponent<Instance>())
             {
-                block.Add("instance", std::string(entity.GetComponent<Instance>().source));
+                const std::string source = SourceOf(entity);
+                block.Add("instance", source);
+                const Detail::InstanceMatch& match = collector.matches.at(id);
+                std::size_t rootEntries = 0;
+                if (match.baseline != nullptr)
+                {
+                    result.componentsWritten += differ.Diff(block, entity, match, ids.at(id), rootEntries);
+                }
+                else
+                {
+                    // With nothing to diff against, the block names its source alone: what it changed is lost.
+                    Detail::Record({.severity = Ser::DiagnosticSeverity::Warning,
+                                    .path = named,
+                                    .message = std::format("entity `{}`: the instance's source `{}` did not load, so "
+                                                           "no change the instance makes to it is written",
+                                                           ids.at(id), source)},
+                                   *m_state->logger, result.diagnostics);
+                }
                 blocks.Add(std::move(block));
                 ++result.entitiesWritten;
-                result.componentsSkipped += entities.ComponentCountOf(id);
+                const std::size_t count = entities.ComponentCountOf(id);
+                result.componentsSkipped += count - std::min(count, rootEntries);
                 continue;
             }
             std::vector<Ser::Member> entries;
@@ -384,11 +645,7 @@ namespace Fenrir
                     ++kept;
                 }
             }
-            std::ranges::stable_sort(entries, [](const Ser::Member& a, const Ser::Member& b) {
-                const int rankA = Rank(a.key);
-                const int rankB = Rank(b.key);
-                return rankA != rankB ? rankA < rankB : a.key < b.key;
-            });
+            SortEntries(entries);
             Ser::Object components;
             components.members = std::move(entries);
             block.Add("components", std::move(components));
