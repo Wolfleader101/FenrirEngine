@@ -7,6 +7,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -22,6 +23,9 @@ namespace Fenrir
 namespace Fenrir::Detail
 {
     struct AssetStoreState;
+    struct InstanceScope;
+    struct SceneFileRecord;
+
     /** @brief What a file on disk looks like now (its modification time and size); none when it cannot be looked at. */
     [[nodiscard]] std::optional<ReloadWatcher::Stamp> StampOf(const std::filesystem::path& file);
 
@@ -30,8 +34,9 @@ namespace Fenrir::Detail
      * frames, their looks spread across the interval. It decides when a file changed and has settled; the store reloads
      * it. A file is watched under its key, the absolute path the store keys its assets by, with the kind of asset it
      * holds, so each kind reloads its own way: a data asset through its envelope, an imported file through its
-     * importer. A scene file LoadScene filled a scene from is watched apart, under its key alone, outside the asset
-     * kinds: it holds no asset, and a change to it patches the scenes filled from it (ADR-0081 §3).
+     * importer. A scene file LoadScene filled a scene from, or one an instance in such a scene expanded, is watched
+     * apart, under its key alone, outside the asset kinds: it holds no asset, and a change to it patches the scenes
+     * filled from it (ADR-0081 §3) and re-patches its instances (ADR-0081 §4).
      */
     class AssetWatcher
     {
@@ -64,7 +69,7 @@ namespace Fenrir::Detail
         void TrackScene(const std::string& key, std::string name, std::optional<ReloadWatcher::Stamp> stamp,
                         ReloadWatcher::Clock::time_point now);
 
-        /** @brief Stops watching the scene file `key` names: no scene is filled from it any more. */
+        /** @brief Stops watching the scene file `key` names: no scene is filled from it, nor instances it, any more. */
         void ForgetScene(const std::string& key);
 
         /** @brief Whether the scene file `key` names is watched. */
@@ -116,9 +121,21 @@ namespace Fenrir::Detail
     /**
      * @brief Records that LoadScene filled `scene` from the scene file `fileKey` (its asset path `assetPath`, its
      * blocks' ids `fileIds`), with a SceneFileRecord on the scene, and, with the store's watch on, watches the file as
-     * it was at `stamp`, looked at before it was read (ADR-0081 §3).
+     * it was at `stamp`, looked at before it was read (ADR-0081 §3). `scopes` are the instances the read expanded,
+     * whose scene sources are watched too (ADR-0081 §4).
      */
     void RecordSceneFile(const std::shared_ptr<AssetStoreState>& state, Scene& scene, const std::string& fileKey,
                          const std::string& assetPath, std::unordered_set<std::uint64_t> fileIds,
+                         std::unordered_map<std::uint32_t, InstanceScope> scopes,
                          std::optional<ReloadWatcher::Stamp> stamp);
+
+    /**
+     * @brief After a patch or re-patch of `record`'s scene: forgets the instances whose roots are gone, watches each
+     * scene source an instance expanded that is not watched yet, and stops watching each of `before`, the scene
+     * sources watched for the record before, that no record names any more.
+     */
+    void SyncSceneWatches(AssetStoreState& state, SceneFileRecord& record, const std::vector<std::string>& before);
+
+    /** @brief The keys of the scene sources `record`'s instances expanded. */
+    [[nodiscard]] std::vector<std::string> SceneSourceKeys(const SceneFileRecord& record);
 } // namespace Fenrir::Detail

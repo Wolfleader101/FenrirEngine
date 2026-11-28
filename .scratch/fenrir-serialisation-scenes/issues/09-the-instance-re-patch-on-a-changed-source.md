@@ -15,9 +15,9 @@
 
 **Touches:** `packages/FenrirAssets/` (`src/ScenePatch.cpp`, `src/AssetWatcher.*`, `src/AssetStore.cpp`, `Tests/SceneReload.cpp`)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Editing a scene source re-patches two instances of it in a running scene. A field one host overrode keeps its override, and the other host takes the edit.
-- [ ] A run-time child added under an instance survives the re-patch.
-- [ ] A rewritten model source re-spawns its instances under their roots.
-- [ ] A broken source changes nothing and logs once.
+- [x] Editing a scene source re-patches two instances of it in a running scene. A field one host overrode keeps its override, and the other host takes the edit.
+- [x] A run-time child added under an instance survives the re-patch.
+- [x] A rewritten model source re-spawns its instances under their roots.
+- [x] A broken source changes nothing and logs once.

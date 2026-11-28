@@ -20,6 +20,7 @@
 #include "AssetSource.hpp"
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirSerialisation/Bridge.hpp"
+#include "FenrirSerialisation/Value.hpp"
 #include "FenrirTypes/TypeDescription.hpp"
 
 namespace Fenrir::Detail
@@ -39,6 +40,44 @@ namespace Fenrir::Detail
 
     class AssetWatcher;
     struct SceneFileRecord;
+
+    /**
+     * @brief What one instance's expansion read from its source (ADR-0081 §4), which the instance re-patch matches the
+     * source's next read against: the source, and the ids its read gave out. Kept for every instance a recorded scene
+     * expanded, nested ones too, by its root's entity id.
+     */
+    struct InstanceScope
+    {
+        /** @brief The source's asset path, as its Instance names it. */
+        std::string source;
+        /** @brief The source's key, the absolute path its watch is under. */
+        std::string sourceKey;
+        /** @brief Whether the source is a model, which re-spawns, rather than a scene file, which is patched. */
+        bool model = false;
+        /**
+         * @brief The ids of the source's blocks at its last read, or of a model spawn's entities: an entity below the
+         * root holding one is the source's, and any other (a run-time child, or one a host added) is left alone.
+         */
+        std::unordered_set<std::uint64_t> ids;
+        /** @brief The id of the source file's single root block, whose entity is the instance's root; none for a
+         * synthetic root. */
+        std::optional<std::uint64_t> rootId;
+        /**
+         * @brief What a scene source looked like before it was read (its modification time and size), which its watch
+         * starts from; none when it could not be looked at. Spelled apart from ReloadWatcher's stamp, since FenrirCore
+         * is private to FenrirAssets and its tests include this header.
+         */
+        std::optional<std::pair<std::filesystem::file_time_type, std::uintmax_t>> stamp;
+    };
+
+    /** @brief The instances a recorded scene expanded, by their roots' entity ids. */
+    using InstanceScopes = std::unordered_map<std::uint32_t, InstanceScope>;
+
+    /**
+     * @brief The scene sources one re-patch has read, by key, each read once however many instances it has: its tree,
+     * or none when it did not read as a scene, which was said once.
+     */
+    using SourceTrees = std::unordered_map<std::string, std::optional<Serialisation::Value>>;
 
     /**
      * @brief A data asset's instance (ADR-0075): of its file's type, which may extend the type it was loaded as, so it
@@ -151,6 +190,19 @@ namespace Fenrir::Detail
          * so the patch never meets a destroyed scene.
          */
         std::vector<SceneFileRecord*> sceneFiles;
+        /**
+         * @brief While a recorded scene is read or re-patched, where each instance an expansion makes is recorded: the
+         * scene's record's scopes. Null otherwise, so Instantiate and the writer's baselines record nothing.
+         */
+        InstanceScopes* scopeSink = nullptr;
+        /** @brief While a scene patch or instance re-patch runs, the scene sources it has read. */
+        SourceTrees* sourceTrees = nullptr;
+
+        /**
+         * @brief Whether a live record names the file `key`: as the file it filled its scene from, or as a scene
+         * source one of its instances expanded. Its watch stays while one does.
+         */
+        [[nodiscard]] bool RecordNames(const std::string& key) const;
 
         /** @brief The live record `slot` names in `kind`'s table, or null. */
         [[nodiscard]] AssetRecord* Find(AssetKind kind, AssetSlot slot);
@@ -291,6 +343,11 @@ namespace Fenrir::Detail
          * one a save minted into a run-time entity) alone.
          */
         std::unordered_set<std::uint64_t> fileIds;
+        /**
+         * @brief Every instance the scene's file expanded, nested ones too, and those a patch added since: a change to
+         * one's source re-patches it (ADR-0081 §4).
+         */
+        InstanceScopes scopes;
 
         SceneFileRecord(std::weak_ptr<AssetStoreState> owningStore, Scene& filled, std::string key, std::string path)
             : store(std::move(owningStore)), scene(&filled), fileKey(std::move(key)), assetPath(std::move(path))
