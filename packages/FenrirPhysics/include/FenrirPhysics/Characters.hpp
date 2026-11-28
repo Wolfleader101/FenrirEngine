@@ -157,7 +157,10 @@ namespace Fenrir
          * game code, and `state` reset. Enabled again, it finds its contacts and ground where it is that tick, as a
          * teleport does, and is not blended from where it was. */
         bool enabled = true;
-        /** @brief Read-back: overwritten by physics after every move. */
+        /**
+         * @brief Read-back: overwritten by physics after every move, so no scene file holds it.
+         * @transient
+         */
         CharacterState state;
     };
 } // namespace Fenrir

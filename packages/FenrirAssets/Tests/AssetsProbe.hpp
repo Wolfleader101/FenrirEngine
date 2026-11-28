@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <string_view>
 #include <utility>
 
 #include "AssetSource.hpp"
@@ -25,6 +26,15 @@ namespace Fenrir
         [[nodiscard]] static Serialisation::Resolvers WritingResolvers(const AssetStore& store)
         {
             return Detail::WritingResolvers(*store.m_state);
+        }
+
+        /**
+         * @brief Reads the scene file `path` into `scene`, which LoadScene makes itself: so a test can watch the
+         * scene's components before the load fills it.
+         */
+        static SceneLoadResult ReadSceneInto(AssetStore& store, Scene& scene, std::string_view path)
+        {
+            return store.ReadSceneFile(path, [&]() -> Scene& { return scene; }, {}, Detail::SceneRead::Load);
         }
     };
 } // namespace Fenrir

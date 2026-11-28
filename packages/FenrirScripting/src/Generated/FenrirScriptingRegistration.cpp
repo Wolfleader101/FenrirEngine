@@ -11,6 +11,8 @@ namespace Fenrir::Generated
     void RegisterScripting(Fenrir::ScriptingExtension& extension)
     {
         extension.components = {
+            Fenrir::MakeComponent<Fenrir::EntityId>("Fenrir.EntityId"),
+            Fenrir::MakeComponent<Fenrir::Instance>("Fenrir.Instance"),
             Fenrir::MakeComponent<Fenrir::Name>("Fenrir.Name"),
             Fenrir::MakeReadOnlyComponent<Fenrir::Relationship>("Fenrir.Relationship"),
             Fenrir::MakeComponent<Fenrir::Transform>("Fenrir.Transform"),

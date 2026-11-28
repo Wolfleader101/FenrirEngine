@@ -10,6 +10,11 @@ add_library(FenrirECS STATIC
 
     include/FenrirECS/DefaultComponents.hpp
 
+    include/FenrirECS/EntityId.hpp
+    src/EntityId.cpp
+
+    include/FenrirECS/SceneComponents.hpp
+
     include/FenrirECS/WorldTransform.hpp
     src/WorldTransform.cpp
 

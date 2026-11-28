@@ -9,6 +9,8 @@
 #include "FenrirApp/App.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
+#include "FenrirECS/EntityId.hpp"
+#include "FenrirECS/SceneComponents.hpp"
 #include "FenrirScripting/Errors.hpp"
 #include "FenrirScripting/BoundMappings.hpp"
 #include "FenrirScripting/Generated/FenrirMathMappings.hpp"
@@ -26,6 +28,28 @@ struct Iris::StructMapping<Fenrir::Entity>
 };
 static_assert(sizeof(Fenrir::Entity) == 16 && alignof(Fenrir::Entity) == 8,
               "Fenrir::Entity is not the layout FenrirECS.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
+struct Iris::StructMapping<Fenrir::EntityId>
+{
+    static constexpr std::string_view typeName = "Fenrir.Scripting.EntityId";
+    static constexpr auto fields = Iris::StructFields(
+        Iris::Field<std::uint64_t>("Value", 0));
+};
+static_assert(sizeof(Fenrir::EntityId) == 8 && alignof(Fenrir::EntityId) == 8,
+              "Fenrir::EntityId is not the layout FenrirECS.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
+struct Iris::StructMapping<Fenrir::Instance>
+{
+    static constexpr std::string_view typeName = "Fenrir.Scripting.Instance";
+    static constexpr auto fields = Iris::StructFields(
+        Iris::Field<std::uint8_t[256]>("Source", 0));
+};
+static_assert(sizeof(Fenrir::Instance) == 256 && alignof(Fenrir::Instance) == 1,
+              "Fenrir::Instance is not the layout FenrirECS.api.json describes: "
               "regenerate the description, then this binding");
 
 static_assert(sizeof(Fenrir::Math::Quat) == 16 && alignof(Fenrir::Math::Quat) == 4,

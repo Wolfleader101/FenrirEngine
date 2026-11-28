@@ -21,6 +21,20 @@ TEST_CASE("Fenrir::Entity, default-constructed through its registration, has its
     });
 }
 
+TEST_CASE("Fenrir::EntityId, default-constructed through its registration, has its description's defaults", "[types][defaults]")
+{
+    Fenrir::Testing::CheckDefaults(Fenrir::Describe<Fenrir::EntityId>::Description(), {
+        {"value", std::int64_t{0}},
+    });
+}
+
+TEST_CASE("Fenrir::Instance, default-constructed through its registration, has its description's defaults", "[types][defaults]")
+{
+    Fenrir::Testing::CheckDefaults(Fenrir::Describe<Fenrir::Instance>::Description(), {
+        {"source", std::string("")},
+    });
+}
+
 TEST_CASE("Fenrir::Name, default-constructed through its registration, has its description's defaults", "[types][defaults]")
 {
     Fenrir::Testing::CheckDefaults(Fenrir::Describe<Fenrir::Name>::Description(), {

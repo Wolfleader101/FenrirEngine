@@ -1,0 +1,58 @@
+{
+  format: 1,
+  type: "Fenrir::Scene",
+  version: 1,
+  data: {
+    resources: {
+      "AssetsTest::Sky": {
+        cubemap: "sky/day.hdr",
+        exposure: 1.5,
+      },
+    },
+    entities: [
+      {
+        id: "a7k2q",
+        components: {
+          "Fenrir::Name": {name: "Level"},
+          "Fenrir::Transform": {},
+        },
+      },
+      {
+        id: "d4e5f",
+        parent: "a7k2q",
+        components: {
+          "Fenrir::Name": {name: "Player"},
+          "Fenrir::Transform": {
+            pos: [0, 2, 0],
+          },
+          "AssetsTest::Health": {
+            version: 2,
+            current: 75,
+          },
+        },
+      },
+      {
+        id: "m9x1p",
+        parent: "d4e5f",
+        components: {
+          "Fenrir::Name": {name: "Sword"},
+          "Fenrir::Transform": {},
+          "AssetsTest::Follower": {
+            target: "zzzzz",
+            icon: "icons/sword.png",
+          },
+        },
+      },
+      {
+        id: "s3w8c",
+        parent: "a7k2q",
+        components: {
+          "Fenrir::Name": {name: "Sun"},
+          "Fenrir::Transform": {
+            rot: [0, 1, 0, 0],
+          },
+        },
+      },
+    ],
+  },
+}

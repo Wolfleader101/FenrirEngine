@@ -5,6 +5,8 @@ add_library(FenrirDemoScaffold STATIC
     include/FenrirDemoScaffold/DemoUI.hpp
     src/DemoScaffold.cpp
     src/DemoHelpers.cpp
+    src/DemoRoundTrip.hpp
+    src/DemoRoundTrip.cpp
     src/DemoUI.cpp
 )
 target_include_directories(FenrirDemoScaffold PUBLIC include)

@@ -392,7 +392,7 @@ internal sealed class Describer
             try
             {
                 var fieldDoc = FieldDoc(field, $"{name}::{field.Name}");
-                if (LeavesOutAsTransient(name, field, fieldDoc, pending.Role))
+                if (LeavesOutAsTransient(fieldDoc, pending.Role))
                 {
                     continue;
                 }
@@ -521,27 +521,11 @@ internal sealed class Describer
     /// <summary>
     /// Whether a field is left out because <c>@transient</c> marks it: code wiring (a list of callbacks, say) that a data
     /// asset or settings type holds and no file does, its type never read. Those two roles are reached by member, so a
-    /// field left out costs nothing; every other role's fields are its layout, which a binding mirrors whole, and a field
-    /// marked there throws.
+    /// field left out costs nothing. Every other role's fields are its layout, which a binding mirrors whole, so a field
+    /// marked there is kept and recorded as transient instead (read-back state a step writes, which no file holds).
     /// </summary>
-    private bool LeavesOutAsTransient(string typeName, FieldDecl field, DocComment.FieldDoc doc, Role role)
-    {
-        var subject = $"{typeName}::{field.Name}";
-        if (!doc.Transient)
-        {
-            return false;
-        }
-
-        if (role is Role.DataAsset or Role.Settings)
-        {
-            return true;
-        }
-
-        var phrase = Roles.Phrase(role);
-        throw Error(field, subject,
-                    $"@transient on a field, which {phrase} cannot leave out: a field marked @transient is code wiring " +
-                    $"a data asset or settings type holds, and {phrase}'s fields are its layout");
-    }
+    private static bool LeavesOutAsTransient(DocComment.FieldDoc doc, Role role) =>
+        doc.Transient && role is Role.DataAsset or Role.Settings;
 
     private FieldDescription DescribeField(string typeName, FieldDecl field, DocComment.FieldDoc doc)
     {
@@ -589,6 +573,7 @@ internal sealed class Describer
         {
             Formerly = doc.Formerly,
             Metadata = doc.Metadata,
+            Transient = doc.Transient,
         };
     }
 

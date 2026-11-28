@@ -264,6 +264,24 @@ namespace BridgeTest
         .defaultAlternative = 0,
     };
 
+    // Shape's layout under a tag field named as the engine's generated unions name theirs (`m_type`), which a file
+    // still spells `kind`.
+    inline const TypeDescription PrivateTagShapeDescription{
+        .name = "BridgeTest::PrivateTagShape",
+        .package = "FenrirSerialisationTests",
+        .role = Role::Nested,
+        .size = sizeof(Shape),
+        .alignment = alignof(Shape),
+        .construct = Fenrir::ConstructValue<Shape>,
+        .destroy = Fenrir::DestroyValue<Shape>,
+        .tag = {.name = "m_type",
+                .type = {.kind = Kind::Enum, .type = &ShapeKindDescription, .unionTag = true},
+                .offset = offsetof(Shape, kind)},
+        .unionOffset = offsetof(Shape, box),
+        .alternatives = ShapeAlternatives,
+        .defaultAlternative = 0,
+    };
+
     inline constexpr ValueType FixedLayersType{.kind = Kind::Array, .element = &U32, .count = 3};
     inline constexpr ValueType FixedMasksType{.kind = Kind::Array, .element = &U32, .count = 2};
 
@@ -458,14 +476,63 @@ namespace BridgeTest
         .visit = VisitRoster,
     };
 
+    // Read-back state a step writes: `state` is transient, kept in the layout but never written or read.
+    struct Sensed
+    {
+        std::int32_t speed = 0;
+        Range state;
+    };
+
+    // A component holding Sensed, which is equal to its default when only its transient field differs.
+    struct Sensor
+    {
+        Sensed sensed;
+    };
+
+    inline constexpr ValueType StateType{.kind = Kind::Struct, .type = &RangeDescription};
+
+    inline const FieldInfo SensedFields[] = {
+        {.name = "speed", .type = I32, .offset = offsetof(Sensed, speed)},
+        {.name = "state", .type = StateType, .offset = offsetof(Sensed, state), .transient = true},
+    };
+
+    inline const TypeDescription SensedDescription{
+        .name = "BridgeTest::Sensed",
+        .package = "FenrirSerialisationTests",
+        .role = Role::Nested,
+        .size = sizeof(Sensed),
+        .alignment = alignof(Sensed),
+        .construct = Fenrir::ConstructValue<Sensed>,
+        .destroy = Fenrir::DestroyValue<Sensed>,
+        .fields = SensedFields,
+    };
+
+    inline constexpr ValueType SensedType{.kind = Kind::Struct, .type = &SensedDescription};
+
+    inline const FieldInfo SensorFields[] = {
+        {.name = "sensed", .type = SensedType, .offset = offsetof(Sensor, sensed)},
+    };
+
+    inline const TypeDescription SensorDescription{
+        .name = "BridgeTest::Sensor",
+        .package = "FenrirSerialisationTests",
+        .role = Role::Component,
+        .size = sizeof(Sensor),
+        .alignment = alignof(Sensor),
+        .construct = Fenrir::ConstructValue<Sensor>,
+        .destroy = Fenrir::DestroyValue<Sensor>,
+        .fields = SensorFields,
+    };
+
     // Adds the types above to `registry`, as a package's generated registration would; whether every one was added.
     inline bool RegisterBridgeTypes(Fenrir::TypeRegistry& registry)
     {
         bool registered = true;
         for (const TypeDescription* description :
              {&MobilityDescription, &Vec3Description, &RangeDescription, &ShapeKindDescription, &BoxShapeDescription,
-              &SphereShapeDescription, &ShapeDescription, &FixedDescription, &OwnedDescription, &RenamedDescription,
-              &LinkedDescription, &RosterDescription})
+              &SphereShapeDescription, &ShapeDescription, &PrivateTagShapeDescription, &FixedDescription,
+              &OwnedDescription, &RenamedDescription, &LinkedDescription, &RosterDescription, &SensedDescription,
+              &SensorDescription})
             registered = registry.Register(*description) && registered;
         return registered;
     }

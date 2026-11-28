@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
 #include <cstdint>
 #include <format>
+#include <functional>
 #include <iterator>
 #include <limits>
 #include <memory>
@@ -14,6 +16,8 @@
 #include <vector>
 
 #include "AssetStoreState.hpp"
+#include "FenrirECS/DefaultComponents.hpp"
+#include "FenrirECS/SceneComponents.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirSerialisation/Bridge.hpp"
 #include "FenrirSerialisation/ReadTree.hpp"
@@ -30,85 +34,6 @@ namespace Fenrir::Detail
     namespace
     {
         namespace Ser = Serialisation;
-
-        // The envelope's file format version (ADR-0077 §2): the one this reader reads.
-        constexpr std::uint64_t EnvelopeFormat = 1;
-
-        // How a diagnostic names what it found: the node's kind, with a string's or number's text.
-        std::string Found(const Ser::Value* node)
-        {
-            if (node == nullptr)
-            {
-                return "none";
-            }
-            switch (node->Kind())
-            {
-            case Ser::ValueKind::Object:
-                return "an object";
-            case Ser::ValueKind::Array:
-                return "an array";
-            case Ser::ValueKind::String:
-                return std::format("\"{}\"", node->AsString());
-            case Ser::ValueKind::Number: {
-                const Ser::Number& number = node->AsNumber();
-                switch (number.Width())
-                {
-                case Ser::NumberWidth::Signed:
-                    return std::to_string(number.AsSigned());
-                case Ser::NumberWidth::Unsigned:
-                    return std::to_string(number.AsUnsigned());
-                default:
-                    return "a fractional number";
-                }
-            }
-            case Ser::ValueKind::Bool:
-                return node->AsBool() ? "true" : "false";
-            case Ser::ValueKind::Null:
-                return "null";
-            }
-            return "a value";
-        }
-
-        // A whole number from 1 up to `max`, as text reads it signed and code may build it unsigned; none for any other
-        // node.
-        std::optional<std::uint64_t> PositiveWhole(const Ser::Value* node, std::uint64_t max)
-        {
-            if (node == nullptr || node->Kind() != Ser::ValueKind::Number)
-            {
-                return std::nullopt;
-            }
-            const Ser::Number& number = node->AsNumber();
-            if (number.Width() == Ser::NumberWidth::Signed && number.AsSigned() >= 1 &&
-                static_cast<std::uint64_t>(number.AsSigned()) <= max)
-            {
-                return static_cast<std::uint64_t>(number.AsSigned());
-            }
-            if (number.Width() == Ser::NumberWidth::Unsigned && number.AsUnsigned() >= 1 && number.AsUnsigned() <= max)
-            {
-                return number.AsUnsigned();
-            }
-            return std::nullopt;
-        }
-
-        // A located diagnostic of the reader's own, at `node`, or at `fallback` when the node is missing or built in
-        // code.
-        Ser::Diagnostic LocatedAt(Ser::DiagnosticSeverity severity, std::string_view path, const Ser::Value* node,
-                                  const Ser::Value& fallback, std::string message)
-        {
-            const Ser::Value& at = node != nullptr && node->location ? *node : fallback;
-            Ser::Diagnostic diagnostic{.severity = severity, .path = std::string(path), .message = std::move(message)};
-            if (at.location)
-            {
-                diagnostic.line = at.location->line;
-                diagnostic.column = at.location->column;
-            }
-            return diagnostic;
-        }
-
-        void Append(std::vector<Ser::Diagnostic>& to, std::vector<Ser::Diagnostic>&& from)
-        {
-            to.insert(to.end(), std::make_move_iterator(from.begin()), std::make_move_iterator(from.end()));
-        }
 
         // The string node under `node` whose text is the one at `text`: the bridge hands a resolver the node's own
         // text, so its address finds the node, and with it the line and column. Null when none is.
@@ -141,14 +66,6 @@ namespace Fenrir::Detail
             }
         }
 
-        // A reference the file names that is left empty, refused by the path rules or naming no fitting target: where
-        // its text is, so its error is located at its string, and the error's message.
-        struct EmptiedReference
-        {
-            const char* text = nullptr;
-            std::string message;
-        };
-
         // How a diagnostic about the entry `name` starts: the sub-asset's name, or nothing for the file's top level.
         std::string EntryPrefix(std::string_view name)
         {
@@ -161,6 +78,169 @@ namespace Fenrir::Detail
             return part.size() == 2 && part[1] == ':' && std::isalpha(static_cast<unsigned char>(part[0])) != 0;
         }
     } // namespace
+
+    std::string Found(const Ser::Value* node)
+    {
+        if (node == nullptr)
+        {
+            return "none";
+        }
+        switch (node->Kind())
+        {
+        case Ser::ValueKind::Object:
+            return "an object";
+        case Ser::ValueKind::Array:
+            return "an array";
+        case Ser::ValueKind::String:
+            return std::format("\"{}\"", node->AsString());
+        case Ser::ValueKind::Number: {
+            const Ser::Number& number = node->AsNumber();
+            switch (number.Width())
+            {
+            case Ser::NumberWidth::Signed:
+                return std::to_string(number.AsSigned());
+            case Ser::NumberWidth::Unsigned:
+                return std::to_string(number.AsUnsigned());
+            default:
+                return "a fractional number";
+            }
+        }
+        case Ser::ValueKind::Bool:
+            return node->AsBool() ? "true" : "false";
+        case Ser::ValueKind::Null:
+            return "null";
+        }
+        return "a value";
+    }
+
+    std::optional<std::uint64_t> PositiveWhole(const Ser::Value* node, std::uint64_t max)
+    {
+        if (node == nullptr || node->Kind() != Ser::ValueKind::Number)
+        {
+            return std::nullopt;
+        }
+        const Ser::Number& number = node->AsNumber();
+        if (number.Width() == Ser::NumberWidth::Signed && number.AsSigned() >= 1 &&
+            static_cast<std::uint64_t>(number.AsSigned()) <= max)
+        {
+            return static_cast<std::uint64_t>(number.AsSigned());
+        }
+        if (number.Width() == Ser::NumberWidth::Unsigned && number.AsUnsigned() >= 1 && number.AsUnsigned() <= max)
+        {
+            return number.AsUnsigned();
+        }
+        return std::nullopt;
+    }
+
+    Ser::Diagnostic LocatedAt(Ser::DiagnosticSeverity severity, std::string_view path, const Ser::Value* node,
+                              const Ser::Value& fallback, std::string message)
+    {
+        const Ser::Value& at = node != nullptr && node->location ? *node : fallback;
+        Ser::Diagnostic diagnostic{.severity = severity, .path = std::string(path), .message = std::move(message)};
+        if (at.location)
+        {
+            diagnostic.line = at.location->line;
+            diagnostic.column = at.location->column;
+        }
+        return diagnostic;
+    }
+
+    void Append(std::vector<Ser::Diagnostic>& to, std::vector<Ser::Diagnostic>&& from)
+    {
+        to.insert(to.end(), std::make_move_iterator(from.begin()), std::make_move_iterator(from.end()));
+    }
+
+    void Record(Ser::Diagnostic diagnostic, ILogger& logger, std::vector<Ser::Diagnostic>& diagnostics)
+    {
+        if (diagnostic.severity == Ser::DiagnosticSeverity::Error)
+        {
+            logger.Error("{}", Ser::FormatDiagnostic(diagnostic));
+        }
+        else
+        {
+            logger.Warn("{}", Ser::FormatDiagnostic(diagnostic));
+        }
+        diagnostics.push_back(std::move(diagnostic));
+    }
+
+    std::optional<std::string> FormatProblem(const Ser::Value* format)
+    {
+        if (PositiveWhole(format, EnvelopeFormat) == EnvelopeFormat)
+        {
+            return std::nullopt;
+        }
+        return std::format("expected `format` {}, found {}", EnvelopeFormat, Found(format));
+    }
+
+    std::optional<SceneEnvelopeProblem> CheckSceneEnvelope(Ser::Value& root, Ser::Value*& data)
+    {
+        if (root.Kind() != Ser::ValueKind::Object)
+        {
+            return SceneEnvelopeProblem{&root, std::format("expected a scene envelope object, found {}", Found(&root))};
+        }
+        Ser::Object& envelope = root.AsObject();
+        const Ser::Value* format = envelope.Find("format");
+        if (std::optional<std::string> problem = FormatProblem(format))
+        {
+            return SceneEnvelopeProblem{format, std::move(*problem)};
+        }
+        const Ser::Value* type = envelope.Find("type");
+        if (type == nullptr || type->Kind() != Ser::ValueKind::String || type->AsString() != SceneTypeName)
+        {
+            return SceneEnvelopeProblem{type,
+                                        std::format("expected `type` \"{}\", found {}", SceneTypeName, Found(type))};
+        }
+        const Ser::Value* version = envelope.Find("version");
+        if (PositiveWhole(version, SceneVersion) == std::nullopt)
+        {
+            return SceneEnvelopeProblem{version,
+                                        std::format("expected `version`, the scene layout's, from 1 up to {}, found {}",
+                                                    SceneVersion, Found(version))};
+        }
+        data = envelope.Find("data");
+        if (data == nullptr || data->Kind() != Ser::ValueKind::Object)
+        {
+            return SceneEnvelopeProblem{
+                data, std::format("expected `data`, an object of `resources` and `entities`, found {}", Found(data))};
+        }
+        return std::nullopt;
+    }
+
+    std::function<std::string(ReferenceValue, const FieldInfo&)> CheckedReferenceWriter(
+        const Ser::Resolvers& inner, const std::string& where, std::string_view path, ILogger& logger,
+        std::vector<Ser::Diagnostic>& diagnostics, std::size_t& nulled)
+    {
+        return [&inner, &where, path, &logger, &diagnostics, &nulled](ReferenceValue reference,
+                                                                      const FieldInfo& field) -> std::string {
+            std::string named = inner.writeReference ? inner.writeReference(reference, field) : std::string();
+            std::optional<std::string> problem;
+            if (named.empty())
+            {
+                problem = std::format("{}`{}` names an asset with no asset path (one added with no name, or freed); it "
+                                      "is written null",
+                                      where, field.name);
+            }
+            else if (std::optional<std::string> refused = FilePathProblem(named))
+            {
+                problem = std::format("{}`{}` names \"{}\", which {}; it is written null", where, field.name, named,
+                                      *refused);
+            }
+            if (!problem)
+            {
+                return named;
+            }
+            WarnWrittenNull(std::move(*problem), path, logger, diagnostics, nulled);
+            return {};
+        };
+    }
+
+    void WarnWrittenNull(std::string message, std::string_view path, ILogger& logger,
+                         std::vector<Ser::Diagnostic>& diagnostics, std::size_t& nulled)
+    {
+        Record({.severity = Ser::DiagnosticSeverity::Warning, .path = std::string(path), .message = std::move(message)},
+               logger, diagnostics);
+        ++nulled;
+    }
 
     std::optional<std::string> FilePathProblem(std::string_view path)
     {
@@ -193,6 +273,57 @@ namespace Fenrir::Detail
         return std::nullopt;
     }
 
+    std::function<std::optional<ReferenceValue>(std::string_view, const FieldInfo&)> CheckedReferenceReader(
+        const std::function<ReferenceRead(std::string_view, const FieldInfo&)>& read, const std::string& where,
+        ReferenceReading& reading)
+    {
+        // Every path the entry names passes the path rules before the store sees it (ADR-0076): a refused one is left
+        // empty with the reader's own located error, and with no store to ask a path is unresolved, as the bridge
+        // counts one. A target the store finds none for, or one of the wrong kind or type, is left empty with one
+        // located error saying what was expected and what was found.
+        return [&read, &where, &reading](std::string_view reference,
+                                         const FieldInfo& field) -> std::optional<ReferenceValue> {
+            if (std::optional<std::string> problem = FilePathProblem(reference))
+            {
+                reading.emptied.push_back(
+                    {reference.data(),
+                     std::format("{}expected `{}` to name an asset path under the asset root, found \"{}\", which "
+                                 "{}; it is left empty",
+                                 where, field.name, reference, *problem)});
+                return ReferenceValue{};
+            }
+            if (!read)
+            {
+                reading.unresolved = true;
+                return ReferenceValue{};
+            }
+            ReferenceRead target = read(reference, field);
+            if (!target.problem.empty())
+            {
+                reading.emptied.push_back(
+                    {reference.data(), std::format("{}`{}` names \"{}\": {}; it is left empty", where, field.name,
+                                                   reference, target.problem)});
+                return ReferenceValue{};
+            }
+            reading.named.emplace_back(target.kind, AssetSlot{target.value.index, target.value.generation});
+            return target.value;
+        };
+    }
+
+    std::size_t ReportEmptied(ReferenceReading& reading, const Ser::Value& data, std::string_view path, ILogger& logger,
+                              std::vector<Ser::Diagnostic>& diagnostics)
+    {
+        const std::size_t count = reading.emptied.size();
+        for (EmptiedReference& reference : reading.emptied)
+        {
+            Record(LocatedAt(Ser::DiagnosticSeverity::Error, path, StringAt(data, reference.text), data,
+                             std::move(reference.message)),
+                   logger, diagnostics);
+        }
+        reading.emptied.clear();
+        return count;
+    }
+
     namespace
     {
         // What every step of one envelope's read shares: the file's path its diagnostics name, where types are found,
@@ -208,8 +339,7 @@ namespace Fenrir::Detail
             // Logs `error`, one of the reader's own that fails no read, and records it with the file's diagnostics.
             void Report(Ser::Diagnostic error) const
             {
-                logger.Error("{}", Ser::FormatDiagnostic(error));
-                diagnostics.push_back(std::move(error));
+                Record(std::move(error), logger, diagnostics);
             }
         };
 
@@ -311,53 +441,18 @@ namespace Fenrir::Detail
                 Ser::Upgrade(reader.registry, entry.type->name, entry.version, data, reader.path, reader.logger);
             Append(reader.diagnostics, std::move(upgraded.diagnostics));
 
-            // Every path the entry names passes the path rules before the store sees it (ADR-0076): a refused one is
-            // left empty with the reader's own located error, and with no store to ask a path is unresolved, as the
-            // bridge counts one. A target the store finds none for, or one of the wrong kind or type, is left empty
-            // with one located error saying what was expected and what was found. No entity callbacks are given: a
-            // data asset holds no entity (ADR-0075).
-            std::vector<EmptiedReference> emptied;
-            std::vector<std::pair<AssetKind, AssetSlot>> named;
-            bool unresolved = false;
+            // No entity callbacks are given: a data asset holds no entity (ADR-0075).
+            ReferenceReading reading;
             Ser::Resolvers checked;
-            checked.readReference = [&](std::string_view reference,
-                                        const FieldInfo& field) -> std::optional<ReferenceValue> {
-                if (std::optional<std::string> problem = FilePathProblem(reference))
-                {
-                    emptied.push_back(
-                        {reference.data(),
-                         std::format("{}expected `{}` to name an asset path under the asset root, found \"{}\", which "
-                                     "{}; it is left empty",
-                                     where, field.name, reference, *problem)});
-                    return ReferenceValue{};
-                }
-                if (!reader.hooks.readReference)
-                {
-                    unresolved = true;
-                    return ReferenceValue{};
-                }
-                ReferenceRead target = reader.hooks.readReference(reference, field);
-                if (!target.problem.empty())
-                {
-                    emptied.push_back({reference.data(), std::format("{}`{}` names \"{}\": {}; it is left empty", where,
-                                                                     field.name, reference, target.problem)});
-                    return ReferenceValue{};
-                }
-                named.emplace_back(target.kind, AssetSlot{target.value.index, target.value.generation});
-                return target.value;
-            };
+            checked.readReference = CheckedReferenceReader(reader.hooks.readReference, where, reading);
 
             auto instance = std::make_unique<DataValue>(*entry.type);
             Ser::BridgeResult bridged =
                 Ser::FromTree(data, *entry.type, reader.registry, checked, instance->value, reader.path, reader.logger);
             Append(reader.diagnostics, std::move(bridged.diagnostics));
-            for (EmptiedReference& reference : emptied)
-            {
-                reader.Report(LocatedAt(Ser::DiagnosticSeverity::Error, reader.path, StringAt(data, reference.text),
-                                        data, std::move(reference.message)));
-            }
+            ReportEmptied(reading, data, reader.path, reader.logger, reader.diagnostics);
             return {AssetBox(instance.release(), &DestroyAssetData<DataValue>),
-                    bridged.status == Ser::BridgeStatus::Partial || unresolved, std::move(named)};
+                    bridged.status == Ser::BridgeStatus::Partial || reading.unresolved, std::move(reading.named)};
         }
 
         // Why `name` cannot name a sub-asset, or none: Load splits a path at its last `#`, so no path names a
@@ -409,11 +504,10 @@ namespace Fenrir::Detail
         Ser::Object& envelope = tree.tree->AsObject();
 
         const Ser::Value* format = envelope.Find("format");
-        if (PositiveWhole(format, EnvelopeFormat) != EnvelopeFormat)
+        if (std::optional<std::string> problem = FormatProblem(format))
         {
             return fail(LoadFailure::ImportFailed,
-                        LocatedAt(Ser::DiagnosticSeverity::Error, path, format, root,
-                                  std::format("expected `format` {}, found {}", EnvelopeFormat, Found(format))));
+                        LocatedAt(Ser::DiagnosticSeverity::Error, path, format, root, std::move(*problem)));
         }
 
         // `sub` maps each sub-asset's name, unique within the file (the parser keeps a repeated key's first), to its
@@ -583,32 +677,8 @@ namespace Fenrir::Detail
         // A reference is written as the path the store names it by, unless it has none a file can hold: then it is
         // `null`, with one warning, and counted (ADR-0079).
         Ser::Resolvers counting = resolvers;
-        counting.writeReference = [&](ReferenceValue reference, const FieldInfo& field) -> std::string {
-            std::string written = resolvers.writeReference ? resolvers.writeReference(reference, field) : std::string();
-            std::optional<std::string> problem;
-            if (written.empty())
-            {
-                problem = std::format("{}`{}` names an asset with no asset path (one added with no name, or freed); it "
-                                      "is written null",
-                                      where, field.name);
-            }
-            else if (std::optional<std::string> refused = FilePathProblem(written))
-            {
-                problem = std::format("{}`{}` names \"{}\", which {}; it is written null", where, field.name, written,
-                                      *refused);
-            }
-            if (!problem)
-            {
-                return written;
-            }
-            Ser::Diagnostic warning{.severity = Ser::DiagnosticSeverity::Warning,
-                                    .path = std::string(path),
-                                    .message = std::move(*problem)};
-            logger.Warn("{}", Ser::FormatDiagnostic(warning));
-            write.diagnostics.push_back(std::move(warning));
-            ++write.emptyReferences;
-            return {};
-        };
+        counting.writeReference =
+            CheckedReferenceWriter(resolvers, where, path, logger, write.diagnostics, write.emptyReferences);
 
         Ser::Object envelope;
         if (top != nullptr)
@@ -674,5 +744,102 @@ namespace Fenrir::Detail
             write.tree.leadingComments = prior->leadingComments;
         }
         return write;
+    }
+    int EntryRank(std::string_view name)
+    {
+        return name == NameType ? 0 : name == TransformType ? 1 : 2;
+    }
+
+    std::vector<WrittenType> WrittenTypes(const TypeRegistry& registry)
+    {
+        std::vector<WrittenType> written;
+        for (const TypeDescription* type : registry.Types(Role::Component))
+        {
+            if (type->transient || std::ranges::find(SpelledApart, type->name) != std::end(SpelledApart))
+            {
+                continue;
+            }
+            // A component type no package attached a ComponentType to cannot be reached on an entity, so it is never
+            // found there to write.
+            if (std::optional<ComponentType> component = ComponentType::ForName(registry, type->name))
+            {
+                written.push_back({type, *component});
+            }
+        }
+        std::ranges::sort(written, [](const WrittenType& a, const WrittenType& b) {
+            const int rankA = EntryRank(a.type->name);
+            const int rankB = EntryRank(b.type->name);
+            return rankA != rankB ? rankA < rankB : a.type->name < b.type->name;
+        });
+        return written;
+    }
+
+    void ForEachInInstance(const Entity& root, const std::function<void(const Entity&)>& visit)
+    {
+        root.ForEachChild([&](const Entity& child) {
+            visit(child);
+            // A nested instance's root is in this scope; what is below it is in its own.
+            if (!child.HasComponent<Instance>())
+            {
+                ForEachInInstance(child, visit);
+            }
+        });
+    }
+
+    Entity FindInInstance(const Entity& root, EntityId id)
+    {
+        Entity found;
+        ForEachInInstance(root, [&](const Entity& entity) {
+            if (!found.IsValid() && entity.HasComponent<EntityId>() &&
+                entity.GetComponent<EntityId>().value == id.value)
+            {
+                found = entity;
+            }
+        });
+        return found;
+    }
+
+    std::optional<Instance> InstanceOf(std::string_view source)
+    {
+        Instance instance;
+        if (source.size() >= sizeof(instance.source))
+        {
+            return std::nullopt;
+        }
+        source.copy(instance.source, source.size());
+        return instance;
+    }
+
+    bool InsideInstance(const Entity& entity)
+    {
+        for (Entity above = entity.GetComponent<Relationship>().parent; above.IsValid();
+             above = above.GetComponent<Relationship>().parent)
+        {
+            if (above.HasComponent<Instance>())
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    Entity FollowSlashPath(Entity top, std::string_view rest)
+    {
+        while (top.IsValid() && top.HasComponent<Instance>())
+        {
+            const std::size_t slash = rest.find('/');
+            const std::optional<EntityId> id = ParseEntityId(rest.substr(0, slash));
+            if (!id)
+            {
+                return {};
+            }
+            top = FindInInstance(top, *id);
+            if (slash == std::string_view::npos)
+            {
+                return top;
+            }
+            rest.remove_prefix(slash + 1);
+        }
+        return {};
     }
 } // namespace Fenrir::Detail

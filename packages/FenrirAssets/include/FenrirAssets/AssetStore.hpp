@@ -4,11 +4,13 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -20,9 +22,12 @@
 #include "FenrirAssets/ImageData.hpp"
 #include "FenrirAssets/InstanceListData.hpp"
 #include "FenrirAssets/MaterialData.hpp"
+#include "FenrirAssets/ModelSpawner.hpp"
 #include "FenrirAssets/ShaderContainer.hpp"
 #include "FenrirAssets/SkeletonData.hpp"
 #include "FenrirAssets/SpawnNodes.hpp"
+#include "FenrirECS/Entity.hpp"
+#include "FenrirECS/EntityId.hpp"
 #include "FenrirMath/Colour.hpp"
 #include "FenrirMath/Math.hpp"
 #include "FenrirSerialisation/Diagnostic.hpp"
@@ -30,11 +35,18 @@
 
 namespace Fenrir
 {
+    class App;
     class ILogger;
     class Scene;
     class TypeRegistry;
+    struct FieldInfo;
     /** @brief FenrirAssets's tests' way inside the store (Tests/AssetsProbe.hpp): no part of its interface. */
     struct AssetsProbe;
+
+    namespace Serialisation
+    {
+        class Value;
+    } // namespace Serialisation
 
     namespace Detail
     {
@@ -42,6 +54,7 @@ namespace Fenrir
         struct AssetStoreState;
         struct AssetRecord;
         struct EnvelopeRead;
+        struct ReferenceRead;
 
         /** @brief An asset handle without its type: what the store's untyped core works with. */
         struct AssetSlot
@@ -61,6 +74,38 @@ namespace Fenrir
 
         /** @brief What a check found that leaves the data usable, one message each, logged as warnings. */
         using AssetWarnings = std::vector<std::string>;
+
+        /** @brief Which door a scene read serves, which decides what it does with the file's `resources` and ids. */
+        enum class SceneRead
+        {
+            /** @brief LoadScene: the file's resources are applied to the scene. */
+            Load,
+            /**
+             * @brief LoadSceneInto: the scene's own resources stand, each of the file's counted as skipped, and a
+             * block's id an entity of the scene already has is re-minted.
+             */
+            Merge,
+            /**
+             * @brief Instantiate: resources as a merge's, and every block keeps the file's id, since ids inside an
+             * instance are scoped by its root and repeat in every instance of the file (ADR-0080 §2).
+             */
+            Instance,
+            /**
+             * @brief The scene patch (ADR-0081 §3): the file read again into the scene LoadScene filled from it. A
+             * block whose id an entity of the scene holds (outside any instance) fills that entity, each component the
+             * block writes reset to its defaults and read again, its parent and order restored; any other block is
+             * added as a load adds it, and the file's resources are rewritten.
+             */
+            Patch,
+            /**
+             * @brief The instance re-patch (ADR-0081 §4): an instance's source read again into the instance, its root
+             * the merge's parent. A block whose id an entity below the root holds, of the ids the source's last read
+             * gave out, fills that entity as a patch does; the source's single root block fills the root itself; any
+             * other block is added as an instance read adds it, keeping its id; and the source's resources are
+             * skipped, as an instance's are.
+             */
+            Repatch,
+        };
 
         /**
          * @name Checks before the store takes data
@@ -312,6 +357,141 @@ namespace Fenrir
          * name, or freed) or whose path a file cannot hold (an imported asset loaded from outside the asset root).
          */
         std::size_t emptyReferences = 0;
+    };
+
+    /**
+     * @brief What AssetStore::SaveScene gives back (ADR-0078, ADR-0079): how it went, what it wrote, what it left out,
+     * and the diagnostics. Named apart from a data asset's SaveResult, whose file holds no entities.
+     */
+    struct SceneSaveResult
+    {
+        /**
+         * @brief Succeeded when the file was written with every reference naming its target; Partial when it was
+         * written with references written `null` (`nullReferences`), or with a component a load kept left out
+         * (`keptComponentsLost`); Failed when nothing was written. Leaving out what a scene file never holds makes no
+         * save Partial.
+         */
+        SaveStatus status = SaveStatus::Succeeded;
+        /** @brief The entities written, one block apiece. */
+        std::size_t entitiesWritten = 0;
+        /**
+         * @brief The components written, an entry apiece under their entities' `components`: the described ones, and
+         * each kept opaque in an `UnknownComponents` by a load, written back as it was read.
+         */
+        std::size_t componentsWritten = 0;
+        /** @brief The entities left out: each tagged `Transient`, and every entity below one. */
+        std::size_t entitiesSkipped = 0;
+        /**
+         * @brief The components of written entities left out of `components`: undescribed ones, `Relationship`, those
+         * of a `@transient` type, `EntityId` and `Instance`, which a block spells as its `id` and `instance`, and
+         * `UnknownComponents`, whose entries are written in its place, and each of those entries that could not be.
+         */
+        std::size_t componentsSkipped = 0;
+        /**
+         * @brief The components a load kept in an `UnknownComponents` that could not be written back, each with a
+         * warning: one whose name a component the entity has now holds, or whose bytes do not decode.
+         */
+        std::size_t keptComponentsLost = 0;
+        /**
+         * @brief The references written `null` for want of a target the file can name: an `entity` field naming an
+         * entity outside the file, and an asset handle field naming an asset with no asset path a file can hold.
+         */
+        std::size_t nullReferences = 0;
+        /**
+         * @brief Each diagnostic of the save, already logged once, naming the file: why it was refused, or each
+         * reference written `null`. Each is at line 1, column 1, as SaveResult's are.
+         */
+        std::vector<Serialisation::Diagnostic> diagnostics;
+    };
+
+    /**
+     * @brief What AssetStore::LoadScene and AssetStore::LoadSceneInto give back (ADR-0078, ADR-0079): how it went, the
+     * scene it filled and the file's top-level entities, what it read and what it could not, and the located
+     * diagnostics.
+     */
+    struct SceneLoadResult
+    {
+        /**
+         * @brief Succeeded when the whole file loaded; Partial when the scene was made and filled with a diagnostic to
+         * report (a component kept unknown, a field dropped, a reference emptied, a resource skipped, a block that did
+         * not read whole); Failed when no scene was made: the file is missing, is not a scene envelope (it did not
+         * parse, or names another `type`, or a newer layout), or its path is outside the asset root.
+         */
+        LoadStatus status = LoadStatus::Succeeded;
+        /** @brief The scene made and filled, or merged into; null when the load failed. */
+        Scene* scene = nullptr;
+        /**
+         * @brief The entities of the blocks with no parent (or none the file holds), in the file's order: the top of a
+         * loaded scene, or what a merge appended under its parent.
+         */
+        std::vector<Entity> roots;
+        /**
+         * @brief The entities made: a block apiece, and every entity an instance block expanded to, the synthetic root
+         * of a source with several roots included.
+         */
+        std::size_t entities = 0;
+        /**
+         * @brief The blocks left out with an error: each instance block whose source is the file being read or a file
+         * instancing it, directly or through a chain (ADR-0080 §5).
+         */
+        std::size_t entitiesSkipped = 0;
+        /** @brief The components added and filled, under the blocks' `components`. */
+        std::size_t components = 0;
+        /**
+         * @brief The components whose type the registry lacks as a component, kept opaque in their entity's
+         * `UnknownComponents` and written back unchanged by SaveScene.
+         */
+        std::size_t unknownComponentsKept = 0;
+        /**
+         * @brief The values of components and resources left at their defaults: keys naming no field (or a transient
+         * one), and values that could not be read.
+         */
+        std::size_t fieldsDropped = 0;
+        /**
+         * @brief The `entity` and asset handle values left empty: an id no block has, an asset path refused or naming
+         * nothing that loads as the field's target.
+         */
+        std::size_t referencesEmptied = 0;
+        /**
+         * @brief The `resources` entries left unapplied: those whose type the registry lacks as a scene resource,
+         * dropped with a warning, and on a merge every entry, with no diagnostic, since the target scene's resources
+         * stand.
+         */
+        std::size_t resourcesSkipped = 0;
+        /**
+         * @brief Every located diagnostic of the load, in the order found, each already logged once through the
+         * store's logger: the text's, the upgraders', the bridge's and the reader's own.
+         */
+        std::vector<Serialisation::Diagnostic> diagnostics;
+    };
+
+    /**
+     * @brief What AssetStore::Instantiate gives back (ADR-0080 §7): the instance's root, how its source read, and its
+     * entities by their ids in the source.
+     */
+    struct InstanceResult
+    {
+        /** @brief The instance's root, marked with `Instance`; null when the source did not load. */
+        Entity root;
+        /**
+         * @brief How the source read. For a scene file, its read's result (`roots` the file's own top-level entities,
+         * under `root` when it made a synthetic one); for a model, `entities` counts what the spawn made, and `roots`
+         * holds `root`. Failed, with `root` null and nothing added, when the source did not load.
+         */
+        SceneLoadResult load;
+        /**
+         * @brief The instance's entities by the value of their id in the source: a scene file's blocks, or a model's
+         * numbered entities (ModelEntityId). An instance nested in the source is here by its own id, its inner entities
+         * not; `root` is here by its source id only when it is a scene file's single root.
+         */
+        std::unordered_map<std::uint64_t, Entity> entities;
+
+        /** @brief The instance's entity whose id in the source is `id`, or the null entity. */
+        [[nodiscard]] Entity Find(EntityId id) const
+        {
+            const auto found = entities.find(id.value);
+            return found == entities.end() ? Entity{} : found->second;
+        }
     };
 
     /**
@@ -617,6 +797,202 @@ namespace Fenrir
             return SaveData({handle.index, handle.generation}, Describe<T>::Description(), path);
         }
 
+        /**
+         * @brief Writes `scene` to the scene file `path`, an asset path relative to the asset root
+         * (`level1.scene.json5`), in ADR-0078's layout, so the same scene writes the same bytes. The scene envelope is
+         * `format` (1), `type` (`Fenrir::Scene`), `version` (the scene layout's, 1) and `data`, which holds `resources`
+         * then `entities`.
+         *
+         * - `resources` holds each described scene resource type the scene has, keyed by canonical name in name order.
+         * - `entities` holds one block per entity, depth-first: the roots in the order of their entity ids, each
+         *   entity's children directly after it in their sibling order. A block is `id`, then `parent` (absent on a
+         *   root), then `components`.
+         * - An instance root (an entity with `Instance`, which Instantiate and SpawnNodes mark) is one block of `id`,
+         *   `parent`, `instance: "<source>"`, and a diff against a fresh expansion of the source (ADR-0080 §4),
+         *   compared as trees by each entity's key, its slash path of source ids from the root, so a value equal to the
+         *   source's is never written: `components`, the root's entries that differ, an entry the source's root has
+         *   holding only its differing fields; `removed`, the types the source's root has and the root lacks;
+         *   `overrides`, the same two for each source entity that differs, by key; and `removedEntities`, the keys of
+         *   the source's entities the instance lacks (one below a removed entity goes with it). Each member is left out
+         *   when empty. The source is expanded once a save, a scene file read as Instantiate reads one and a model
+         *   spawned through the ModelSpawner, into a scene of the save's own. The root's components not written are
+         *   counted in `componentsSkipped`. A source that no longer expands is named alone, with a warning, so the
+         *   instance's changes are not written.
+         * - An entity a host added below an instance's root, one the source has no entity of its key for, is a block of
+         *   its own after the instance's, whose `parent` is the slash path of the entity holding it
+         *   (`"<instance id>/<source id>"`), or the instance's id when the root holds it; what is below it follows
+         *   as usual.
+         * - `components` holds each described component the entity has, keyed by canonical name: `Fenrir::Name` and
+         *   `Fenrir::Transform` first, then the rest in name order. One holding its type's defaults is written as
+         *   `{}`, so the file still says the entity has it. Each component a load kept in the entity's
+         *   `UnknownComponents` is written back among them by its name, as it was read (ADR-0078 §9).
+         * - An entry, in `resources` or `components`, is its type's fields in declaration order with its defaults left
+         *   out, preceded by `version` only when its type's version is above 1.
+         *
+         * Each written entity without an `EntityId`, and each whose id another entity written before it already has,
+         * is given a newly minted one that no entity of the scene has, so the save changes the scene and a later save
+         * keeps its ids. Left out, and
+         * counted with no diagnostic: entities tagged `Transient` and every entity below them; `Relationship`, which
+         * `parent` and the order spell; `EntityId` and `Instance`, which `id` and `instance` spell; undescribed
+         * components; and components of a `@transient` type. A `@transient` field is left out by the bridge, uncounted.
+         *
+         * An `entity` field names its target by its id, or one inside an instance by its slash path,
+         * `"<instance id>/<source id>"`, chained through nested instances (`"<id>/<id>/<id>"`; ADR-0080 §5). One
+         * naming an entity the file does not hold (a left-out entity, one destroyed, or one of another scene) is
+         * written `null`, with a warning, and counted; a null entity is its default, left
+         * out. An asset handle field is written as its asset's path (PathOf), or `null`, with a warning, and counted,
+         * as Save writes it.
+         *
+         * The write is atomic, as Save's is. Refused with a logged error, and nothing written, for `path` absolute,
+         * climbing out of the root, or naming a sub-asset (`#`).
+         */
+        SceneSaveResult SaveScene(Scene& scene, std::string_view path);
+
+        /**
+         * @brief Writes the subtree `root` tops in `scene` to the scene file `path` as its own scene, as SaveScene
+         * writes a whole one: "make a prefab from this selection" (ADR-0080 §8). The file's one root block is `root`'s,
+         * with no `parent`, and its blocks are the subtree's, depth-first; `resources` is `{}`, since the scene's
+         * resources are not the subtree's.
+         *
+         * Ids are minted as SaveScene mints them, for the subtree's entities only, and never one another entity of the
+         * scene has. An `entity` field naming an entity outside the subtree (its parent, a sibling, or one tagged
+         * Transient) is written `null`, with a warning, and counted in `nullReferences`; a null entity is its default,
+         * left out.
+         *
+         * Refused with a logged error, and nothing written, as SaveScene is, and also for `root` not a live entity of
+         * `scene`, or tagged `Transient`, which a scene file never holds.
+         */
+        SceneSaveResult SaveScene(Scene& scene, Entity root, std::string_view path);
+
+        /**
+         * @brief Reads the scene file `path`, an asset path relative to the asset root (`level1.scene.json5`), into a
+         * new scene named `name` (the path when empty), made through App::CreateScene; switching the active scene is
+         * the caller's. Synchronous, on the main thread, and within one frame (ADR-0078 §8).
+         *
+         * The file is read through the store's source, as a data asset's envelope is. It is refused, with no scene
+         * made, when it is missing, does not parse, has another `format`, names a `type` other than `Fenrir::Scene`
+         * or a layout `version` newer than this reader's, has no `data` object, or lies outside the asset root.
+         *
+         * The scene is filled in two passes. The first reserves an entity for every block and maps each block's id to
+         * it. The second walks the blocks in file order: it completes the entity, adds its `EntityId`, then adds each
+         * entry of `components` by canonical (or former) name, upgraded from the entry's `version` (1 when missing)
+         * and filled field by field, then appends the entity to its `parent` with AddChild, so sibling order is the
+         * file's. The block lists every described component its entity has, `Fenrir::Name` and `Fenrir::Transform`
+         * too, as `{}` at their defaults, so a block listing neither loads without it, as the saved entity was. An
+         * `entity` field names the block of its id; an id no block has leaves it empty with one error. An
+         * asset handle field loads its asset with the scene as its owner. A ComponentWatch sees one add per component
+         * the file holds, and no event marks the load.
+         *
+         * Then each entry of `resources` is added to the scene by canonical name (or filled, when the scene already
+         * has one), so an `entity` field in a resource names an entity of the file.
+         *
+         * A block with `instance` is an instance of that source, expanded as Instantiate expands one in the first pass,
+         * so a field may name an entity inside it by its slash path (`"<instance id>/<source id>"`, chained through
+         * nested instances); the root takes the block's id. A source that does not load leaves the root alone, marked
+         * with `Instance`, with an error, so a save writes the block back. A source that is the file being read, or a
+         * file instancing it through a chain, is refused at the block with an error, counted in `entitiesSkipped`. The
+         * source's read's diagnostics and counts are the load's too, but for its `resourcesSkipped`.
+         *
+         * In the second pass the block's diff is applied to the expansion (ADR-0080 §4): the entities `removedEntities`
+         * names are destroyed with what is below them; the root's `components` are merged on top of the source root's,
+         * an entry it has filled field by field over the source's value and one it lacks added, and the types `removed`
+         * names are taken off; then each entry of `overrides` does the same to the source entity its key, a slash path
+         * from the root, names. An `entity` field in the diff names the host's entities as any block's does, so an
+         * override may point out of the instance. A key or name naming nothing is warned of and ignored. A block whose
+         * `parent` is a slash path (`"<instance id>/<source id>"`) is an entity the host added inside that instance.
+         * A variant, a file whose single root block is an instance of another scene file, loads so, its own
+         * `resources` applied.
+         *
+         * Tolerant past the envelope: a block that is not an object is left out; one with a bad id, or an id an
+         * earlier block has, loads with no `EntityId` and no place in the id map, so a save mints it one; one whose
+         * `parent` names no earlier block loads as a root. A component type the registry lacks is kept opaque in the
+         * entity's `UnknownComponents`, with one warning per type per load, and SaveScene writes it back unchanged.
+         * Each is reported in the result.
+         */
+        SceneLoadResult LoadScene(App& app, std::string_view path, std::string_view name = {});
+
+        /**
+         * @brief Reads the scene file `path` into `scene`, which exists, as LoadScene reads one into a new scene: the
+         * same two passes, the same refusals (nothing is added), and the same tolerance (ADR-0079 §2). The unlinked
+         * additive merge; Instantiate is the linked one (ADR-0080 §7).
+         *
+         * The file's top-level blocks are appended under `parent` in file order, after any children it has, or go at
+         * the top of the scene when `parent` is empty. A `parent` that is no live entity of `scene` is reported with
+         * an error, and the blocks go at the top. `roots` lists them either way.
+         *
+         * The file's `resources` are not applied: the scene's own stand, and each entry is counted in
+         * `resourcesSkipped`, with no diagnostic. A block's id that an entity of the scene has already is re-minted
+         * for the merged entity, with no diagnostic, so no two entities of the scene share one (a subtree merged back
+         * into its own scene, say); the file's `entity` fields still name its blocks. Nothing is recorded for hot
+         * reload.
+         */
+        SceneLoadResult LoadSceneInto(Scene& scene, std::string_view path, Entity parent = {});
+
+        /**
+         * @brief Copies `scene` into a new scene named `name`, made through App::CreateScene, with no disk (ADR-0082):
+         * the play-in-editor copy. It is exactly what saving `scene` with SaveScene and loading the file with
+         * LoadScene would give, since it runs the same writer into a value tree and the same reader out of it.
+         *
+         * So the copy drops what a scene file never holds: entities tagged `Transient` and what is below them,
+         * transient and undescribed components, and transient fields. An instance copies as an instance, its source
+         * expanded afresh and the diff the writer finds applied to it; an `entity` field naming an entity the copy
+         * does not hold is left empty, and an asset handle field loads its asset again with the copy as its owner. As
+         * a save does, it mints an `EntityId` for every copied entity of `scene` that lacks one, so the call changes
+         * `scene` and both scenes give each entity the same id.
+         *
+         * No file is written, and the scene is not read from the store's source; an instance's source still is, as
+         * any expansion reads one. Nothing is recorded for hot reload: the copy is no file's scene. What the write and
+         * read report is logged, under `scene`'s name as the path. As LoadScene, a `name` another scene has already
+         * makes a second scene of that name. Synchronous, on the main thread.
+         */
+        Scene& CopyScene(App& app, Scene& scene, std::string_view name);
+
+        /**
+         * @brief Places the scene or model file `path` into `scene` as one instance (ADR-0080): its entities, made
+         * under `parent` (or at the top when it is empty), below a root marked with `Instance { path }`, so SaveScene
+         * writes the whole instance as one block. The host scene owns what it made, the model's assets included.
+         *
+         * - A `.scene.json5` source is read as LoadSceneInto reads one (its `resources` skipped and counted), each
+         *   entity keeping its id in the file. Its root is the file's single root, which loses its id (the host's file
+         *   gives the root its own), or, when the file has several roots or none, a new root named after the file
+         *   (`tree` for `props/tree.scene.json5`) at the identity transform, holding them in file order.
+         * - Any other source is loaded as a model, owned by `scene`, and spawned through the registered ModelSpawner,
+         *   or SpawnNodes with none: its root is SpawnNodes', named after the file, and each node's entity has
+         *   ModelEntityId of its index plus one.
+         *
+         * A source that is no scene file the reader accepts, no model that loads, lies outside the asset root or has
+         * an asset path over 255 bytes is refused, Failed, with `root` null and nothing added. A `parent` that is no
+         * live entity of `scene` is reported with an error, and the root goes at the top. Synchronous, on the main
+         * thread.
+         */
+        InstanceResult Instantiate(Scene& scene, std::string_view path, Entity parent = {});
+
+        /**
+         * @brief Unlinks the instance `root` tops in `scene` from its source (ADR-0080 §8), one level: its `Instance`
+         * is removed, so SaveScene writes its subtree verbatim, a block per entity, rather than as one block and a
+         * diff.
+         *
+         * Each entity of the instance's own scope (every entity below the root down to, and including, each nested
+         * instance's root) is given a newly minted id no entity of the scene has, since its id was its source's and the
+         * host's file must not repeat one. The entities inside a nested instance keep theirs: that instance stays
+         * linked, and its root is now the host's to save as an instance block. The root keeps its own id.
+         *
+         * False, with a logged error and nothing changed, for `root` not a live entity of `scene`, or not an instance's
+         * root.
+         */
+        bool Unpack(Scene& scene, Entity root);
+
+        /**
+         * @brief Makes `spawner` the store's ModelSpawner, which Instantiate expands a model source through, until
+         * UnregisterModelSpawner: FenrirRenderer registers its SpawnModel at install. False, with a logged error and
+         * nothing changed, when another is registered. `spawner` is the caller's, and must stay alive until it is
+         * unregistered.
+         */
+        bool RegisterModelSpawner(ModelSpawner& spawner);
+
+        /** @brief Unregisters `spawner` if it is the store's ModelSpawner, so SpawnNodes spawns models again. */
+        void UnregisterModelSpawner(const ModelSpawner& spawner) noexcept;
+
         /** @brief Whether `handle` names a live asset: false for an empty or stale handle. */
         template <typename T>
         [[nodiscard]] bool IsValid(AssetHandle<T> handle) const
@@ -799,6 +1175,11 @@ namespace Fenrir
          * top of the scene if `parent` is null), and below it one entity per model node with its `Name`, its rest
          * transform as its `Transform`, and its parent link. It adds nothing that draws: FenrirRenderer's SpawnModel
          * adds the meshes. Nothing is spawned, and an error logged, if the handle does not resolve.
+         *
+         * Each node's entity has the `EntityId` ModelEntityId gives its node index plus one, the same on every spawn.
+         * The root, given no id, is marked with `Instance` naming the model's asset path, so SaveScene writes the
+         * spawned model as one instance block (ADR-0080 §3); a model added in code, or loaded from outside the asset
+         * root, has no such path and its root is left unmarked.
          */
         SpawnedNodes SpawnNodes(Scene& scene, AssetHandle<Model> model, Entity parent = {});
 
@@ -880,6 +1261,57 @@ namespace Fenrir
                                        std::optional<LoadDiagnostic>& diagnostic,
                                        std::vector<Serialisation::Diagnostic>& diagnostics, bool& incomplete);
         /**
+         * @brief LoadScene's, LoadSceneInto's and Instantiate's read of the scene file `path`: checks its envelope,
+         * then fills the scene `makeScene` gives, called once the file is known to be a scene, so a refused file makes
+         * none. The file's roots go under `parent` (the top when empty), and its `resources` and ids are treated as
+         * `read` says. While it reads, the file is on the store's chain of scene files being read, so an instance block
+         * naming one on the chain is refused.
+         */
+        SceneLoadResult ReadSceneFile(std::string_view path, const std::function<Scene&()>& makeScene, Entity parent,
+                                      Detail::SceneRead read, std::unordered_set<std::uint64_t>* fileIds = nullptr);
+        /**
+         * @brief Instantiate's work, and an instance block's in the reader: expands the source `path` at the top of
+         * `scene` and marks its root, which the caller then places.
+         */
+        InstanceResult ExpandInstance(Scene& scene, std::string_view path);
+        /**
+         * @brief Both SaveScene doors: writes the subtree `root` tops, or the whole scene when `root` is empty, to
+         * `path`.
+         */
+        SceneSaveResult WriteSceneFile(Scene& scene, std::optional<Entity> root, std::string_view path);
+        /**
+         * @brief The writer behind SaveScene and CopyScene: writes the subtree `root` tops, or the whole scene when
+         * `root` is empty, into `envelope` as a scene file's whole tree, reporting under `named`. Failed, with
+         * `envelope` untouched, when `root` is no live entity of the scene or is tagged `Transient`.
+         */
+        SceneSaveResult WriteSceneTree(Scene& scene, std::optional<Entity> root, const std::string& named,
+                                       Serialisation::Value& envelope);
+        /** @brief Logs that saving `scene` to `named` failed for `message`, and records it in `result` as Failed. */
+        void FailSceneWrite(const Scene& scene, const std::string& named, std::string message, SceneSaveResult& result);
+        /**
+         * @brief The reader behind ReadSceneFile and CopyScene: checks the scene envelope `tree`, then fills the
+         * scene `makeScene` gives as ReadSceneFile does. `assetPath` is the file read, which a bare `#name` reference
+         * names and which goes on the chain of scene files being read; empty for a tree no file holds. Diagnostics are
+         * located at `fileKey`, and a refusal is logged naming `named`. `result` holds what came before, the parse's
+         * diagnostics. When `fileIds` is given, the read puts in it the ids the file's blocks hold; for a patch it
+         * holds those of the file's last read on the way in, and an entity of one of them the file no longer has is
+         * destroyed.
+         */
+        SceneLoadResult ReadSceneTree(Serialisation::Value& tree, std::string_view named, const std::string& assetPath,
+                                      const std::string& fileKey, const std::function<Scene&()>& makeScene,
+                                      Entity parent, Detail::SceneRead read, SceneLoadResult result,
+                                      std::unordered_set<std::uint64_t>* fileIds = nullptr,
+                                      std::optional<std::uint64_t>* rootId = nullptr);
+        /** @brief Logs that loading the scene `named` failed for `diagnostic`, and records it in `result` as Failed. */
+        void FailSceneRead(std::string_view named, Serialisation::Diagnostic diagnostic, SceneLoadResult& result);
+        /**
+         * @brief What the reference `reference` in the file `assetPath` names (ADR-0076 §2, §3): its target, loaded
+         * first for `owner`, of the kind `field` holds and, for a data asset, of a type extending the field's; or why
+         * it names none. A bare `#name` is a sub-asset of `assetPath`.
+         */
+        [[nodiscard]] Detail::ReferenceRead ReadFileReference(const std::string& assetPath, std::uint32_t owner,
+                                                              std::string_view reference, const FieldInfo& field);
+        /**
          * @brief Reads the envelope `bytes` of the data asset file `fileKey` (its asset path `assetPath`), asking for
          * the entry `label` names (the top level when none) as `type`: each entry's slot is reserved for `owner`
          * before the file's references load, for `owner` too, as LoadDataSlot and a reload both read a file.
@@ -895,6 +1327,36 @@ namespace Fenrir
         void PollForReload();
         /** @brief Reloads the data asset file `fileKey` in place under its handles, or keeps it whole and says why. */
         void ReloadDataFile(const std::string& fileKey);
+        /**
+         * @brief Patches every scene LoadScene filled from the scene file `fileKey` by entity id, or, when the file
+         * does not read as a scene, changes nothing and says why once.
+         */
+        void PatchSceneFile(const std::string& fileKey);
+        /**
+         * @brief Re-patches every instance of the source `sourceKey`, a scene or model file, in every scene a LoadScene
+         * recorded (ADR-0081 §4): each top-level instance holding one, nested or not, is read again from its source and
+         * given its host block's diff on top. The host files are read, never written.
+         */
+        void RepatchInstancesOf(const std::string& sourceKey);
+        /**
+         * @brief Reads the instance `root` tops, in `scene`, again from its source: a scene file patched in by source
+         * id, a model re-spawned under the root. What is below the root that is not the source's is left where it is.
+         * Its host's diff is the caller's to apply. Whether the source read; when it did not, nothing changed.
+         */
+        bool RepatchInstance(Scene& scene, Entity root);
+        /**
+         * @brief For each of `chains`, an instance of a changed source in `scene` and the instances holding it out to
+         * the top, re-patches the nearest the host file's `tree` (its asset path `assetPath`, its key `fileKey`) still
+         * writes as a block of the same source, then reapplies that block's diff on top.
+         */
+        void RepatchHostInstances(Scene& scene, Serialisation::Value& tree, const std::string& assetPath,
+                                  const std::string& fileKey, const std::vector<std::vector<Entity>>& chains);
+        /**
+         * @brief The tree of the scene file `assetPath` (its key `fileKey`) for this patch run, read and checked once,
+         * or null when it does not read as a scene, said once, prefixed `what`.
+         */
+        [[nodiscard]] const Serialisation::Value* SceneSourceTree(const std::string& assetPath,
+                                                                  const std::string& fileKey, std::string_view what);
         /**
          * @brief Re-imports the image, cubemap, font or shader container file `fileKey` and replaces its one asset
          * under its handle, or keeps it and says why.

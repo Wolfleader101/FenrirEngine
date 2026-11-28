@@ -372,6 +372,45 @@ namespace Fenrir
             return std::nullopt;
         }
 
+        std::optional<std::string> SavePathProblem(const std::filesystem::path& root, std::string_view path,
+                                                   std::filesystem::path& file)
+        {
+            const std::filesystem::path given = Utf8Path(path);
+            if (given.is_absolute() || given.has_root_name() || given.has_root_directory())
+            {
+                return "the path is absolute: an asset path is relative to the asset root";
+            }
+            if (path.find('#') != std::string_view::npos)
+            {
+                return "the path names a sub-asset: a save writes a whole file";
+            }
+            file = Resolve(root, path).file;
+            const std::optional<std::string> relative = RootRelative(root, file);
+            if (!relative || *relative == ".")
+            {
+                return std::format("the path is outside the asset root '{}'", Utf8Text(root));
+            }
+            return std::nullopt;
+        }
+
+        std::optional<std::string> WholeFileLoadProblem(const std::filesystem::path& root, std::string_view path,
+                                                        std::string& assetPath, std::string& fileKey)
+        {
+            const AssetPath resolved = Resolve(root, path);
+            fileKey = Utf8Text(resolved.file);
+            if (resolved.labelled)
+            {
+                return "the path names a sub-asset: this file is read whole";
+            }
+            std::optional<std::string> relative = RootRelative(root, resolved.file);
+            if (!relative || *relative == ".")
+            {
+                return std::format("the path is outside the asset root '{}'", Utf8Text(root));
+            }
+            assetPath = std::move(*relative);
+            return std::nullopt;
+        }
+
         bool ReadAssetFile(const std::filesystem::path& file, std::vector<std::byte>& bytes)
         {
             std::ifstream stream(file, std::ios::binary);
@@ -912,88 +951,92 @@ namespace Fenrir
         return requested;
     }
 
+    Detail::ReferenceRead AssetStore::ReadFileReference(const std::string& assetPath, std::uint32_t owner,
+                                                        std::string_view reference, const FieldInfo& field)
+    {
+        const TypeRegistry& registry = *m_state->types;
+        Detail::AssetTable& table = TableOf(*m_state, Detail::AssetKind::Data);
+        // A bare `#name` is a sub-asset of the file that names it (ADR-0076).
+        const std::string target =
+            reference.starts_with('#') ? assetPath + std::string(reference) : std::string(reference);
+        const std::string_view targetFile = std::string_view(target).substr(0, target.rfind('#'));
+        const auto refuse = [](std::string problem) {
+            return Detail::ReferenceRead{Detail::AssetKind::Data, {}, std::move(problem)};
+        };
+        // The target's load logs nothing of its own: the problem is reported once, at the path in this file.
+        std::optional<LoadDiagnostic> failure;
+        Detail::AssetSlot slot;
+        std::string expected;
+        Detail::AssetKind targetKind = Detail::AssetKind::Data;
+
+        if (const std::optional<Detail::AssetKind> kind = Detail::KindOfTarget(field.type.target))
+        {
+            const std::string_view name = KindName(*kind);
+            expected = std::format(
+                "{} {}", std::string_view("aeiou").find(name.front()) != std::string_view::npos ? "an" : "a", name);
+            if (targetFile.ends_with(".json5"))
+            {
+                return refuse(std::format("expected {}, found a data asset's `.json5` envelope", expected));
+            }
+            std::vector<std::string> failedUnits;
+            targetKind = *kind;
+            m_state->quietNextLoad = true;
+            slot = LoadSlot(*kind, target, owner, failure, failedUnits);
+        }
+        else
+        {
+            const TypeDescription* targetType = registry.Find(field.type.target);
+            if (targetType == nullptr || targetType->role != Role::DataAsset)
+            {
+                return refuse(
+                    std::format("expected `{}`, which the type registry has as no data asset type", field.type.target));
+            }
+            expected = std::format("`{}` or a type extending it", targetType->name);
+            if (!targetFile.ends_with(".asset.json5"))
+            {
+                const std::string extension = Utf8Text(Utf8Path(targetFile).extension());
+                return refuse(std::format("expected {}, found {}, not a data asset's `.asset.json5` envelope", expected,
+                                          extension.empty() ? std::string("a file with no extension")
+                                                            : std::format("a `{}` file", extension)));
+            }
+            // One loaded already, or still loading, is checked by the type it was stored with.
+            if (const auto loaded = table.byKey.find(Resolve(m_state->root, target).key);
+                loaded != table.byKey.end() && !registry.IsA(table.records[loaded->second].typeName, targetType->name))
+            {
+                return refuse(std::format("expected {}, found `{}`", expected, table.records[loaded->second].typeName));
+            }
+            std::vector<Serialisation::Diagnostic> targetDiagnostics;
+            bool targetIncomplete = false;
+            m_state->quietNextLoad = true;
+            slot = LoadDataSlot(target, owner, *targetType, failure, targetDiagnostics, targetIncomplete);
+            // A file of the wrong type says what it found in the diagnostic that failed its read, its last.
+            if (failure && failure->reason == LoadFailure::WrongType && !targetDiagnostics.empty())
+            {
+                return refuse(targetDiagnostics.back().message);
+            }
+        }
+
+        if (!failure)
+        {
+            return {targetKind, {slot.index, slot.generation}, {}};
+        }
+        if (failure->reason == LoadFailure::FileNotFound)
+        {
+            return refuse(std::format("expected {}, found no file", expected));
+        }
+        return refuse(std::format("expected {}, found a file that did not load: {} ({})", expected,
+                                  ReasonText(failure->reason), failure->importerMessage));
+    }
+
     Detail::EnvelopeRead AssetStore::ReadDataFile(const std::string& fileKey, const std::string& assetPath,
                                                   std::optional<std::string_view> label, const TypeDescription& type,
                                                   std::uint32_t owner, std::span<const std::byte> bytes)
     {
         const TypeRegistry& registry = *m_state->types;
         Detail::AssetTable& table = TableOf(*m_state, Detail::AssetKind::Data);
-        // What a reference in this file names (ADR-0076 §2, §3): its target, loaded first with this load's owner, of
-        // the kind the field holds and, for a data asset, of a type extending the field's; or why it names none.
-        const auto readReference = [&](std::string_view reference, const FieldInfo& field) -> Detail::ReferenceRead {
-            // A bare `#name` is a sub-asset of the file that names it (ADR-0076).
-            const std::string target =
-                reference.starts_with('#') ? assetPath + std::string(reference) : std::string(reference);
-            const std::string_view targetFile = std::string_view(target).substr(0, target.rfind('#'));
-            const auto refuse = [](std::string problem) {
-                return Detail::ReferenceRead{Detail::AssetKind::Data, {}, std::move(problem)};
-            };
-            // The target's load logs nothing of its own: the problem is reported once, at the path in this file.
-            std::optional<LoadDiagnostic> failure;
-            Detail::AssetSlot slot;
-            std::string expected;
-            Detail::AssetKind targetKind = Detail::AssetKind::Data;
-
-            if (const std::optional<Detail::AssetKind> kind = Detail::KindOfTarget(field.type.target))
-            {
-                const std::string_view name = KindName(*kind);
-                expected = std::format(
-                    "{} {}", std::string_view("aeiou").find(name.front()) != std::string_view::npos ? "an" : "a", name);
-                if (targetFile.ends_with(".json5"))
-                {
-                    return refuse(std::format("expected {}, found a data asset's `.json5` envelope", expected));
-                }
-                std::vector<std::string> failedUnits;
-                targetKind = *kind;
-                m_state->quietNextLoad = true;
-                slot = LoadSlot(*kind, target, owner, failure, failedUnits);
-            }
-            else
-            {
-                const TypeDescription* targetType = registry.Find(field.type.target);
-                if (targetType == nullptr || targetType->role != Role::DataAsset)
-                {
-                    return refuse(std::format("expected `{}`, which the type registry has as no data asset type",
-                                              field.type.target));
-                }
-                expected = std::format("`{}` or a type extending it", targetType->name);
-                if (!targetFile.ends_with(".asset.json5"))
-                {
-                    const std::string extension = Utf8Text(Utf8Path(targetFile).extension());
-                    return refuse(std::format("expected {}, found {}, not a data asset's `.asset.json5` envelope",
-                                              expected,
-                                              extension.empty() ? std::string("a file with no extension")
-                                                                : std::format("a `{}` file", extension)));
-                }
-                // One loaded already, or still loading, is checked by the type it was stored with.
-                if (const auto loaded = table.byKey.find(Resolve(m_state->root, target).key);
-                    loaded != table.byKey.end() &&
-                    !registry.IsA(table.records[loaded->second].typeName, targetType->name))
-                {
-                    return refuse(
-                        std::format("expected {}, found `{}`", expected, table.records[loaded->second].typeName));
-                }
-                std::vector<Serialisation::Diagnostic> targetDiagnostics;
-                bool targetIncomplete = false;
-                m_state->quietNextLoad = true;
-                slot = LoadDataSlot(target, owner, *targetType, failure, targetDiagnostics, targetIncomplete);
-                // A file of the wrong type says what it found in the diagnostic that failed its read, its last.
-                if (failure && failure->reason == LoadFailure::WrongType && !targetDiagnostics.empty())
-                {
-                    return refuse(targetDiagnostics.back().message);
-                }
-            }
-
-            if (!failure)
-            {
-                return {targetKind, {slot.index, slot.generation}, {}};
-            }
-            if (failure->reason == LoadFailure::FileNotFound)
-            {
-                return refuse(std::format("expected {}, found no file", expected));
-            }
-            return refuse(std::format("expected {}, found a file that did not load: {} ({})", expected,
-                                      ReasonText(failure->reason), failure->importerMessage));
+        // What a reference in this file names (ADR-0076 §2, §3): its target, loaded first with this load's owner.
+        const auto readReference = [&](std::string_view reference, const FieldInfo& field) {
+            return ReadFileReference(assetPath, owner, reference, field);
         };
 
         Detail::EnvelopeHooks hooks;
@@ -1291,24 +1334,11 @@ namespace Fenrir
             {
                 return fail("it is a sub-asset, which is saved with its whole file, to that file's own path");
             }
-            // The writer's path check (ADR-0085 §1): an asset path is relative, under the root, and names a file.
-            const std::filesystem::path given = Utf8Path(*path);
-            if (given.is_absolute() || given.has_root_name() || given.has_root_directory())
+            if (std::optional<std::string> problem = Detail::SavePathProblem(m_state->root, *path, target))
             {
-                return fail("the path is absolute: an asset path is relative to the asset root");
+                return fail(std::move(*problem));
             }
-            if (path->find('#') != std::string_view::npos)
-            {
-                return fail("the path names a sub-asset: a save writes a whole file");
-            }
-            const AssetPath resolved = Resolve(m_state->root, *path);
-            const std::optional<std::string> relative = RootRelative(m_state->root, resolved.file);
-            if (!relative || *relative == ".")
-            {
-                return fail(std::format("the path is outside the asset root '{}'", Utf8Text(m_state->root)));
-            }
-            target = resolved.file;
-            targetKey = resolved.key;
+            targetKey = Utf8Text(target);
             named = targetKey;
             // Another asset's file is the store's to save from that asset, not this one's to write over.
             if (targetKey != fileKey && FileInUse(table, targetKey))
@@ -1407,23 +1437,25 @@ namespace Fenrir
         {
             return;
         }
-        m_state->watcher->Poll(ReloadWatcher::Clock::now(), *m_state->logger,
-                               [this](const std::string& key, Detail::AssetKind kind) {
-                                   // A data asset file reloads through its envelope, an imported one through its
-                                   // importer (ADR-0081 §2).
-                                   if (kind == Detail::AssetKind::Data)
-                                   {
-                                       ReloadDataFile(key);
-                                   }
-                                   else if (kind == Detail::AssetKind::Model)
-                                   {
-                                       ReloadModelFile(key);
-                                   }
-                                   else
-                                   {
-                                       ReloadImportedFile(key, kind);
-                                   }
-                               });
+        m_state->watcher->Poll(
+            ReloadWatcher::Clock::now(), *m_state->logger,
+            [this](const std::string& key, Detail::AssetKind kind) {
+                // A data asset file reloads through its envelope, an imported one through its importer (ADR-0081 §2).
+                if (kind == Detail::AssetKind::Data)
+                {
+                    ReloadDataFile(key);
+                }
+                else if (kind == Detail::AssetKind::Model)
+                {
+                    ReloadModelFile(key);
+                }
+                else
+                {
+                    ReloadImportedFile(key, kind);
+                }
+            },
+            // A scene file patches every scene LoadScene filled from it (ADR-0081 §3).
+            [this](const std::string& key) { PatchSceneFile(key); });
     }
 
     void AssetStore::ReloadImportedFile(const std::string& fileKey, Detail::AssetKind kind)
@@ -1455,7 +1487,10 @@ namespace Fenrir
         {
             LogKept(*m_state->logger, Detail::AssetKind::Model,
                     RootRelative(m_state->root, Utf8Path(fileKey)).value_or(fileKey), problem);
+            return;
         }
+        // The model is replaced under its handle; its instances in recorded scenes re-spawn from it (ADR-0081 §4).
+        RepatchInstancesOf(fileKey);
     }
 
     void AssetStore::ReloadDataFile(const std::string& fileKey)

@@ -1,0 +1,37 @@
+{
+  format: 1,
+  type: "Fenrir::Scene",
+  version: 1,
+  data: {
+    resources: {
+      "AssetsTest::Sky": {
+        cubemap: "sky/day.hdr",
+        exposure: 2,
+      },
+    },
+    entities: [
+      {
+        id: "v4r1a",
+        instance: "prefabs/tower.scene.json5",
+        components: {
+          "Fenrir::Name": {name: "Watchtower"},
+        },
+        overrides: {
+          g4te1: {
+            components: {
+              "AssetsTest::Follower": {speed: 7},
+            },
+          },
+        },
+      },
+      {
+        id: "b3110",
+        parent: "v4r1a/f1ag0",
+        components: {
+          "Fenrir::Name": {name: "Bell"},
+          "Fenrir::Transform": {},
+        },
+      },
+    ],
+  },
+}

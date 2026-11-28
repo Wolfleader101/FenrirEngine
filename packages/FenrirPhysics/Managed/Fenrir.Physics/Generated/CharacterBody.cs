@@ -111,7 +111,7 @@ public partial struct CharacterBody : IComponent
     /// and is not blended from where it was.
     /// </summary>
     public bool Enabled = true;
-    /// <summary>Read-back: overwritten by physics after every move.</summary>
+    /// <summary>Read-back: overwritten by physics after every move, so no scene file holds it.</summary>
     public readonly CharacterState State = new();
 
     public CharacterBody()

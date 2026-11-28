@@ -22,6 +22,7 @@ add_library(FenrirAssets STATIC
     include/FenrirAssets/MaterialData.hpp
     include/FenrirAssets/MeshData.hpp
     include/FenrirAssets/Model.hpp
+    include/FenrirAssets/ModelSpawner.hpp
     include/FenrirAssets/Move.hpp
     include/FenrirAssets/ShaderData.hpp
     include/FenrirAssets/SkeletonData.hpp
@@ -51,6 +52,10 @@ add_library(FenrirAssets STATIC
     src/ModelData.cpp
     src/MeshLods.cpp
     src/SpawnNodes.cpp
+    src/SceneInstances.cpp
+    src/SceneReader.cpp
+    src/ScenePatch.cpp
+    src/SceneWriter.cpp
 
     src/Importers/ImageImporter.hpp
     src/Importers/Stb/StbImageImporter.cpp

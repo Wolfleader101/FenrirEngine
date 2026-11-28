@@ -1,0 +1,37 @@
+{
+  format: 1,
+  type: "Fenrir::Scene",
+  version: 1,
+  data: {
+    resources: {},
+    entities: [
+      {
+        id: "st4ge",
+        components: {
+          "Fenrir::Name": {name: "Stage"},
+          "Fenrir::Transform": {},
+        },
+      },
+      {id: "p1ace", parent: "st4ge", instance: "prefabs/player.scene.json5"},
+      {id: "m0de1", parent: "st4ge", instance: "models/scene.gltf"},
+      {
+        id: "w4tch",
+        parent: "st4ge",
+        components: {
+          "Fenrir::Name": {name: "Watcher"},
+          "Fenrir::Transform": {},
+          "AssetsTest::Follower": {target: "p1ace/m9x1p"},
+        },
+      },
+      {
+        id: "sp0tr",
+        parent: "st4ge",
+        components: {
+          "Fenrir::Name": {name: "Spotter"},
+          "Fenrir::Transform": {},
+          "AssetsTest::Follower": {target: "m0de1/3"},
+        },
+      },
+    ],
+  },
+}

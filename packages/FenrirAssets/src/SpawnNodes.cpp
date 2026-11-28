@@ -1,21 +1,52 @@
 // Spawning a model's node tree as entities (ADR-0028, ADR-0031): the model's half of spawning, which FenrirRenderer's
-// SpawnModel builds on.
+// SpawnModel builds on, giving each node's entity its model id and marking the root as an instance (ADR-0080); and the
+// ModelSpawner seam Instantiate spawns a model source through.
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 
 #include "AssetStoreState.hpp"
+#include "Envelope.hpp"
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirAssets/Model.hpp"
+#include "FenrirAssets/ModelSpawner.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
+#include "FenrirECS/EntityId.hpp"
+#include "FenrirECS/SceneComponents.hpp"
 #include "FenrirECS/WorldTransform.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirScene/Scene.hpp"
 
 namespace Fenrir
 {
+    EntityId ModelEntityId(std::uint64_t number)
+    {
+        return NumberedEntityId(number).value_or(EntityId{});
+    }
+
+    bool AssetStore::RegisterModelSpawner(ModelSpawner& spawner)
+    {
+        if (m_state->modelSpawner != nullptr && m_state->modelSpawner != &spawner)
+        {
+            m_state->logger->Error("A model spawner is already registered on the asset store; this second one is "
+                                   "ignored");
+            return false;
+        }
+        m_state->modelSpawner = &spawner;
+        return true;
+    }
+
+    void AssetStore::UnregisterModelSpawner(const ModelSpawner& spawner) noexcept
+    {
+        if (m_state->modelSpawner == &spawner)
+        {
+            m_state->modelSpawner = nullptr;
+        }
+    }
+
     SpawnedNodes AssetStore::SpawnNodes(Scene& scene, AssetHandle<Model> model, Entity parent)
     {
         const Model* data = TryGet(model);
@@ -44,13 +75,25 @@ namespace Fenrir
         SpawnedNodes spawned;
         spawned.root = entities.CreateEntity();
         spawned.root.GetComponent<Name>().Set(name.c_str());
+        // The root is the model's instance, so a save writes it as one block naming the file; a model with no asset
+        // path (added in code, or a built-in) has nothing a file could name.
+        if (const std::optional<std::string> path =
+                PathOfSlot(Detail::AssetKind::Model, {model.index, model.generation});
+            path && !path->starts_with(Detail::BuiltinPrefix))
+        {
+            if (const std::optional<Instance> instance = Detail::InstanceOf(*path))
+            {
+                spawned.root.AddComponent<Instance>(*instance);
+            }
+        }
         if (parent.IsValid())
         {
             parent.AddChild(spawned.root);
         }
         spawned.nodes.reserve(data->nodes.size());
-        for (const ModelNode& node : data->nodes)
+        for (std::size_t index = 0; index < data->nodes.size(); ++index)
         {
+            const ModelNode& node = data->nodes[index];
             // Bones are FenrirSkeleton's, posed in its arrays: they get no entity.
             if (node.kind == ModelNodeKind::Bone)
             {
@@ -69,6 +112,8 @@ namespace Fenrir
             Entity entity = entities.CreateEntity();
             entity.GetComponent<Name>().Set(node.name.c_str());
             entity.GetComponent<Transform>() = rest;
+            // The same id on every spawn, so a host file can name the entity inside any instance of the model.
+            entity.AddComponent<EntityId>(ModelEntityId(index + 1));
             // Nodes come parents first, so the parent's entity already exists.
             const Entity& above = parent >= 0 ? spawned.nodes[static_cast<std::size_t>(parent)] : spawned.root;
             above.AddChild(entity);

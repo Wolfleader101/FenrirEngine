@@ -74,7 +74,7 @@ public partial struct VehicleWheel : IComponent
     public float MaxHandbrakeTorque = 4000;
     public VehicleTyre Longitudinal = new() { PeakSlip = 0.06f, PeakFriction = 1.2f, SlideSlip = 0.2f, SlideFriction = 1 };
     public VehicleTyre Lateral = new() { PeakSlip = 0.052f, PeakFriction = 1.2f, SlideSlip = 0.35f, SlideFriction = 1 };
-    /// <summary>Read-back: overwritten by physics after every step.</summary>
+    /// <summary>Read-back: overwritten by physics after every step, so no scene file holds it.</summary>
     public readonly VehicleWheelState State = new();
 
     public VehicleWheel()

@@ -23,6 +23,13 @@ namespace Fenrir
 namespace Fenrir::Serialisation
 {
     /**
+     * @brief The key a tagged union's tag is written under in a file, whatever the tag field is named in its type
+     * (`m_type` in the engine's unions): `ToTree` writes it as the union object's first member and `FromTree` reads
+     * it. A caller walking a written tree beside a description finds the tag here, not under `tag.name`.
+     */
+    inline constexpr std::string_view UnionTagKey = "kind";
+
+    /**
      * @brief How the bridge turns `reference` and `entity` fields into the strings a file holds and back (ADR-0076 §2,
      * ADR-0078 §3): the caller's, since the bridge never knows an asset path's meaning, a store or an id map.
      *
@@ -64,7 +71,9 @@ namespace Fenrir::Serialisation
      * - a `reference` or an `entity` is the string `writeReference` or `writeEntity` gives it, or `null` when that is
      *   empty, the callback is missing or the value is the empty handle or the null entity;
      * - a `pointer` field is never written, since its target is never described and its bytes mean nothing in a
-     *   file; a pointer element of an array, list or optional is `null`.
+     *   file; a pointer element of an array, list or optional is `null`;
+     * - a transient field (`FieldInfo::transient`, read-back state such as `CharacterBody::state`) is never written,
+     *   and a struct differing from its default only there is left out as equal to it.
      *
      * An enum value no enumerator has is written as its number.
      *
@@ -84,9 +93,15 @@ namespace Fenrir::Serialisation
      *        every nested type itself.
      * @param resolvers Asked once for each `reference` or `entity` value written, an element apiece in an array.
      * @param prior The tree the value was read from, whose comments the new tree takes by key path; null for none.
+     * @param defaults Another value of `type` whose fields are the defaults left out, in place of an instance
+     *        `Construct` makes: a scene instance's override is the live value written against its source's (ADR-0080
+     *        §4). A field equal to the same field there is left out, a nested struct field by field; one that differs
+     *        is written, even when it is at the type's own default. A `reference` or `entity` compares by
+     *        value, so one naming an entity of another scene always differs. Null for the constructed defaults.
      */
     [[nodiscard]] Value ToTree(const void* value, const TypeDescription& type, const TypeRegistry& registry,
-                               const Resolvers& resolvers, const Value* prior = nullptr);
+                               const Resolvers& resolvers, const Value* prior = nullptr,
+                               const void* defaults = nullptr);
 
     /** @brief How a `FromTree` read went. */
     enum class BridgeStatus
@@ -127,7 +142,8 @@ namespace Fenrir::Serialisation
      *   beyond an `f32`'s range, an unknown enumerator, `null` in a field that does not admit it, and a fixed array
      *   or bound type of the wrong length;
      * - a list's elements are each read so, a bad element taking the element type's default;
-     * - a key matching no field and no `@formerly` name is warned, dropped and counted in `unknownFields`;
+     * - a key matching no field and no `@formerly` name is warned, dropped and counted in `unknownFields`, and so is
+     *   a key naming a transient field, which is never read and keeps its default;
      * - a key matching a field's `@formerly` name reads into that field; when the current name is there too, the
      *   current one is read and the former is dropped with a warning, which no count counts. Of several former names
      *   the first the field lists is read, the others dropped so. Every field's current name is claimed before any

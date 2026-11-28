@@ -2,6 +2,7 @@
 
 #include <entt/entity/registry.hpp>
 
+#include <type_traits>
 #include <vector>
 
 #include "EntityList.hpp"
@@ -57,7 +58,18 @@ namespace Fenrir
          * @return T& The component that was added
          */
         template <typename T, typename... Args>
+            requires(!std::is_empty_v<T>)
         T& AddComponent(Args&&... args);
+
+        /**
+         * @brief Tag the entity with the empty component `T` (Transient, say), which holds nothing to return. Tagging
+         * it again keeps it tagged.
+         *
+         * @tparam T The empty tag type to add
+         */
+        template <typename T>
+            requires std::is_empty_v<T>
+        void AddComponent();
 
         /**
          * @brief Remove a component from the entity, if it doesnt exist then it ignores
@@ -171,6 +183,7 @@ namespace Fenrir
     };
 
     template <typename T, typename... Args>
+        requires(!std::is_empty_v<T>)
     T& Entity::AddComponent(Args&&... args)
     {
         if (HasComponent<T>())
@@ -182,6 +195,16 @@ namespace Fenrir
         }
 
         return m_entityList->m_registry.emplace<T>(m_entityId, std::forward<Args>(args)...);
+    }
+
+    template <typename T>
+        requires std::is_empty_v<T>
+    void Entity::AddComponent()
+    {
+        if (!HasComponent<T>())
+        {
+            m_entityList->m_registry.emplace<T>(m_entityId);
+        }
     }
 
     template <typename T>

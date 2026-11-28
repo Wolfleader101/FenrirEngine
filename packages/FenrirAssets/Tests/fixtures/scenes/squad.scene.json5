@@ -1,0 +1,18 @@
+{
+  format: 1,
+  type: "Fenrir::Scene",
+  version: 1,
+  data: {
+    resources: {},
+    entities: [
+      {
+        id: "sq0ad",
+        components: {
+          "Fenrir::Name": {name: "Squad"},
+          "Fenrir::Transform": {},
+        },
+      },
+      {id: "a1pha", parent: "sq0ad", instance: "prefabs/player.scene.json5"},
+    ],
+  },
+}

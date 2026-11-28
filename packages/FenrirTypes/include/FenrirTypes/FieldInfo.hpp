@@ -148,6 +148,12 @@ namespace Fenrir
         std::string_view doc;
         /** @brief What an inspector needs to show the field. */
         FieldMetadata metadata;
+        /**
+         * @brief `@transient`: read-back state kept in the type's layout that no file holds, so a writer leaves it
+         * out and a reader leaves it at its default (ADR-0078). A data asset's or settings type's transient field is
+         * not described at all.
+         */
+        bool transient = false;
     };
 
     /** @brief One enumerator of a described enum. */

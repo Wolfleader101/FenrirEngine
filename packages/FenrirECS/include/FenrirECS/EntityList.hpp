@@ -175,6 +175,13 @@ namespace Fenrir
         /** @brief Removes the entity's component of this type, if it has one. False only if the entity is not alive. */
         bool Remove(const ComponentType& type, std::uint32_t entity);
 
+        /**
+         * @brief How many components the entity has, of every type, native or dynamic, empty tags included: what a
+         * writer that reaches components by type compares with what it reached, to count the rest. Zero if the entity
+         * is not alive. Linear in the kinds of component this list holds storage for.
+         */
+        [[nodiscard]] std::size_t ComponentCountOf(std::uint32_t entity) const;
+
         /** @brief How many entities have a component of this type. Constant time. */
         [[nodiscard]] std::size_t Count(const ComponentType& type);
 

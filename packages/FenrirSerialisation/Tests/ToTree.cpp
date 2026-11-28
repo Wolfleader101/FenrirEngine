@@ -181,6 +181,26 @@ TEST_CASE("A nested struct writes as an object of the fields off their defaults"
     REQUIRE(Tree(fixed) == ObjectOf({{"limits", ObjectOf({{"max", 5.0f}})}}));
 }
 
+TEST_CASE("Written against another value, a field equal to that value's is left out and one off it is written, though "
+          "at the type's default",
+          "[serialisation][totree]")
+{
+    Fixed source;
+    source.lives = 5;
+    source.limits.max = 5.0f;
+    source.speed = 2.0f;
+    Fixed live = source;
+    live.lives = 3;
+    live.limits.min = -1.0f;
+
+    Fenrir::TypeRegistry registry;
+    RegisterBridgeTypes(registry);
+    const Value tree = ToTree(&live, FixedDescription, registry, Resolvers{}, nullptr, &source);
+
+    INFO("lives is back at the type's default 3, still written; limits.min alone differs; speed and limits.max match");
+    REQUIRE(tree == ObjectOf({{"lives", Number(std::int64_t{3})}, {"limits", ObjectOf({{"min", -1.0f}})}}));
+}
+
 TEST_CASE("A fixed array writes as an array of its elements, the one at its default left out",
           "[serialisation][totree]")
 {
@@ -333,4 +353,23 @@ TEST_CASE("An engaged optional writes as its value, the one at its default left 
 
     INFO("edge holds 0.75 and is written as the number; reach holds its default 2");
     REQUIRE(Tree(owned) == ObjectOf({{"edge", 0.75f}}));
+}
+
+TEST_CASE("A transient field is never written", "[serialisation][totree]")
+{
+    Sensed sensed;
+    sensed.speed = 3;
+    sensed.state.max = 9.0f;
+
+    INFO("speed differs from its default and is written; state, transient, is left out though it differs too");
+    REQUIRE(Tree(&sensed, SensedDescription) == ObjectOf({{"speed", std::int64_t{3}}}));
+}
+
+TEST_CASE("A struct differing from its default only in a transient field is left out", "[serialisation][totree]")
+{
+    Sensor sensor;
+    sensor.sensed.state.min = -2.0f;
+
+    INFO("sensed differs only in its transient state, so it compares equal to its default and is not written");
+    REQUIRE(Tree(&sensor, SensorDescription) == Value(Object{}));
 }

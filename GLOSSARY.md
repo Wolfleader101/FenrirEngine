@@ -240,11 +240,11 @@ The file a scene is created from: its described scene resources, and its entitie
 *Avoid:* map file, level file (the game's words), save file (a game's own), world.
 
 **Entity id**
-The readable random string a scene file gives an entity, held in its `EntityId` component, minted once when the entity is first saved and kept for its life. It is how a file names an entity, for a parent or a component's entity field; it is not the run-time `Entity`, which is reassigned on every load (ADR-0078).
+The readable random string a scene file gives an entity, held in its `EntityId` component, minted once when the entity is first saved and kept for its life, but for unpacking an instance, which gives the source's entities fresh ones. It is how a file names an entity, for a parent or a component's entity field; it is not the run-time `Entity`, which is reassigned on every load (ADR-0078). Inside a scene instance the ids are its source's, scoped by its root; a model's are fixed at spawn, its node index plus one (see *Slash path*, ADR-0080).
 *Avoid:* entity handle, fileID, GUID, name (the display string).
 
 **Transient**
-Not written to a scene file: a component whose description says so, or an entity tagged `Transient` with its children (a free-fly camera, a debug entity). Everything else described is written (ADR-0078). A field of a data asset or settings type marked `@transient` is code wiring no file holds (`ScriptingConfig::extensions`): it is left out of its type's description altogether (ADR-0084).
+Not written to a scene file: a component whose description says so, a field marked `@transient` (read-back state a step writes, such as `CharacterBody::state`, kept in its type's layout), or an entity tagged `Transient` with its children (a free-fly camera, a debug entity). Everything else described is written (ADR-0078). A field of a data asset or settings type marked `@transient` is code wiring no file holds (`ScriptingConfig::extensions`): it is left out of its type's description altogether (ADR-0084).
 *Avoid:* runtime-only, editor-only (which is written but stripped when cooked), hidden, don't-save.
 
 **Editor-only**
@@ -255,8 +255,16 @@ A described type an editor package defines for its own organisation (a layer, a 
 The entities made in a scene from another scene file or a model file, under one root that carries the `Instance` component naming the source. The host's file writes the instance as that reference plus its overrides, so a change to the source reaches every instance that did not override it. *Prefab* is the informal word for a scene file meant to be instanced; there is no prefab asset kind (ADR-0080).
 *Avoid:* prefab instance, nested scene, sub-scene, level instance, blueprint.
 
+**Slash path**
+How a scene file names an entity inside a scene instance: the instance root's entity id, `/`, then the entity's id in the source, chained through nested instances (`"t3am0/a1pha/m9x1p"`). Ids inside an instance are its source's, repeated in every instance and scoped by its root; a model's are its node index plus one, its meshes' numbered after (ADR-0080).
+*Avoid:* entity path, node path (Godot's, by name), fileID chain.
+
+**Model spawner**
+The seam (`ModelSpawner`, FenrirAssets) a model source is spawned through when it is instanced. FenrirRenderer registers `SpawnModel` at install so an instanced model draws; with none registered the asset store's `SpawnNodes` spawns its node tree alone (ADR-0080, after ADR-0041's skinning source).
+*Avoid:* model loader, importer (which reads the file), model factory.
+
 **Override**
-A per-placement difference an instance keeps from its source: a field's value, a component or entity added, a component or entity removed. Written in the host's file against the source entity's id; never in the source (ADR-0080).
+A per-placement difference an instance keeps from its source: a field's value, a component or entity added, a component or entity removed. Written in the host's file against the source entity's slash path from the instance's root (its id, or ids chained through nested instances); never in the source (ADR-0080).
 *Avoid:* modification, delta, patch, property override (Unreal's).
 
 **Variant**
@@ -264,7 +272,7 @@ A scene file whose single root is an instance of another scene file, so it is th
 *Avoid:* inherited scene, derived scene, prefab variant, child blueprint.
 
 **Scene patch**
-What a changed scene file or instance source does to a running scene: entities matched by entity id have their written components, parent and order rewritten from the file, new ones are added, ones the file dropped are destroyed with their children, and run-time entities and unwritten components are left alone (ADR-0081).
+What a changed scene file or instance source does to a running scene: entities matched by entity id have their written components, parent and order rewritten from the file, new ones are added, ones the file dropped are destroyed with their children, and run-time entities and unwritten components are left alone, but for a Name or Transform the block stops listing, which goes as on a load (ADR-0081).
 *Avoid:* scene reload (destroying and recreating, which is the caller's), live sync, diff apply.
 
 **Hot reload**

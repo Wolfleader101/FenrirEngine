@@ -1,0 +1,54 @@
+{
+  format: 1,
+  type: "Fenrir::Scene",
+  version: 1,
+  data: {
+    resources: {},
+    entities: [
+      {
+        id: "t0wer",
+        components: {
+          "Fenrir::Name": {name: "Tower"},
+          "Fenrir::Transform": {},
+        },
+      },
+      {
+        id: "g4te1",
+        parent: "t0wer",
+        components: {
+          "Fenrir::Name": {name: "Gate"},
+          "Fenrir::Transform": {},
+          "AssetsTest::Follower": {
+            target: "t0wer",
+            speed: 2,
+          },
+        },
+      },
+      {
+        id: "f1ag0",
+        parent: "t0wer",
+        components: {
+          "Fenrir::Name": {name: "Flag"},
+          "Fenrir::Transform": {
+            pos: [0, 5, 0],
+          },
+          "AssetsTest::Health": {
+            version: 2,
+            current: 50,
+          },
+        },
+      },
+      {
+        id: "g0ard",
+        parent: "t0wer",
+        components: {
+          "Fenrir::Name": {name: "Guard"},
+          "Fenrir::Transform": {
+            pos: [1, 0, 0],
+          },
+        },
+      },
+      {id: "p4tr1", parent: "t0wer", instance: "prefabs/player.scene.json5"},
+    ],
+  },
+}

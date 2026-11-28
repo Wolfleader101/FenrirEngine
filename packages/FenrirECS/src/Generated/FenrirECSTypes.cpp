@@ -32,6 +32,42 @@ namespace Fenrir::Generated::FenrirECSTypes
         .fields = Fenrir_Entity_Fields,
     };
 
+    // Fenrir::EntityId
+    static_assert(sizeof(Fenrir::EntityId) == 8 && alignof(Fenrir::EntityId) == 8,
+                  "Fenrir::EntityId is not the layout FenrirECS.api.json describes: regenerate the description, then this registration");
+    constexpr Fenrir::FieldInfo Fenrir_EntityId_Fields[] = {
+        {.name = "value", .type = {.kind = Fenrir::Kind::U64}, .offset = 0, .doc = "The id's spelling, packed: below a leading 1 bit, five bits per lower-case Crockford base32 character, the first character highest. Zero, which no spelling packs to, means no id."},
+    };
+    constexpr Fenrir::TypeDescription Fenrir_EntityId{
+        .name = "Fenrir::EntityId",
+        .package = "FenrirECS",
+        .role = Fenrir::Role::Component,
+        .size = sizeof(Fenrir::EntityId),
+        .alignment = alignof(Fenrir::EntityId),
+        .construct = &Fenrir::ConstructValue<Fenrir::EntityId>,
+        .destroy = &Fenrir::DestroyValue<Fenrir::EntityId>,
+        .doc = "The entity id a scene file gives an entity: minted once, when the entity is first saved, and kept for its life (ADR-0078). It is how a file names an entity, for a parent or an entity field; it is not the run-time Entity, which a load reassigns. A file spells it as a string (SpellEntityId), as the block's `id`.",
+        .fields = Fenrir_EntityId_Fields,
+    };
+
+    // Fenrir::Instance
+    static_assert(sizeof(Fenrir::Instance) == 256 && alignof(Fenrir::Instance) == 1,
+                  "Fenrir::Instance is not the layout FenrirECS.api.json describes: regenerate the description, then this registration");
+    constexpr Fenrir::FieldInfo Fenrir_Instance_Fields[] = {
+        {.name = "source", .type = {.kind = Fenrir::Kind::FixedString, .count = 256}, .offset = 0, .doc = "The source's asset path, relative to the asset root, zero-terminated (so at most 255 bytes)."},
+    };
+    constexpr Fenrir::TypeDescription Fenrir_Instance{
+        .name = "Fenrir::Instance",
+        .package = "FenrirECS",
+        .role = Fenrir::Role::Component,
+        .size = sizeof(Fenrir::Instance),
+        .alignment = alignof(Fenrir::Instance),
+        .construct = &Fenrir::ConstructValue<Fenrir::Instance>,
+        .destroy = &Fenrir::DestroyValue<Fenrir::Instance>,
+        .doc = "Marks a scene instance's root: the entities under it were made from another scene file or a model file, and the host's file writes them as that source plus overrides (ADR-0080). A file spells it as the block's `instance`.",
+        .fields = Fenrir_Instance_Fields,
+    };
+
     // Fenrir::Name
     static_assert(sizeof(Fenrir::Name) == 256 && alignof(Fenrir::Name) == 1,
                   "Fenrir::Name is not the layout FenrirECS.api.json describes: regenerate the description, then this registration");
@@ -97,6 +133,16 @@ const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::Entity>::Description() n
     return Fenrir::Generated::FenrirECSTypes::Fenrir_Entity;
 }
 
+const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::EntityId>::Description() noexcept
+{
+    return Fenrir::Generated::FenrirECSTypes::Fenrir_EntityId;
+}
+
+const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::Instance>::Description() noexcept
+{
+    return Fenrir::Generated::FenrirECSTypes::Fenrir_Instance;
+}
+
 const Fenrir::TypeDescription& Fenrir::Describe<Fenrir::Name>::Description() noexcept
 {
     return Fenrir::Generated::FenrirECSTypes::Fenrir_Name;
@@ -122,6 +168,10 @@ bool Fenrir::Generated::RegisterFenrirECSTypes(Fenrir::TypeRegistry& registry)
     // registers nothing; one that registers goes to its role's hook, which hangs its attachments.
     if (registry.Find(FenrirECSTypes::Fenrir_Entity.name) != &FenrirECSTypes::Fenrir_Entity)
         registered = registry.Register(FenrirECSTypes::Fenrir_Entity) && registered;
+    if (registry.Find(FenrirECSTypes::Fenrir_EntityId.name) != &FenrirECSTypes::Fenrir_EntityId)
+        registered = registry.Register(FenrirECSTypes::Fenrir_EntityId) && Fenrir::AttachComponent<Fenrir::EntityId>(registry, FenrirECSTypes::Fenrir_EntityId) && registered;
+    if (registry.Find(FenrirECSTypes::Fenrir_Instance.name) != &FenrirECSTypes::Fenrir_Instance)
+        registered = registry.Register(FenrirECSTypes::Fenrir_Instance) && Fenrir::AttachComponent<Fenrir::Instance>(registry, FenrirECSTypes::Fenrir_Instance) && registered;
     if (registry.Find(FenrirECSTypes::Fenrir_Name.name) != &FenrirECSTypes::Fenrir_Name)
         registered = registry.Register(FenrirECSTypes::Fenrir_Name) && Fenrir::AttachComponent<Fenrir::Name>(registry, FenrirECSTypes::Fenrir_Name) && registered;
     if (registry.Find(FenrirECSTypes::Fenrir_Relationship.name) != &FenrirECSTypes::Fenrir_Relationship)

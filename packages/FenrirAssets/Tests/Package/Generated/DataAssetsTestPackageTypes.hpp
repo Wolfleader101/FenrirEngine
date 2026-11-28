@@ -6,14 +6,37 @@
 #pragma once
 
 #include "DataAssetsTestPackage.hpp"
+#include "FenrirECS/TypeAttachments.hpp"
+#include "FenrirScene/Scene.hpp"
 
 #include "FenrirTypes/Describe.hpp"
+#include "FenrirTypes/RoleHooks.hpp"
 #include "FenrirTypes/TypeDescription.hpp"
 
 namespace Fenrir
 {
     class TypeRegistry;
 } // namespace Fenrir
+
+// A no-op AttachComponent, unless a header this registration includes defines it (FENRIR_TYPES_ATTACH_COMPONENT_DEFINED).
+#ifndef FENRIR_TYPES_ATTACH_COMPONENT_DEFINED
+#define FENRIR_TYPES_ATTACH_COMPONENT_DEFINED
+template <typename T>
+inline bool Fenrir::AttachComponent(Fenrir::TypeRegistry&, const Fenrir::TypeDescription&)
+{
+    return true;
+}
+#endif
+
+// A no-op AttachSceneResource, unless a header this registration includes defines it (FENRIR_TYPES_ATTACH_SCENE_RESOURCE_DEFINED).
+#ifndef FENRIR_TYPES_ATTACH_SCENE_RESOURCE_DEFINED
+#define FENRIR_TYPES_ATTACH_SCENE_RESOURCE_DEFINED
+template <typename T>
+inline bool Fenrir::AttachSceneResource(Fenrir::TypeRegistry&, const Fenrir::TypeDescription&)
+{
+    return true;
+}
+#endif
 
 namespace Fenrir::Generated
 {
@@ -29,7 +52,17 @@ namespace Fenrir::Generated
 // 'uses') points its fields at them rather than describing the types again.
 namespace Fenrir::Generated::DataAssetsTestPackageTypes
 {
+    extern const Fenrir::TypeDescription AssetsTest_LookType;
+    extern const Fenrir::TypeDescription AssetsTest_PaintedLook;
+    extern const Fenrir::TypeDescription AssetsTest_PlainLook;
+    extern const Fenrir::TypeDescription AssetsTest_Look;
+    extern const Fenrir::TypeDescription AssetsTest_BannerData;
+    extern const Fenrir::TypeDescription AssetsTest_Decal;
+    extern const Fenrir::TypeDescription AssetsTest_Follower;
+    extern const Fenrir::TypeDescription AssetsTest_FrameCounter;
+    extern const Fenrir::TypeDescription AssetsTest_Health;
     extern const Fenrir::TypeDescription AssetsTest_ShieldData;
+    extern const Fenrir::TypeDescription AssetsTest_Sky;
     extern const Fenrir::TypeDescription AssetsTest_WeaponStats;
     extern const Fenrir::TypeDescription AssetsTest_WeaponData;
     extern const Fenrir::TypeDescription AssetsTest_Sword;
@@ -38,11 +71,91 @@ namespace Fenrir::Generated::DataAssetsTestPackageTypes
     extern const Fenrir::TypeDescription MyGame_Sword;
 } // namespace Fenrir::Generated::DataAssetsTestPackageTypes
 
+/** @brief The description of AssetsTest::LookType that RegisterDataAssetsTestPackageTypes adds. */
+template <>
+struct Fenrir::Describe<AssetsTest::LookType>
+{
+    static constexpr Fenrir::Role role = Fenrir::Role::Enum;
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of AssetsTest::PaintedLook that RegisterDataAssetsTestPackageTypes adds. */
+template <>
+struct Fenrir::Describe<AssetsTest::PaintedLook>
+{
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of AssetsTest::PlainLook that RegisterDataAssetsTestPackageTypes adds. */
+template <>
+struct Fenrir::Describe<AssetsTest::PlainLook>
+{
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of AssetsTest::Look that RegisterDataAssetsTestPackageTypes adds. */
+template <>
+struct Fenrir::Describe<AssetsTest::Look>
+{
+    static constexpr Fenrir::Role role = Fenrir::Role::Nested;
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of AssetsTest::BannerData that RegisterDataAssetsTestPackageTypes adds. */
+template <>
+struct Fenrir::Describe<AssetsTest::BannerData>
+{
+    static constexpr Fenrir::Role role = Fenrir::Role::DataAsset;
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of AssetsTest::Decal that RegisterDataAssetsTestPackageTypes adds. */
+template <>
+struct Fenrir::Describe<AssetsTest::Decal>
+{
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of AssetsTest::Follower that RegisterDataAssetsTestPackageTypes adds. */
+template <>
+struct Fenrir::Describe<AssetsTest::Follower>
+{
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of AssetsTest::FrameCounter that RegisterDataAssetsTestPackageTypes adds. */
+template <>
+struct Fenrir::Describe<AssetsTest::FrameCounter>
+{
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of AssetsTest::Health that RegisterDataAssetsTestPackageTypes adds. */
+template <>
+struct Fenrir::Describe<AssetsTest::Health>
+{
+    static constexpr Fenrir::Role role = Fenrir::Role::Component;
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
 /** @brief The description of AssetsTest::ShieldData that RegisterDataAssetsTestPackageTypes adds. */
 template <>
 struct Fenrir::Describe<AssetsTest::ShieldData>
 {
     static constexpr Fenrir::Role role = Fenrir::Role::DataAsset;
+    static const Fenrir::TypeDescription& Description() noexcept;
+};
+
+/** @brief The description of AssetsTest::Sky that RegisterDataAssetsTestPackageTypes adds. */
+template <>
+struct Fenrir::Describe<AssetsTest::Sky>
+{
+    static constexpr Fenrir::Role role = Fenrir::Role::SceneResource;
     static const Fenrir::TypeDescription& Description() noexcept;
 };
 

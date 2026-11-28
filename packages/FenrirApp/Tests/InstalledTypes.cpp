@@ -65,6 +65,8 @@ namespace
     std::vector<std::string_view> DescribedComponents()
     {
         std::vector<std::string_view> components{
+            "Fenrir::EntityId",
+            "Fenrir::Instance",
             "Fenrir::Name",
             "Fenrir::Relationship",
             "Fenrir::Transform",

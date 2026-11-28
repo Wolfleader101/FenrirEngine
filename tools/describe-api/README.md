@@ -61,7 +61,7 @@ Types a selected type's fields use (nested structs, tagged unions, enums) are de
 
 ## The description
 
-`<Package>.api.json` beside the selection, in the schema `SCHEMA.md` documents. It is written only when its content changes. What a file or an inspector needs beyond a type's layout is written in its header as doc commands, each on a line of its own in the doc comment: `@version N`, `@formerly Old::Name`, `@transient` and `@editor-only` on a type, and `@formerly oldName`, `@range min max`, `@step s`, `@display text`, `@group text`, `@readonly`, `@hidden`, `@multiline`, `@units text` and `@transient` (left out of the description) on a field (`SCHEMA.md`, "Type and field doc commands"). The fixture's `tests/Fixture/Fixture.api.json` is an example of every part.
+`<Package>.api.json` beside the selection, in the schema `SCHEMA.md` documents. It is written only when its content changes. What a file or an inspector needs beyond a type's layout is written in its header as doc commands, each on a line of its own in the doc comment: `@version N`, `@formerly Old::Name`, `@transient` and `@editor-only` on a type, and `@formerly oldName`, `@range min max`, `@step s`, `@display text`, `@group text`, `@readonly`, `@hidden`, `@multiline`, `@units text` and `@transient` (left out of a data asset or settings type, and recorded as `transient` elsewhere) on a field (`SCHEMA.md`, "Type and field doc commands"). The fixture's `tests/Fixture/Fixture.api.json` is an example of every part.
 
 ## Running
 

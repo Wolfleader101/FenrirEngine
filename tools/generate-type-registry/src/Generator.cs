@@ -876,6 +876,11 @@ internal static class Generator
             entry.Add($".metadata = {{{Metadata(metadata)}}}");
         }
 
+        if (field.TryGetProperty("transient", out var transient) && transient.GetBoolean())
+        {
+            entry.Add(".transient = true");
+        }
+
         return "{" + string.Join(", ", entry) + "}";
     }
 

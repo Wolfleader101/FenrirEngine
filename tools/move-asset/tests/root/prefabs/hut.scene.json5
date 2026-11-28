@@ -1,0 +1,18 @@
+// The hut the camp instances, which the smoke run's second move moves.
+{
+  format: 1,
+  type: "Fenrir::Scene",
+  version: 1,
+  data: {
+    resources: {},
+    entities: [
+      {
+        id: "hut00",
+        components: {
+          "Fenrir::Name": {name: "Hut"},
+          "Fenrir::Transform": {},
+        },
+      },
+    ],
+  },
+}

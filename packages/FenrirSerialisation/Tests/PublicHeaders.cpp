@@ -2,6 +2,7 @@
 // before anything else, so if one of them ever reaches for a package above it, the build fails here. That each header
 // also compiles alone is checked by the one-line sources the test CMakeLists.txt writes per header.
 #include "FenrirSerialisation/Bridge.hpp"
+#include "FenrirSerialisation/HeldFields.hpp"
 #include "FenrirSerialisation/Text.hpp"
 #include "FenrirSerialisation/Upgrade.hpp"
 #include "FenrirSerialisation/Value.hpp"

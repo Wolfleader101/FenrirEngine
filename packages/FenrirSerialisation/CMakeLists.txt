@@ -13,6 +13,7 @@ add_library(FenrirSerialisation STATIC
     include/FenrirSerialisation/Bridge.hpp
     include/FenrirSerialisation/Diagnostic.hpp
     include/FenrirSerialisation/Encoding.hpp
+    include/FenrirSerialisation/HeldFields.hpp
     include/FenrirSerialisation/ReadTree.hpp
     include/FenrirSerialisation/Text.hpp
     include/FenrirSerialisation/Upgrade.hpp

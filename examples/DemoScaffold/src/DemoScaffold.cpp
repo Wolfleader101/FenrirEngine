@@ -1,5 +1,7 @@
 #include "FenrirDemoScaffold/DemoScaffold.hpp"
 
+#include "DemoRoundTrip.hpp"
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -8,16 +10,19 @@
 #include <filesystem>
 #include <format>
 #include <iterator>
+#include <random>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <utility>
 
 #include "FenrirApp/App.hpp"
+#include "FenrirAssets/AssetStore.hpp"
 #include "FenrirAssets/Assets.hpp"
 #include "FenrirDebugDraw/DebugDrawing.hpp"
 #include "FenrirDemoScaffold/DemoUI.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
+#include "FenrirECS/SceneComponents.hpp"
 #include "FenrirInput/Input.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirRenderer/Components.hpp"
@@ -469,9 +474,11 @@ namespace FenrirDemo
                     demoUI->SceneSlot(demoScene.razorPanel);
                 }
 
-                // The free-fly camera first, so the scene can find it.
+                // The free-fly camera first, so the scene can find it. It is the scaffold's, not the scene's, so a
+                // scene file never holds it.
                 Fenrir::EntityList& entities = scene.GetEntityList();
                 freeFly = entities.CreateEntity();
+                freeFly.AddComponent<Fenrir::Transient>();
                 freeFly.AddComponent<Fenrir::Transform>();
                 freeFly.AddComponent<Fenrir::Camera>();
                 yaw = demoScene.camera.yaw;
@@ -821,6 +828,63 @@ namespace FenrirDemo
                 stat("Shadow draws", &Fenrir::RendererStats::shadowDraws);
             }
 
+            // A smoke run's check that the active demo scene saves and loads back whole (the scenes spec's "Demos"). It
+            // is saved to a temporary scene file, loaded back into a second scene, and that scene is saved too, so the
+            // two saves count alike what a file holds: an instance as one block, the free-fly camera not at all. A
+            // mismatch, or a door that failed, is an error, which fails the run. The files go afterwards.
+            void CheckRoundTrip(const DemoScene& demoScene)
+            {
+                if (!assets || !assets->IsValid())
+                {
+                    return;
+                }
+                Fenrir::AssetStore& store = assets->Store();
+                // A folder of its own in the asset root, which SaveScene writes under: two smoke runs of one app (CTest
+                // runs each backend's) share the root.
+                std::random_device random;
+                const std::string folder = std::format(".demo-smoke-{:08x}{:08x}", random(), random());
+                const std::string savedPath = folder + "/saved.scene.json5";
+                const std::string reloadedPath = folder + "/reloaded.scene.json5";
+                const std::string reloadedName = demoScene.name + " (reloaded)";
+
+                const Fenrir::SceneSaveResult saved = store.SaveScene(app->GetScene(demoScene.name), savedPath);
+                std::optional<Fenrir::SceneSaveResult> reloadedSave;
+                Fenrir::SceneLoadResult loaded;
+                if (saved.status != Fenrir::SaveStatus::Failed)
+                {
+                    loaded = store.LoadScene(*app, savedPath, reloadedName);
+                    if (loaded.scene != nullptr)
+                    {
+                        reloadedSave = store.SaveScene(*loaded.scene, reloadedPath);
+                        app->DestroyScene(reloadedName);
+                    }
+                }
+                std::error_code removeError;
+                std::filesystem::remove_all(store.Root() / folder, removeError);
+
+                if (saved.status == Fenrir::SaveStatus::Failed)
+                {
+                    Log().Error("FENRIR_DEMO_SMOKE: the scene \"{}\" did not save to a scene file", demoScene.name);
+                    return;
+                }
+                if (loaded.status == Fenrir::LoadStatus::Failed || !reloadedSave ||
+                    reloadedSave->status == Fenrir::SaveStatus::Failed)
+                {
+                    Log().Error("FENRIR_DEMO_SMOKE: the scene \"{}\" did not load back from its scene file",
+                                demoScene.name);
+                    return;
+                }
+                const SceneRoundTripCounts savedCounts = SceneRoundTripCounts::Of(saved);
+                if (const std::optional<std::string> mismatch =
+                        RoundTripMismatch(demoScene.name, savedCounts, SceneRoundTripCounts::Of(*reloadedSave)))
+                {
+                    Log().Error("{}", *mismatch);
+                    return;
+                }
+                Log().Info("FENRIR_DEMO_SMOKE: {} saved and loaded back whole: {} entities and {} components",
+                           demoScene.name, savedCounts.entities, savedCounts.components);
+            }
+
             // Update: the scene's own update, then a smoke run's or FENRIR_DEMO_KEYS's bookkeeping.
             void Update()
             {
@@ -841,6 +905,7 @@ namespace FenrirDemo
                         return;
                     }
                     Log().Info("FENRIR_DEMO_SMOKE: ran {} frames of {}", framesInScene, scene.name);
+                    CheckRoundTrip(scene);
                     if (smokeNext < smokeScenes.size())
                     {
                         EnterScene(smokeScenes[smokeNext++]);
