@@ -274,6 +274,24 @@ namespace Fenrir
         return ComponentWatch(std::move(record));
     }
 
+    std::size_t EntityList::ComponentCountOf(std::uint32_t entity) const
+    {
+        if (!m_registry.valid(AsEntity(entity)))
+        {
+            return 0;
+        }
+        std::size_t count = 0;
+        for (auto&& [id, storage] : m_registry.storage())
+        {
+            (void)id;
+            if (storage.contains(AsEntity(entity)))
+            {
+                ++count;
+            }
+        }
+        return count;
+    }
+
     std::size_t EntityList::ComponentStorageCount() const
     {
         std::size_t count = 0;

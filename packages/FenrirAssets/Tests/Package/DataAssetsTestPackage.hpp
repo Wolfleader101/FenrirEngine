@@ -1,9 +1,9 @@
 #pragma once
 
-// FenrirAssets' data asset test package: game-defined data asset types, as a game writes them, run through both real
-// tools (fenrir-describe-api writes DataAssetsTestPackage.api.json beside it, and fenrir-generate-type-registry writes
-// Generated/DataAssetsTestPackageTypes.* from that), whose committed registration FenrirAssets' tests compile and
-// register into the app's type registry.
+// FenrirAssets' data asset test package: game-defined data asset types, components and a scene resource, as a game
+// writes them, run through both real tools (fenrir-describe-api writes DataAssetsTestPackage.api.json beside it, and
+// fenrir-generate-type-registry writes Generated/DataAssetsTestPackageTypes.* from that), whose committed registration
+// FenrirAssets' tests compile and register into the app's type registry.
 
 #include <cstdint>
 #include <filesystem>
@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "FenrirAssets/AssetHandle.hpp"
+#include "FenrirECS/Entity.hpp"
 
 namespace AssetsTest
 {
@@ -48,6 +49,51 @@ namespace AssetsTest
     {
         /** @brief How sharp the blade is, from 0 to 1. */
         float edge = 0.5f;
+    };
+
+    /**
+     * @brief A component a scene file writes an entity id and an asset path for: it follows another entity, showing
+     * an icon.
+     */
+    struct Follower
+    {
+        /** @brief The entity followed. */
+        Fenrir::Entity target;
+        /** @brief The icon shown over the follower. */
+        Fenrir::AssetHandle<Fenrir::Image> icon;
+        float speed = 1.0f;
+    };
+
+    /**
+     * @brief A component at a version above 1, which a scene file's entry spells before its fields.
+     *
+     * @version 2
+     */
+    struct Health
+    {
+        float current = 100.0f;
+        float maximum = 100.0f;
+    };
+
+    /**
+     * @brief Run-time bookkeeping a scene file never holds.
+     *
+     * @transient
+     */
+    struct FrameCounter
+    {
+        std::uint32_t frames = 0;
+    };
+
+    /**
+     * @brief A described scene resource: a sky's settings, as FenrirRenderer's `Fenrir::Sky` holds its own, which a
+     * scene file writes under `resources`.
+     */
+    struct Sky
+    {
+        /** @brief The cubemap the sky shows. */
+        Fenrir::AssetHandle<Fenrir::Image> cubemap;
+        float exposure = 1.0f;
     };
 
     /** @brief A data asset of its own, extending nothing: not a weapon. */

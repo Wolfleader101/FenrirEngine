@@ -51,6 +51,7 @@ add_library(FenrirAssets STATIC
     src/ModelData.cpp
     src/MeshLods.cpp
     src/SpawnNodes.cpp
+    src/SceneWriter.cpp
 
     src/Importers/ImageImporter.hpp
     src/Importers/Stb/StbImageImporter.cpp

@@ -153,7 +153,8 @@ A scene file is authoring data. It is read when a scene is made and never writte
 - **`entity` fields** are written through the bridge's `writeEntity`:
   - a target in the same file is its id string;
   - a target inside an instance in the same file is its slash path;
-  - an empty handle, or a target outside the file, is written `null`, with one diagnostic at save (ADR-0078).
+  - a target outside the file is written `null`, with one diagnostic at save (ADR-0078);
+  - an empty handle is the field's default: left out, with no diagnostic, so the many fields left unset never warn (the user, 2026-11-27).
 - **`fixed-string` fields** (`Name`, `BoneName`, `Instance::source`) are string literals. One read back longer than the field is cut by the bridge at N-1 bytes on a UTF-8 boundary, with its diagnostic.
 - **Asset handle fields** are asset paths. They are written through `PathOf`, and loaded with the filled scene as owner, as data assets' are (ADR-0076).
 - **Reading through the source:** scene files are read through the store's `AssetSource`, as envelopes are, so a cooked build serves them the same way (ADR-0085).
