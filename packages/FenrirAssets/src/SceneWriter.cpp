@@ -46,45 +46,9 @@ namespace Fenrir
         using Detail::NameType;
         using Detail::TransformType;
 
-        // One described component type a block writes when its entity has one.
-        struct WrittenType
-        {
-            const TypeDescription* type = nullptr;
-            ComponentType component;
-        };
-
-        // Where an entry goes among `components`: Name, then Transform, then the rest by canonical name, so the same
-        // scene writes the same bytes (ADR-0077 §1).
-        int Rank(std::string_view name)
-        {
-            return name == NameType ? 0 : name == TransformType ? 1 : 2;
-        }
-
-        // Every described component type a block can write, in the order it writes them.
-        std::vector<WrittenType> WrittenTypes(const TypeRegistry& registry)
-        {
-            std::vector<WrittenType> written;
-            for (const TypeDescription* type : registry.Types(Role::Component))
-            {
-                if (type->transient ||
-                    std::ranges::find(Detail::SpelledApart, type->name) != std::end(Detail::SpelledApart))
-                {
-                    continue;
-                }
-                // A component type no package attached a ComponentType to cannot be reached on an entity, so it is
-                // never found there to write.
-                if (std::optional<ComponentType> component = ComponentType::ForName(registry, type->name))
-                {
-                    written.push_back({type, *component});
-                }
-            }
-            std::ranges::sort(written, [](const WrittenType& a, const WrittenType& b) {
-                const int rankA = Rank(a.type->name);
-                const int rankB = Rank(b.type->name);
-                return rankA != rankB ? rankA < rankB : a.type->name < b.type->name;
-            });
-            return written;
-        }
+        using Detail::EntryRank;
+        using Detail::WrittenType;
+        using Detail::WrittenTypes;
 
         // How many entities are in the subtree `entity` roots, itself included.
         std::size_t SubtreeSize(const Entity& entity)
@@ -185,8 +149,8 @@ namespace Fenrir
         void SortEntries(std::vector<Ser::Member>& entries)
         {
             std::ranges::stable_sort(entries, [](const Ser::Member& a, const Ser::Member& b) {
-                const int rankA = Rank(a.key);
-                const int rankB = Rank(b.key);
+                const int rankA = EntryRank(a.key);
+                const int rankB = EntryRank(b.key);
                 return rankA != rankB ? rankA < rankB : a.key < b.key;
             });
         }
@@ -454,8 +418,9 @@ namespace Fenrir
             return fail("the subtree's root is tagged Transient, which a scene file never holds");
         }
 
-        // The entities the file holds: the subtree's, or every root's in the order of their entity ids, so a scene
-        // saved twice lists them alike. Each instance's source is expanded fresh, once a save, to diff it against.
+        // The entities the file holds: the subtree's, or every root's, in the order the files that filled the scene
+        // list them and then in the order of their slots, so a scene saved twice lists them alike. Each instance's
+        // source is expanded fresh, once a save, to diff it against.
         Detail::InstanceBaselines baselines(
             [this](Scene& into, std::string_view source) { return ExpandInstance(into, source); });
         Collector collector{baselines};
@@ -476,9 +441,24 @@ namespace Fenrir
                 }
             });
             std::ranges::sort(roots);
+            std::unordered_set<std::uint32_t> ordered;
+            if (const Detail::SceneRootOrder* order = scene.GetResource<Detail::SceneRootOrder>())
+            {
+                for (const Entity& top : order->roots)
+                {
+                    if (Detail::LiveIn(entities, top) && !top.GetComponent<Relationship>().parent.IsValid() &&
+                        ordered.insert(top.GetId()).second)
+                    {
+                        collector.Collect(top);
+                    }
+                }
+            }
             for (const std::uint32_t top : roots)
             {
-                collector.Collect(entities.GetEntity(top));
+                if (!ordered.contains(top))
+                {
+                    collector.Collect(entities.GetEntity(top));
+                }
             }
         }
         result.entitiesSkipped = collector.skipped;

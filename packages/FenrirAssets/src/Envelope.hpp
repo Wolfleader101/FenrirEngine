@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "FenrirAssets/AssetStore.hpp"
+#include "FenrirECS/ComponentType.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityId.hpp"
 #include "FenrirECS/EntityList.hpp"
@@ -228,6 +229,26 @@ namespace Fenrir::Detail
     inline constexpr std::string_view TransformType = "Fenrir::Transform";
 
     /**
+     * @brief Where a component's entry goes among a block's `components`: 0 for Name, 1 for Transform, 2 for the rest,
+     * which go by canonical name, so the same scene writes the same bytes (ADR-0077 §1).
+     */
+    [[nodiscard]] int EntryRank(std::string_view name);
+
+    /** @brief One described component type a block writes when its entity has one. */
+    struct WrittenType
+    {
+        const TypeDescription* type = nullptr;
+        ComponentType component;
+    };
+
+    /**
+     * @brief Every described component type a block can write, in the order it writes them: each registered component
+     * type with a ComponentType, but a transient one and those SpelledApart. A block lists each one its entity has, so
+     * one it leaves out the entity has not.
+     */
+    [[nodiscard]] std::vector<WrittenType> WrittenTypes(const TypeRegistry& registry);
+
+    /**
      * @brief Whether `entity` is a live entity of `entities`: false for an empty entity, a destroyed one, or one of
      * another scene. A merge's parent and a subtree's root must be.
      */
@@ -235,6 +256,19 @@ namespace Fenrir::Detail
     {
         return entity.IsValid() && entity == entities.GetEntity(entity.GetId());
     }
+
+    /**
+     * @brief The order of a scene's top-level entities as the files that filled it list them (the spec's "siblings in
+     * the file's order"), which a save writes them in: a load's roots, a merge's at the top after them, and a patch's
+     * in its file's order again. A scene resource no type describes, so no file holds it. A top-level entity it does
+     * not list (one made at run time, or of a block with no id that a patch skipped) is written after those it does,
+     * in the order of the entities' slots.
+     */
+    struct SceneRootOrder
+    {
+        /** @brief The top-level entities in order; one destroyed or given a parent since is passed over. */
+        std::vector<Entity> roots;
+    };
 
     /**
      * @brief Calls `visit` for each entity in the scope of the instance `root` tops (ADR-0080 §2): every entity below

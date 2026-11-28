@@ -4,6 +4,7 @@
 // Every test works in a temporary asset root of its own.
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -265,6 +266,73 @@ TEST_CASE("Instancing a model spawns its nodes under the parent, the root marked
     REQUIRE(NameOf(model.Find(Fenrir::ModelEntityId(2))) == "Panel");
     REQUIRE(NameOf(model.Find(Fenrir::ModelEntityId(3))) == "Marker");
     REQUIRE(NameOf(model.Find(Fenrir::ModelEntityId(4))) == "Empty");
+}
+
+TEST_CASE("Instancing an OBJ model spawns its two objects under a root named after the file, numbered from one",
+          "[assets][scenes][instances][models]")
+{
+    TempRoot root;
+    for (const char* file : {"scene.obj", "scene.mtl", "checker.png", "normal.png"})
+    {
+        root.Copy(Fixtures() / "models" / file, std::string("models/") + file);
+    }
+    DataApp test({root.Path()});
+    Fenrir::Scene& scene = test.app.CreateScene("Host");
+    const Entity mount = Spawn(scene, "Mount");
+
+    const InstanceResult model = test.store.Instantiate(scene, "models/scene.obj", mount);
+
+    INFO("SpawnNodes' root, named after the file, under the mount and marked with the model's path");
+    REQUIRE(model.root.IsValid());
+    REQUIRE(model.load.status != LoadStatus::Failed);
+    REQUIRE(NameOf(model.root) == "scene");
+    REQUIRE(ParentOf(model.root) == mount);
+    REQUIRE(SourceOf(model.root) == "models/scene.obj");
+    INFO("the OBJ's objects, Panel and Marker, hang from the root, found by their node index plus one");
+    REQUIRE(ChildNames(model.root) == std::vector<std::string>{"Panel", "Marker"});
+    REQUIRE(model.entities.size() == 2);
+    REQUIRE(NameOf(model.Find(Fenrir::ModelEntityId(1))) == "Panel");
+    REQUIRE(NameOf(model.Find(Fenrir::ModelEntityId(2))) == "Marker");
+
+    const SceneSaveResult saved = test.store.SaveScene(scene, HostPath);
+    INFO("a save writes the mount and the instance, one block each");
+    REQUIRE(saved.status == SaveStatus::Succeeded);
+    REQUIRE(saved.entitiesWritten == 2);
+}
+
+TEST_CASE("CopyScene copies an instance as an instance, so the copy saves it as one block",
+          "[assets][scenes][instances][copy]")
+{
+    TempRoot root;
+    CopySources(root);
+    DataApp test({root.Path()});
+    Fenrir::Scene& scene = test.app.CreateScene("Host");
+    BuildHost(test, scene);
+
+    Fenrir::Scene& copy = test.store.CopyScene(test.app, scene, "Copy");
+
+    INFO("the copy's player is an instance's root, marked with its source and holding its block's id");
+    Fenrir::EntityList& entities = copy.GetEntityList();
+    Entity player;
+    entities.ForEachEntity([&](auto handle) {
+        const Entity entity = entities.GetEntity(static_cast<std::uint32_t>(handle));
+        if (IdOf(entity) == "p1ace")
+        {
+            player = entity;
+        }
+    });
+    REQUIRE(player.IsValid());
+    REQUIRE(SourceOf(player) == PlayerPath);
+    INFO("the copy's sword is inside the player, its source's, and the watcher still follows it");
+    const Entity sword = ChildNamed(player, "Sword");
+    REQUIRE(sword.IsValid());
+    REQUIRE(ChildNamed(ParentOf(player), "Watcher").GetComponent<AssetsTest::Follower>().target == sword);
+
+    const SceneSaveResult saved = test.store.SaveScene(copy, HostPath);
+    INFO("the copy saves as the original does: five blocks, each instance one, the golden host's bytes");
+    REQUIRE(saved.status == SaveStatus::Succeeded);
+    REQUIRE(saved.entitiesWritten == 5);
+    REQUIRE(ReadFile(root.Path() / HostPath) == ReadFile(Fixtures() / "scenes" / "host.scene.json5"));
 }
 
 TEST_CASE("A model id is its number in base32", "[assets][scenes][instances][models]")

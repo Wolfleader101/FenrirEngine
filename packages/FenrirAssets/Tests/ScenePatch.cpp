@@ -1,13 +1,16 @@
 // The scene patch (ADR-0081 §3): a scene LoadScene filled follows its file when the file changes, matched by entity
-// id. A matched entity has the components the file writes rewritten and its parent and order restored, an entity only
-// in the file is added, and one whose id the file no longer has is destroyed with its children; an entity with no id,
-// and a component the file does not write, is left alone, and the file's resources are rewritten. A file that does not
+// id, at the top or added by the file inside an instance. A matched entity has the components the file writes
+// rewritten and its parent and order restored, an entity only in the file is added, and one whose id the file no
+// longer has is destroyed with its children; an entity with no id, and a component the file does not write, is left
+// alone, but for a Name or Transform its block stops listing, which goes as on a load; the file's resources are
+// rewritten, and a save writes the top-level entities in the file's order. A file that does not
 // read changes nothing and says why once, and a destroyed scene is never patched. Every test runs on a temporary asset
 // root of its own, with both reload intervals at zero, and rewrites the scene file between RunFrame calls. The instance
 // re-patch's tests (ADR-0081 §4) follow the patch's, rewriting a scene or model source instead. No fixture holds a
 // tagged union.
 
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <format>
 #include <optional>
@@ -55,7 +58,8 @@ namespace
 
     // The level's blocks: a level holding a player at 75 health, who holds a sword following them, and a crate with a
     // lid at the top.
-    constexpr std::string_view LevelBlock = R"(      { id: "a7k2q", components: { "Fenrir::Name": { name: "Level" } } },
+    constexpr std::string_view LevelBlock =
+        R"(      { id: "a7k2q", components: { "Fenrir::Name": { name: "Level" } } },
 )";
     constexpr std::string_view PlayerBlock = R"(      {
         id: "d4e5f",
@@ -161,6 +165,23 @@ namespace
         std::size_t count = 0;
         scene.GetEntityList().ForEachEntity([&](auto) { ++count; });
         return count;
+    }
+
+    // How many entities of `scene` hold the id `spelled`.
+    std::size_t HoldingId(Fenrir::Scene& scene, std::string_view spelled)
+    {
+        const std::optional<Fenrir::EntityId> id = Fenrir::ParseEntityId(spelled);
+        REQUIRE(id.has_value());
+        Fenrir::EntityList& entities = scene.GetEntityList();
+        std::size_t holding = 0;
+        entities.ForEachEntity([&](auto handle) {
+            const Entity entity = entities.GetEntity(static_cast<std::uint32_t>(handle));
+            if (entity.HasComponent<Fenrir::EntityId>() && entity.GetComponent<Fenrir::EntityId>().value == id->value)
+            {
+                ++holding;
+            }
+        });
+        return holding;
     }
 } // namespace
 
@@ -514,6 +535,76 @@ TEST_CASE("With hotReload off, a rewritten scene file patches nothing", "[assets
     REQUIRE(EntityCount(scene) == entities);
 }
 
+TEST_CASE("A scene patch takes a Name or Transform from a matched entity whose block stops listing it, as a load does",
+          "[assets][scenes][reload]")
+{
+    TempRoot root;
+    root.Write(LevelPath, Level());
+    DataApp test(Watching(root));
+    Fenrir::Scene& scene = Load(test, LevelPath, "Level");
+    const Entity player = WithId(scene, "d4e5f");
+    INFO("the player loads with the name and transform its block lists");
+    REQUIRE(player.HasComponent<Fenrir::Name>());
+    REQUIRE(player.HasComponent<Fenrir::Transform>());
+
+    // The player's block lists its health alone now.
+    constexpr std::string_view Bare = R"(      {
+        id: "d4e5f",
+        parent: "a7k2q",
+        components: { "AssetsTest::Health": { version: 2, current: 75 } },
+      },
+)";
+    root.Write(LevelPath, SceneText(std::string(LevelBlock) + std::string(Bare)));
+    RunFrames(test, 2);
+
+    INFO("the player is the same entity, with neither a name nor a transform, as a load of the file gives it");
+    REQUIRE(Alive(scene, player));
+    REQUIRE_FALSE(player.HasComponent<Fenrir::Name>());
+    REQUIRE_FALSE(player.HasComponent<Fenrir::Transform>());
+    INFO("the health it lists is still written, and nothing was logged");
+    REQUIRE(player.GetComponent<AssetsTest::Health>().current == 75.0f);
+    REQUIRE(test.errors->empty());
+}
+
+TEST_CASE("A save after a scene patch lists the top-level entities in the file's order, a new one included",
+          "[assets][scenes][reload]")
+{
+    constexpr std::string_view SavedPath = "levels/saved.scene.json5";
+    constexpr std::string_view First = R"(      { id: "a0001", components: { "Fenrir::Name": { name: "A" } } },
+)";
+    constexpr std::string_view Second = R"(      { id: "b0002", components: { "Fenrir::Name": { name: "B" } } },
+)";
+    constexpr std::string_view Third = R"(      { id: "c0003", components: { "Fenrir::Name": { name: "C" } } },
+)";
+    constexpr std::string_view Fourth = R"(      { id: "d0004", components: { "Fenrir::Name": { name: "D" } } },
+)";
+    TempRoot root;
+    root.Write(LevelPath, SceneText(std::string(First) + std::string(Second) + std::string(Third)));
+    DataApp test(Watching(root));
+    Fenrir::Scene& scene = Load(test, LevelPath, "Level");
+    // At run time the first goes, so its slot is free for the patch's new entity.
+    scene.GetEntityList().DestroyEntity(WithId(scene, "a0001"));
+
+    // The file drops the first, puts the third before the second, and gains a fourth between them.
+    root.Write(LevelPath, SceneText(std::string(Third) + std::string(Fourth) + std::string(Second)));
+    RunFrames(test, 2);
+    INFO("the patch added the fourth");
+    REQUIRE(Alive(scene, WithId(scene, "d0004")));
+
+    const Fenrir::SceneSaveResult saved = test.store.SaveScene(scene, SavedPath);
+    INFO("the scene saves, and its file loads back whole");
+    REQUIRE(saved.status == Fenrir::SaveStatus::Succeeded);
+    const SceneLoadResult reloaded = test.store.LoadScene(test.app, SavedPath, "Saved");
+    REQUIRE(reloaded.status == LoadStatus::Succeeded);
+    std::vector<std::string> names;
+    for (const Entity& top : reloaded.roots)
+    {
+        names.emplace_back(top.GetComponent<Fenrir::Name>().Get());
+    }
+    INFO("the save lists the top-level entities as the patched file does, not by their slots");
+    REQUIRE(names == std::vector<std::string>{"C", "D", "B"});
+}
+
 // The instance re-patch (ADR-0081 §4): a scene LoadScene filled follows the sources its instances expanded. A changed
 // scene source is read again into each of its instances by source id, with the host block's diff reapplied on top, a
 // run-time child left where it is and the host file never written; a changed model re-spawns its instances under
@@ -679,8 +770,9 @@ TEST_CASE("An edit to a host's instance diff is reapplied over its source", "[as
     REQUIRE(Alive(scene, second));
     INFO("the second crate takes its new override");
     REQUIRE(second.GetComponent<AssetsTest::Health>().current == 20.0f);
-    INFO("the first crate, its transform override gone, is where its source puts it, at the source's health");
-    REQUIRE(first.GetComponent<Fenrir::Transform>().pos.x == 0.0f);
+    INFO("the first crate, its transform override gone, has no transform, as its source gives it none, and is at the "
+         "source's health");
+    REQUIRE_FALSE(first.HasComponent<Fenrir::Transform>());
     REQUIRE(first.GetComponent<AssetsTest::Health>().current == 50.0f);
     INFO("nothing was logged");
     REQUIRE(test.errors->empty());
@@ -776,6 +868,181 @@ TEST_CASE("A rewritten model source re-spawns its instances under their roots", 
     INFO("two roots of four nodes, a sticker, and the attached prop's root and its three nodes");
     REQUIRE(EntityCount(scene) == 12);
     INFO("nothing was logged");
+    REQUIRE(test.errors->empty());
+}
+
+TEST_CASE("A scene patch matches an entity the file added inside an instance by its id, rather than adding it again",
+          "[assets][scenes][reload][instances]")
+{
+    // The yard: a crate, and, with `latch`, a latch the yard adds to the crate's lid, at `health`.
+    const auto yard = [](std::string_view health, bool latch = true) {
+        std::string blocks = R"(      { id: "a1a1a", instance: "prefabs/crate.scene.json5" },
+)";
+        if (latch)
+        {
+            blocks += std::string(R"(      {
+        id: "e1e1e",
+        parent: "a1a1a/k1d0a",
+        components: { "Fenrir::Name": { name: "Latch" }, "AssetsTest::Health": { version: 2, current: )") +
+                      std::string(health) + R"( } },
+      },
+)";
+        }
+        return SceneText(blocks);
+    };
+    TempRoot root;
+    root.Write(CratePath, Crate("50"));
+    root.Write(YardPath, yard("3"));
+    DataApp test(Watching(root));
+    Fenrir::Scene& scene = Load(test, YardPath, "Yard");
+    const Entity lid = ChildNamed(WithId(scene, "a1a1a"), "Lid");
+    const Entity latch = WithId(scene, "e1e1e");
+    INFO("the latch loads under the crate's lid");
+    REQUIRE(ParentOf(latch) == lid);
+
+    root.Write(YardPath, yard("4"));
+    RunFrames(test, 2);
+    root.Write(YardPath, yard("5"));
+    RunFrames(test, 2);
+
+    INFO("after two patches the latch is the one entity of its id, the same one, under the lid, with the edit");
+    REQUIRE(HoldingId(scene, "e1e1e") == 1);
+    REQUIRE(WithId(scene, "e1e1e") == latch);
+    REQUIRE(ParentOf(latch) == lid);
+    REQUIRE(latch.GetComponent<AssetsTest::Health>().current == 5.0f);
+    INFO("three entities: the crate, its lid and the latch, and nothing was logged");
+    REQUIRE(EntityCount(scene) == 3);
+    REQUIRE(test.errors->empty());
+
+    root.Write(YardPath, yard("5", false));
+    RunFrames(test, 2);
+    INFO("a latch the file drops is destroyed, the crate and its lid kept");
+    REQUIRE_FALSE(Alive(scene, latch));
+    REQUIRE(Alive(scene, lid));
+    REQUIRE(EntityCount(scene) == 2);
+}
+
+TEST_CASE("An instance re-patch removes a component the source no longer gives an entity, a host's override kept",
+          "[assets][scenes][reload][instances]")
+{
+    // The crate prefab, its lid's components `lid`.
+    const auto crate = [](std::string_view lid) {
+        return SceneText(std::string(R"(      { id: "c8r4t", components: { "Fenrir::Name": { name: "Crate" } } },
+      { id: "k1d0a", parent: "c8r4t", components: { )") +
+                         std::string(lid) + R"( } },
+)");
+    };
+    TempRoot root;
+    root.Write(CratePath,
+               crate(R"("Fenrir::Name": { name: "Lid" }, "AssetsTest::Health": { version: 2, current: 5 })"));
+    // The second crate overrides its lid's health.
+    root.Write(YardPath, SceneText(R"(      { id: "a1a1a", instance: "prefabs/crate.scene.json5" },
+      {
+        id: "b2b2b",
+        instance: "prefabs/crate.scene.json5",
+        overrides: { "k1d0a": { components: { "AssetsTest::Health": { version: 2, current: 7 } } } },
+      },
+)"));
+    DataApp test(Watching(root));
+    Fenrir::Scene& scene = Load(test, YardPath, "Yard");
+    const Entity firstLid = ChildNamed(WithId(scene, "a1a1a"), "Lid");
+    const Entity secondLid = ChildNamed(WithId(scene, "b2b2b"), "Lid");
+    INFO("the first lid has its source's health, the second its host's");
+    REQUIRE(firstLid.GetComponent<AssetsTest::Health>().current == 5.0f);
+    REQUIRE(secondLid.GetComponent<AssetsTest::Health>().current == 7.0f);
+
+    // The lid has no health now.
+    root.Write(CratePath, crate(R"("Fenrir::Name": { name: "Lid" })"));
+    RunFrames(test, 2);
+
+    INFO("the lid the host left alone loses its health, as a load of the source gives it none");
+    REQUIRE(Alive(scene, firstLid));
+    REQUIRE_FALSE(firstLid.HasComponent<AssetsTest::Health>());
+    INFO("the lid the host overrode has its override put back on top, and nothing was logged");
+    REQUIRE(Alive(scene, secondLid));
+    REQUIRE(secondLid.GetComponent<AssetsTest::Health>().current == 7.0f);
+    REQUIRE(test.errors->empty());
+}
+
+TEST_CASE("An instance re-patch takes a Name or Transform the source stops listing, and an override adds its back",
+          "[assets][scenes][reload][instances]")
+{
+    // The crate prefab, its lid's components `lid`.
+    const auto crate = [](std::string_view lid) {
+        return SceneText(std::string(R"(      { id: "c8r4t", components: { "Fenrir::Name": { name: "Crate" } } },
+      { id: "k1d0a", parent: "c8r4t", components: { )") +
+                         std::string(lid) + R"( } },
+)");
+    };
+    TempRoot root;
+    root.Write(CratePath, crate(R"("Fenrir::Name": { name: "Lid" }, "Fenrir::Transform": { pos: [0, 1, 0] })"));
+    // The second crate overrides its lid's transform.
+    root.Write(YardPath, SceneText(R"(      { id: "a1a1a", instance: "prefabs/crate.scene.json5" },
+      {
+        id: "b2b2b",
+        instance: "prefabs/crate.scene.json5",
+        overrides: { "k1d0a": { components: { "Fenrir::Transform": { pos: [0, 3, 0] } } } },
+      },
+)"));
+    DataApp test(Watching(root));
+    Fenrir::Scene& scene = Load(test, YardPath, "Yard");
+    const Entity firstLid = ChildNamed(WithId(scene, "a1a1a"), "Lid");
+    const Entity secondLid = ChildNamed(WithId(scene, "b2b2b"), "Lid");
+    INFO("the first lid is where its source puts it, the second where its host does");
+    REQUIRE(firstLid.GetComponent<Fenrir::Transform>().pos.y == 1.0f);
+    REQUIRE(secondLid.GetComponent<Fenrir::Transform>().pos.y == 3.0f);
+
+    // The lid lists nothing now: no name and no transform.
+    root.Write(CratePath, crate(""));
+    RunFrames(test, 2);
+
+    INFO("the lid the host left alone has neither a name nor a transform, as a load of the source gives it");
+    REQUIRE(Alive(scene, firstLid));
+    REQUIRE_FALSE(firstLid.HasComponent<Fenrir::Name>());
+    REQUIRE_FALSE(firstLid.HasComponent<Fenrir::Transform>());
+    INFO("the lid the host overrode has no name, and its transform override adds the transform back");
+    REQUIRE(Alive(scene, secondLid));
+    REQUIRE_FALSE(secondLid.HasComponent<Fenrir::Name>());
+    REQUIRE(secondLid.HasComponent<Fenrir::Transform>());
+    REQUIRE(secondLid.GetComponent<Fenrir::Transform>().pos.y == 3.0f);
+    REQUIRE(test.errors->empty());
+}
+
+TEST_CASE("A model re-spawn points a host's entity field into the model at the new entity of its id",
+          "[assets][scenes][reload][instances]")
+{
+    TempRoot root;
+    root.Write(PropPath, Prop({"Panel", "Marker"}));
+    // A watcher at the top follows the model's Marker, its second node.
+    root.Write(YardPath, SceneText(R"(      { id: "a1a1a", instance: "models/prop.obj" },
+      {
+        id: "f0110",
+        components: { "Fenrir::Name": { name: "Watcher" }, "AssetsTest::Follower": { target: "a1a1a/2", speed: 1 } },
+      },
+)"));
+    DataApp test(Watching(root));
+    Fenrir::Scene& scene = Load(test, YardPath, "Yard");
+    const Entity prop = WithId(scene, "a1a1a");
+    const Entity watcher = WithId(scene, "f0110");
+    const Entity oldMarker = ChildNamed(prop, "Marker");
+    INFO("the watcher follows the Marker inside the model");
+    REQUIRE(oldMarker.IsValid());
+    REQUIRE(watcher.GetComponent<AssetsTest::Follower>().target == oldMarker);
+
+    root.Write(PropPath, Prop({"Panel", "Marker", "Beacon"}));
+    RunFrames(test, 2);
+
+    INFO("the model re-spawned, and the watcher follows the new Marker");
+    const Entity newMarker = ChildNamed(prop, "Marker");
+    REQUIRE(newMarker.IsValid());
+    REQUIRE_FALSE(Alive(scene, oldMarker));
+    REQUIRE(watcher.GetComponent<AssetsTest::Follower>().target == newMarker);
+
+    root.Write(PropPath, Prop({"Panel"}));
+    RunFrames(test, 2);
+    INFO("a model with no Marker any more leaves the watcher following nothing, and nothing was logged");
+    REQUIRE_FALSE(ChildNamed(prop, "Marker").IsValid());
+    REQUIRE_FALSE(watcher.GetComponent<AssetsTest::Follower>().target.IsValid());
     REQUIRE(test.errors->empty());
 }
 

@@ -272,7 +272,7 @@ A scene file whose single root is an instance of another scene file, so it is th
 *Avoid:* inherited scene, derived scene, prefab variant, child blueprint.
 
 **Scene patch**
-What a changed scene file or instance source does to a running scene: entities matched by entity id have their written components, parent and order rewritten from the file, new ones are added, ones the file dropped are destroyed with their children, and run-time entities and unwritten components are left alone (ADR-0081).
+What a changed scene file or instance source does to a running scene: entities matched by entity id have their written components, parent and order rewritten from the file, new ones are added, ones the file dropped are destroyed with their children, and run-time entities and unwritten components are left alone, but for a Name or Transform the block stops listing, which goes as on a load (ADR-0081).
 *Avoid:* scene reload (destroying and recreating, which is the caller's), live sync, diff apply.
 
 **Hot reload**

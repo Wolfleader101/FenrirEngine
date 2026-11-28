@@ -34,6 +34,7 @@
 #include "FenrirScene/Scene.hpp"
 #include "FenrirSerialisation/Bridge.hpp"
 #include "FenrirSerialisation/Encoding.hpp"
+#include "FenrirSerialisation/HeldFields.hpp"
 #include "FenrirSerialisation/ReadTree.hpp"
 #include "FenrirSerialisation/Upgrade.hpp"
 #include "FenrirSerialisation/Value.hpp"
@@ -147,6 +148,126 @@ namespace Fenrir
             type.Construct(value);
         }
 
+        // Points each `entity` field of `value` naming an entity of `list` that `moved` has at the entity it maps to,
+        // or at none when that is the null entity. Every field a file holds is walked: a list's elements, an
+        // optional's value and a tagged union's live alternative.
+        void RemapEntityFields(ValueRef value, void* list, const std::unordered_map<std::uint32_t, Entity>& moved)
+        {
+            switch (value.GetKind())
+            {
+            case Kind::Entity:
+                if (const EntityValue held = value.Entity(); held.list == list)
+                {
+                    if (const auto found = moved.find(held.id); found != moved.end())
+                    {
+                        value.SetEntity(found->second.IsValid() ? EntityValue{found->second.GetId(), list}
+                                                                : EntityValue{});
+                    }
+                }
+                break;
+            case Kind::Struct:
+                for (const Ser::HeldField<ValueRef>& field : Ser::HeldFieldsOf(value))
+                {
+                    RemapEntityFields(field.value, list, moved);
+                }
+                break;
+            case Kind::Array:
+            case Kind::List:
+                for (std::size_t index = 0; index < value.Size(); ++index)
+                {
+                    RemapEntityFields(value.Element(index), list, moved);
+                }
+                break;
+            case Kind::Optional:
+                if (value.HasValue())
+                {
+                    RemapEntityFields(value.Value(), list, moved);
+                }
+                break;
+            default:
+                break;
+            }
+        }
+
+        // Remaps each `entity` field of `scene`'s described components and scene resources through `moved`, by
+        // RemapEntityFields.
+        void RemapSceneEntityFields(Scene& scene, const TypeRegistry& registry,
+                                    const std::unordered_map<std::uint32_t, Entity>& moved)
+        {
+            EntityList& entities = scene.GetEntityList();
+            void* const list = &entities;
+            const std::vector<Detail::WrittenType> types = Detail::WrittenTypes(registry);
+            entities.ForEachEntity([&](auto handle) {
+                const auto entity = static_cast<std::uint32_t>(handle);
+                for (const Detail::WrittenType& written : types)
+                {
+                    if (void* component = entities.Get(written.component, entity))
+                    {
+                        RemapEntityFields(ValueRef(component, ValueType{.kind = Kind::Struct, .type = written.type}),
+                                          list, moved);
+                    }
+                }
+            });
+            for (const TypeDescription* type : registry.Types(Role::SceneResource))
+            {
+                if (void* resource = scene.FindResource(registry, type->name))
+                {
+                    RemapEntityFields(ValueRef(resource, ValueType{.kind = Kind::Struct, .type = type}), list, moved);
+                }
+            }
+        }
+
+        // Whether `entity`, inside an instance and holding the id `value`, is its source's: one the read of the
+        // nearest instance above it gave out, as `scopes` records it. An entity there that no recorded read gave its
+        // id is a host's.
+        bool SourceEntity(const Detail::InstanceScopes* scopes, const Entity& entity, std::uint64_t value)
+        {
+            if (scopes == nullptr)
+            {
+                return false;
+            }
+            for (Entity above = entity.GetComponent<Relationship>().parent; above.IsValid();
+                 above = above.GetComponent<Relationship>().parent)
+            {
+                if (above.HasComponent<Instance>())
+                {
+                    const auto scope = scopes->find(above.GetId());
+                    return scope != scopes->end() && scope->second.ids.contains(value);
+                }
+            }
+            return false;
+        }
+
+        // Records `roots`, a read's top-level entities in its file's order, in `scene`'s root order: after those it
+        // lists already, or, for a patch, before them, since the patch restores its file's order. An entity destroyed
+        // or given a parent since it was listed goes.
+        void OrderRoots(Scene& scene, const std::vector<Entity>& roots, bool patch)
+        {
+            Detail::SceneRootOrder* order = scene.GetResource<Detail::SceneRootOrder>();
+            if (order == nullptr)
+            {
+                order = &scene.AddResource<Detail::SceneRootOrder>();
+            }
+            std::vector<Entity> before = std::move(order->roots);
+            const std::vector<Entity>& first = patch ? roots : before;
+            const std::vector<Entity>& then = patch ? before : roots;
+            EntityList& entities = scene.GetEntityList();
+            std::unordered_set<std::uint32_t> listed;
+            std::vector<Entity> ordered;
+            for (const std::vector<Entity>* part : {&first, &then})
+            {
+                for (const Entity& top : *part)
+                {
+                    if (Detail::LiveIn(entities, top) && !top.GetComponent<Relationship>().parent.IsValid() &&
+                        listed.insert(top.GetId()).second)
+                    {
+                        ordered.push_back(top);
+                    }
+                }
+            }
+            order->roots = std::move(ordered);
+        }
+
         // One load's work: the scene being filled, where its types are found, its file's path for diagnostics, how
         // its asset handle fields are read, and the result being filled; and for a merge, the entity the file's roots
         // go under (none for the top) and which door the read serves. An instance block's source is expanded through
@@ -171,9 +292,10 @@ namespace Fenrir
             // The ids the scene's entities hold, from before the load and as it gives them: a block's id one of them
             // has already is re-minted, so a merge never repeats an id in its scene.
             std::unordered_set<std::uint64_t> taken;
-            // For a patch (ADR-0081 §3): the scene's entities outside any instance by the value of the id each holds,
-            // which a block of that id fills rather than adding one; the entities matched so, which the patch keeps;
-            // and the ids the file held when it last filled the scene, whose entities the file no longer has go.
+            // For a patch (ADR-0081 §3): the scene's entities outside any instance, and those the file added inside
+            // one, by the value of the id each holds, which a block of that id fills rather than adding one; the
+            // entities matched so, which the patch keeps; and the ids the file held when it last filled the scene,
+            // whose entities the file no longer has go.
             std::unordered_map<std::uint64_t, std::uint32_t> live;
             std::unordered_set<std::uint32_t> matched;
             const std::unordered_set<std::uint64_t>* priorIds = nullptr;
@@ -185,6 +307,19 @@ namespace Fenrir
             std::function<bool(Entity)> repatch;
             // The unknown component types already warned of in this load.
             std::unordered_set<std::string> unknownWarned;
+            // Every described component type a block can list, which a re-patch removes from a matched entity when
+            // its block does not; found the first time it is asked for.
+            std::optional<std::vector<Detail::WrittenType>> writtenTypes;
+
+            // The described component types a block can list.
+            const std::vector<Detail::WrittenType>& Written()
+            {
+                if (!writtenTypes)
+                {
+                    writtenTypes = Detail::WrittenTypes(registry);
+                }
+                return *writtenTypes;
+            }
 
             // Whether this read patches entities the scene has: a scene patch, or an instance re-patch.
             [[nodiscard]] bool Patching() const
@@ -275,7 +410,8 @@ namespace Fenrir
             // Fills the entity `entity`, reserved for `block`: completes it, gives it its id `id` when it `holdsId`,
             // adds its components and appends it to its parent. `filled` holds every entity of an earlier block, which
             // a `parent` may name. A patch's `matchedEntity` is the scene's already, holding the id: each component the
-            // block writes is reset and read again, the rest are left, and it is taken from its parent first, so
+            // block writes is reset and read again, a Name or Transform it does not write goes (for a re-patch, any
+            // described component it does not write), the rest are left, and it is taken from its parent first, so
             // appending it restores its parent and its order.
             void FillBlock(Ser::Object& block, const Ser::Value& at, std::uint32_t entity, std::optional<EntityId> id,
                            bool holdsId, bool matchedEntity, const std::unordered_set<std::uint32_t>& filled)
@@ -313,25 +449,32 @@ namespace Fenrir
                 const auto lists = [&](std::string_view type) {
                     return components != nullptr && components->AsObject().Find(type) != nullptr;
                 };
-                if (!matchedEntity)
+                // The block lists every described component its entity has, Name and Transform at their defaults as
+                // `{}`, so one it leaves out the entity had not (ADR-0078 §5). A new entity loses CompleteEntity's,
+                // and a patch's matched one loses the Name or Transform it had, as a load gives it neither; the rest
+                // of a patched entity's components are the scene's, which the file does not write (ADR-0081 §3).
+                if (matchedEntity && read == Detail::SceneRead::Repatch)
                 {
-                    // The block lists every described component its entity has, Name and Transform at their defaults
-                    // as `{}`, so one it leaves out the entity had not: CompleteEntity's goes (ADR-0078 §5).
-                    if (!lists(Detail::NameType))
+                    // A source entity's components are all its source's, but what the host's overrides add, and
+                    // those are reapplied on top (ADR-0081 §4): one the source no longer gives it goes.
+                    for (const Detail::WrittenType& written : Written())
+                    {
+                        if (!lists(written.type->name) && entities.Has(written.component, entity))
+                        {
+                            entities.Remove(written.component, entity);
+                        }
+                    }
+                }
+                else
+                {
+                    if (!lists(Detail::NameType) && handle.HasComponent<Name>())
                     {
                         handle.RemoveComponent<Name>();
                     }
-                    if (!lists(Detail::TransformType))
+                    if (!lists(Detail::TransformType) && handle.HasComponent<Transform>())
                     {
                         handle.RemoveComponent<Transform>();
                     }
-                }
-                else if (read == Detail::SceneRead::Repatch && !lists(Detail::TransformType) &&
-                         handle.HasComponent<Transform>())
-                {
-                    // A source that does not write a transform gives its entity none, so a transform there is a
-                    // host's override, reset to the identity: the override, if still written, is reapplied on top.
-                    handle.GetComponent<Transform>() = Transform{};
                 }
                 if (matchedEntity)
                 {
@@ -778,8 +921,8 @@ namespace Fenrir
                 return root.GetId();
             }
 
-            // For a patch: the entity of the scene a block of id `id` fills, when one holds it outside any instance and
-            // no earlier block has the id. It is an instance's root of the source `instance` names for an instance
+            // For a patch: the entity of the scene a block of id `id` fills, when one `live` has holds it and no
+            // earlier block has the id. It is an instance's root of the source `instance` names for an instance
             // block, and no instance's root for any other; one that is not is no match, so the block adds its entity
             // afresh and the one the scene had goes.
             [[nodiscard]] std::optional<std::uint32_t> Matching(const std::optional<EntityId>& id,
@@ -1104,6 +1247,13 @@ namespace Fenrir
                 madeIds.insert(entity.GetComponent<EntityId>().value);
             }
         });
+        // Each old entity's new one, by its id, or none: the null entity.
+        std::unordered_map<std::uint32_t, Entity> moved;
+        for (const Entity& was : old)
+        {
+            const auto to = made.find(was.GetComponent<EntityId>().value);
+            moved.emplace(was.GetId(), to != made.end() ? to->second : Entity{});
+        }
         // What hangs from an old entity that is not the model's (a run-time child, or one a host added) moves to the
         // new entity of its id, or to the root when the model has none any more.
         for (const Entity& was : old)
@@ -1140,6 +1290,10 @@ namespace Fenrir
         Detail::DestroySubtree(entities, fresh);
         scope.ids = std::move(madeIds);
         scope.revision = revision;
+
+        // An `entity` field naming an old entity (a host's, into the model) names the new entity of its id now, or
+        // none when the model has none any more, as a load of the host would resolve it.
+        RemapSceneEntityFields(scene, *m_state->types, moved);
         return true;
     }
 
@@ -1604,16 +1758,23 @@ namespace Fenrir
         {
             entities.ForEachEntity([&](auto handle) {
                 const Entity entity = entities.GetEntity(static_cast<std::uint32_t>(handle));
-                if (!entity.HasComponent<EntityId>() || Detail::InsideInstance(entity))
+                if (!entity.HasComponent<EntityId>())
                 {
                     return;
                 }
                 const std::uint64_t value = entity.GetComponent<EntityId>().value;
                 if (read == Detail::SceneRead::Patch)
                 {
-                    filler.live.emplace(value, entity.GetId());
+                    // An entity inside an instance holds the file's id when the file added it there (a block whose
+                    // `parent` is a slash path): it is the file's to match and destroy, as one at the top is. Any
+                    // other there is its source's, scoped by its instance.
+                    if (!Detail::InsideInstance(entity) || (fileIds != nullptr && fileIds->contains(value) &&
+                                                            !SourceEntity(m_state->scopeSink, entity, value)))
+                    {
+                        filler.live.emplace(value, entity.GetId());
+                    }
                 }
-                else
+                else if (!Detail::InsideInstance(entity))
                 {
                     filler.taken.insert(value);
                 }
@@ -1665,6 +1826,12 @@ namespace Fenrir
             onChain.emplace(m_state->scenesReading);
         }
         filler.FillScene(*data);
+        if (read == Detail::SceneRead::Load || read == Detail::SceneRead::Patch ||
+            (read == Detail::SceneRead::Merge && !filler.parent.IsValid()))
+        {
+            // A save writes the scene's top-level entities in the order its files list them.
+            OrderRoots(scene, result.roots, read == Detail::SceneRead::Patch);
+        }
         if (fileIds != nullptr)
         {
             fileIds->clear();

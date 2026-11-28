@@ -745,6 +745,35 @@ namespace Fenrir::Detail
         }
         return write;
     }
+    int EntryRank(std::string_view name)
+    {
+        return name == NameType ? 0 : name == TransformType ? 1 : 2;
+    }
+
+    std::vector<WrittenType> WrittenTypes(const TypeRegistry& registry)
+    {
+        std::vector<WrittenType> written;
+        for (const TypeDescription* type : registry.Types(Role::Component))
+        {
+            if (type->transient || std::ranges::find(SpelledApart, type->name) != std::end(SpelledApart))
+            {
+                continue;
+            }
+            // A component type no package attached a ComponentType to cannot be reached on an entity, so it is never
+            // found there to write.
+            if (std::optional<ComponentType> component = ComponentType::ForName(registry, type->name))
+            {
+                written.push_back({type, *component});
+            }
+        }
+        std::ranges::sort(written, [](const WrittenType& a, const WrittenType& b) {
+            const int rankA = EntryRank(a.type->name);
+            const int rankB = EntryRank(b.type->name);
+            return rankA != rankB ? rankA < rankB : a.type->name < b.type->name;
+        });
+        return written;
+    }
+
     void ForEachInInstance(const Entity& root, const std::function<void(const Entity&)>& visit)
     {
         root.ForEachChild([&](const Entity& child) {
