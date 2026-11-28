@@ -15,5 +15,5 @@ public partial struct EntityId : IComponent
     /// The id's spelling, packed: below a leading 1 bit, five bits per lower-case Crockford base32 character, the first
     /// character highest. Zero, which no spelling packs to, means no id.
     /// </summary>
-    public ulong Value;
+    public ulong Id;
 }

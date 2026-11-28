@@ -20,7 +20,8 @@ internal sealed record BoundType(string Type, IReadOnlyList<string>? Constructor
 /// <summary>
 /// Where the C# mirrors go, the names of the SDK types they use (each only when the binding mirrors a type that needs
 /// it: <see cref="Binding" />'s accessors say which), the fields (<c>Type::member</c>) mirrored as private, or as fixed
-/// buffers rather than <c>[InlineArray]</c> structs, and the structs mirrored <c>internal</c>.
+/// buffers rather than <c>[InlineArray]</c> structs, the structs mirrored <c>internal</c>, and the members of the SDK's
+/// reference to a component or resource (<c>component-ref-members</c>), whose names no field of one may take in C#.
 /// </summary>
 internal sealed record CSharpConfig(
     string Contract,
@@ -41,7 +42,8 @@ internal sealed record CSharpConfig(
     IReadOnlySet<string> ImmutableStructs,
     IReadOnlySet<string> PrivateFields,
     IReadOnlySet<string> FixedBuffers,
-    IReadOnlySet<string> InternalStructs);
+    IReadOnlySet<string> InternalStructs,
+    IReadOnlySet<string> ComponentRefMembers);
 
 /// <summary>
 /// Where the Iris mappings go, the headers they include, and the mappings header's include-directory spelling
@@ -182,7 +184,7 @@ internal sealed record BindingConfig(
                     "read-only-component-interface", "event-attribute", "event-interface", "tagged-union-attribute",
                     "resource-attribute", "resource-interface", "read-only-resource-interface", "pointer-type",
                     "readonly-events", "readonly-structs", "immutable-structs", "private-fields", "fixed-buffers",
-                    "internal-structs");
+                    "internal-structs", "component-ref-members");
         var cpp = reader.Table(table, "cpp");
         reader.Keys(cpp, "cpp", "mappings", "includes", "include");
 
@@ -303,7 +305,8 @@ internal sealed record BindingConfig(
                              reader.Strings(csharp, "immutable-structs").ToHashSet(StringComparer.Ordinal),
                              reader.Strings(csharp, "private-fields").ToHashSet(StringComparer.Ordinal),
                              reader.Strings(csharp, "fixed-buffers").ToHashSet(StringComparer.Ordinal),
-                             reader.Strings(csharp, "internal-structs").ToHashSet(StringComparer.Ordinal)),
+                             reader.Strings(csharp, "internal-structs").ToHashSet(StringComparer.Ordinal),
+                             reader.Strings(csharp, "component-ref-members").ToHashSet(StringComparer.Ordinal)),
             new CppConfig(reader.PathOf(cpp, "mappings"), reader.Strings(cpp, "includes"),
                           reader.OptionalString(cpp, "include")),
             registration, tests,

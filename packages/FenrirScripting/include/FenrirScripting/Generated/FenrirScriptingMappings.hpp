@@ -35,7 +35,7 @@ struct Iris::StructMapping<Fenrir::EntityId>
 {
     static constexpr std::string_view typeName = "Fenrir.Scripting.EntityId";
     static constexpr auto fields = Iris::StructFields(
-        Iris::Field<std::uint64_t>("Value", 0));
+        Iris::Field<std::uint64_t>("Id", 0));
 };
 static_assert(sizeof(Fenrir::EntityId) == 8 && alignof(Fenrir::EntityId) == 8,
               "Fenrir::EntityId is not the layout FenrirECS.api.json describes: "
