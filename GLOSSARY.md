@@ -132,7 +132,7 @@ A user's C# assembly holding C# components and systems. The engine loads it as o
 *Avoid:* script (as the name of a type or file), plugin.
 
 **Script report**
-What a script assembly says it defines when it loads: the C# components and events, each with its size and alignment, and a fingerprint of its layout that the engine compares across builds. The engine checks a report before it keeps the assembly, and refuses the whole load if any part of it is wrong (see *admission*). In code it is `ScriptReport`, which the reporting natives fill while the assembly's generated tables run.
+What a script assembly says it defines when it loads: the C# components and events, each with its size and alignment, each component's public fields (kind, target and offset, measured at run time) and `new T()` bytes, the structs those components hold, and a fingerprint of its layout that the engine compares across builds. The engine checks a report before it keeps the assembly, and refuses the whole load if any part of it is wrong (see *admission*). In code it is `ScriptReport`, which the reporting natives fill while the assembly's generated tables run.
 *Avoid:* manifest, schema.
 
 **Script data**
@@ -140,7 +140,7 @@ The data of the script components and events a generation of the script assembly
 *Avoid:* owned data, schema.
 
 **Admission**
-Keeping a generation's script report all or nothing: nothing of it is registered unless all of it is. In order, the report is discovered and checked, the native components, events, shared structs and resources are checked against their C# structs, the script's components and events are registered, then stale script data is dropped and the queues of new events made. A failed admission leaves the registry as a stop would, so the previous generation can be admitted again.
+Keeping a generation's script report all or nothing: nothing of it is registered unless all of it is. In order, the report is discovered and checked, the native components, events, shared structs and resources are checked against their C# structs, the script's components and events are registered and its components described to the App's type registry (so scene files hold them by name), then stale script data is dropped and the queues of new events made. A failed admission leaves the registry as a stop would, so the previous generation can be admitted again.
 *Avoid:* reconcile (the old function's name), validation (only the first part of it).
 
 **Scripting contract**

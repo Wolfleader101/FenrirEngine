@@ -193,7 +193,9 @@ fenrir_expect_compile(AcrossAwaitLocal CS4007)  # a local still alive after an a
 fenrir_expect_compile(InternalField OK)         # an internal field of an internal type on a public component
 fenrir_expect_compile(PointerField OK)          # a pointer field makes the accessors class unsafe
 fenrir_expect_compile(LatePart OK)              # IComponent named only on a later part of a partial struct
-fenrir_expect_compile(ManagedComponent FENRIR0004)  # a component holding a reference: a clear error
+fenrir_expect_compile(ManagedComponent FENRIR0004)  # a component holding a reference (a string): a clear error
+fenrir_expect_compile(DescribedFields OK)       # the component table measures every kind of field it describes
+fenrir_expect_compile(FixedStringNotBytes FENRIR0006)  # [FixedString] on a buffer that is not bytes
 fenrir_expect_compile(ReadOnlyStruct CS1929)    # a readonly component has no writable accessors
 fenrir_expect_compile(ReadOnlyFieldRead OK)     # a readonly field is read through Ref<T>, beside writable ones
 fenrir_expect_compile(ReadOnlyFieldWrite CS8331)  # but never written through it

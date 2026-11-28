@@ -2,8 +2,12 @@
 
 #include "ScriptComponents.hpp"
 
+#include "FenrirTypes/TypeRegistry.hpp"
+
 #include <functional>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -287,9 +291,9 @@ namespace Fenrir::Detail
     } // namespace
 
     // Admission, in an order that puts the one irreversible step as late as it can go and undoes everything after it:
-    //   1. discover what the script defines, kind by kind, and check it;
+    //   1. discover what the script defines, kind by kind, and check it, with the descriptions of its components;
     //   2. check every native component's, event's, shared struct's and resource's mapping against its C# struct;
-    //   3. register what the script defines (undone by Forget);
+    //   3. register what the script defines, and describe its components to the type registry (undone by Forget);
     //   4. drop what the previous generation left that no longer matches (irreversible);
     //   5. make the queues of new events (undone by removing them);
     //   6. record the definitions as owned.
@@ -313,6 +317,12 @@ namespace Fenrir::Detail
                 return discovered;
             }
         }
+        auto& types = app.GetResource<TypeRegistry>();
+        auto scriptTypes = std::make_unique<ScriptTypes>();
+        if (auto described = scriptTypes->Build(report, types); !described.Succeeded())
+        {
+            return described;
+        }
         if (auto validated = assembly.CheckNativeAgainstCSharp(m_registry); !validated.Succeeded())
         {
             return validated;
@@ -324,6 +334,20 @@ namespace Fenrir::Detail
                 Forget();
                 return registered;
             }
+        }
+        // The stop path forgets a generation before the next is admitted; this keeps a missed one from being dropped
+        // while the registry still points at its descriptions.
+        ForgetTypes();
+        m_types = &types;
+        m_scriptTypes = std::move(scriptTypes);
+        const auto componentTypeOf = [this](std::string_view name) -> std::optional<ComponentType> {
+            const auto* component = m_registry.Components().Get(m_registry.Components().Find(name));
+            return component != nullptr ? std::optional<ComponentType>(component->type) : std::nullopt;
+        };
+        if (auto described = m_scriptTypes->Register(types, componentTypeOf); !described.Succeeded())
+        {
+            Forget();
+            return described;
         }
         // Everything checks out and is registered, so from here the new generation is kept.
         for (auto& pass : passes)
@@ -349,8 +373,31 @@ namespace Fenrir::Detail
         return Succeeded();
     }
 
+    ScriptData::~ScriptData()
+    {
+        ForgetTypes();
+    }
+
+    void ScriptData::ForgetTypes()
+    {
+        if (m_types == nullptr)
+        {
+            return;
+        }
+        // Holders go before what they hold, which ScriptTypes keeps to; what the registry still refuses stays alive
+        // here.
+        std::erase_if(m_stranded,
+                      [this](const std::unique_ptr<ScriptTypes>& stranded) { return stranded->Unregister(*m_types); });
+        if (m_scriptTypes != nullptr && !m_scriptTypes->Unregister(*m_types))
+        {
+            m_stranded.push_back(std::move(m_scriptTypes));
+        }
+        m_scriptTypes.reset();
+    }
+
     void ScriptData::Forget()
     {
+        ForgetTypes();
         m_registry.RemoveScriptDefined();
     }
 

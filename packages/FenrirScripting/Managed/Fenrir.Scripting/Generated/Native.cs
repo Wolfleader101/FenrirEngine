@@ -58,10 +58,40 @@ internal static unsafe partial class Native
     [NativeFunction]
     public static partial int ComponentIdOf(ReadOnlySpan<char> name, ReadOnlySpan<char> typeName);
 
-    /// <summary>A script assembly reports a component type it defines, while it loads.</summary>
-    /// <returns>False when nothing is loading.</returns>
+    /// <summary>
+    /// A script assembly reports a component type it defines, while it loads, with the bytes of its `new T()` (`size`
+    /// of them, or none for zero bytes) and its flags: 1 `[Transient]`, 2 `[EditorOnly]`. Its fields follow, through
+    /// RegisterScriptField.
+    /// </summary>
+    /// <returns>False when nothing is loading, or the size, alignment or defaults are not plausible.</returns>
     [NativeFunction]
-    public static partial bool RegisterScriptComponent(ReadOnlySpan<char> name, int size, int alignment);
+    public static partial bool RegisterScriptComponent(ReadOnlySpan<char> name, int size, int alignment,
+                                                       ReadOnlySpan<byte> defaults, int flags);
+
+    /// <summary>
+    /// A script assembly reports a struct one of its components holds by value, while it loads, with the bytes of its
+    /// `new T()` (`size` of them). Its fields follow, through RegisterScriptField.
+    /// </summary>
+    /// <returns>False when nothing is loading, or the size, alignment or defaults are not plausible.</returns>
+    [NativeFunction]
+    public static partial bool RegisterScriptStruct(ReadOnlySpan<char> name, int size, int alignment,
+                                                    ReadOnlySpan<byte> defaults);
+
+    /// <summary>
+    /// A script assembly reports one field of the component or struct `owner` it reported last under that name, while
+    /// it loads: its kind as the API description spells it (`i32`, `struct`, `fixed-string`), for an array the kind of
+    /// its elements in `elementKind` (empty otherwise), the struct or reference target it names (empty when none), its
+    /// offset and size in bytes, its count (an array's elements, a fixed string's bytes) and whether it is
+    /// `[Transient]`.
+    /// </summary>
+    /// <returns>
+    /// False when nothing is loading, no such owner was reported, or a kind is not one the API description spells.
+    /// </returns>
+    [NativeFunction]
+    public static partial bool RegisterScriptField(ReadOnlySpan<char> owner, ReadOnlySpan<char> name,
+                                                   ReadOnlySpan<char> kind, ReadOnlySpan<char> elementKind,
+                                                   ReadOnlySpan<char> target, int offset, int size, int count,
+                                                   bool transient);
 
     /// <summary>Which registry ids belong to: it changes every time a registry is created.</summary>
     [NativeFunction]

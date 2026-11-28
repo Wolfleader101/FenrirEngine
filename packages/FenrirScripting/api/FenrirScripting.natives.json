@@ -164,11 +164,11 @@
       "namespace": "Fenrir::ScriptingNatives",
       "source": "../src/Bindings.cpp",
       "state": "Fenrir::Detail::EngineContext",
-      "doc": "A script assembly reports a component type it defines, while it loads.",
+      "doc": "A script assembly reports a component type it defines, while it loads, with the bytes of its `new T()` (`size` of them, or none for zero bytes) and its flags: 1 `[Transient]`, 2 `[EditorOnly]`. Its fields follow, through RegisterScriptField.",
       "returns": {
         "type": "bool",
         "kind": "bool",
-        "doc": "False when nothing is loading."
+        "doc": "False when nothing is loading, or the size, alignment or defaults are not plausible."
       },
       "parameters": [
         {
@@ -185,6 +185,125 @@
           "name": "alignment",
           "type": "std::int32_t",
           "kind": "i32"
+        },
+        {
+          "name": "defaults",
+          "type": "const std::uint8_t*",
+          "kind": "pointer",
+          "pointee": "std::uint8_t",
+          "pointeeKind": "u8",
+          "const": true
+        },
+        {
+          "name": "defaultsSize",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "flags",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "RegisterScriptStruct",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "A script assembly reports a struct one of its components holds by value, while it loads, with the bytes of its `new T()` (`size` of them). Its fields follow, through RegisterScriptField.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "False when nothing is loading, or the size, alignment or defaults are not plausible."
+      },
+      "parameters": [
+        {
+          "name": "name",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "size",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "alignment",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "defaults",
+          "type": "const std::uint8_t*",
+          "kind": "pointer",
+          "pointee": "std::uint8_t",
+          "pointeeKind": "u8",
+          "const": true
+        },
+        {
+          "name": "defaultsSize",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "RegisterScriptField",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "A script assembly reports one field of the component or struct `owner` it reported last under that name, while it loads: its kind as the API description spells it (`i32`, `struct`, `fixed-string`), for an array the kind of its elements in `elementKind` (empty otherwise), the struct or reference target it names (empty when none), its offset and size in bytes, its count (an array's elements, a fixed string's bytes) and whether it is `[Transient]`.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "False when nothing is loading, no such owner was reported, or a kind is not one the API description spells."
+      },
+      "parameters": [
+        {
+          "name": "owner",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "name",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "kind",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "elementKind",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "target",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "offset",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "size",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "count",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "transient",
+          "type": "bool",
+          "kind": "bool"
         }
       ]
     },

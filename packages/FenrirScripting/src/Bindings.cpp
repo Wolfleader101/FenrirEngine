@@ -11,13 +11,16 @@
 
 #include <atomic>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 // The engine side of the built-in extension's native functions, the contract's Native class: plain functions over C
 // types, called with the call context of the running Scripting. The declaration is the contract (ADR-0045): an `in` or
@@ -139,19 +142,109 @@ namespace Fenrir::ScriptingNatives
         return engine.components->Components().Resolve(name, typeName);
     }
 
+    namespace
+    {
+        // A component or struct a script reports, with the bytes of its `new T()`: none, or `size` of them.
+        bool ReportScriptType(std::vector<Detail::ScriptComponentDescription>& reported, std::string_view name,
+                              std::int32_t size, std::int32_t alignment, std::span<const std::uint8_t> defaults,
+                              std::int32_t flags)
+        {
+            if (name.empty() || size <= 0 || alignment <= 0 ||
+                (!defaults.empty() && defaults.size() != static_cast<std::size_t>(size)))
+            {
+                return false;
+            }
+            Detail::ScriptComponentDescription description;
+            description.name = std::string(name);
+            description.size = static_cast<std::size_t>(size);
+            description.alignment = static_cast<std::size_t>(alignment);
+            description.defaults.resize(defaults.size());
+            std::memcpy(description.defaults.data(), defaults.data(), defaults.size());
+            description.transient = (flags & 1) != 0;
+            description.editorOnly = (flags & 2) != 0;
+            reported.push_back(std::move(description));
+            return true;
+        }
+    } // namespace
+
     /**
-     * @brief A script assembly reports a component type it defines, while it loads.
-     * @return False when nothing is loading.
+     * @brief A script assembly reports a component type it defines, while it loads, with the bytes of its `new T()`
+     * (`size` of them, or none for zero bytes) and its flags: 1 `[Transient]`, 2 `[EditorOnly]`. Its fields follow,
+     * through RegisterScriptField.
+     * @return False when nothing is loading, or the size, alignment or defaults are not plausible.
      */
     bool RegisterScriptComponent(const CallContext&, Detail::EngineContext& engine, std::string_view name,
-                                 std::int32_t size, std::int32_t alignment)
+                                 std::int32_t size, std::int32_t alignment, const std::uint8_t* defaults,
+                                 std::int32_t defaultsSize, std::int32_t flags)
     {
-        if (engine.reporting == nullptr || name.empty() || size <= 0 || alignment <= 0)
+        return engine.reporting != nullptr && ReportScriptType(engine.reporting->components, name, size, alignment,
+                                                               SpanOf(defaults, defaultsSize), flags);
+    }
+
+    /**
+     * @brief A script assembly reports a struct one of its components holds by value, while it loads, with the bytes of
+     * its `new T()` (`size` of them). Its fields follow, through RegisterScriptField.
+     * @return False when nothing is loading, or the size, alignment or defaults are not plausible.
+     */
+    bool RegisterScriptStruct(const CallContext&, Detail::EngineContext& engine, std::string_view name,
+                              std::int32_t size, std::int32_t alignment, const std::uint8_t* defaults,
+                              std::int32_t defaultsSize)
+    {
+        return engine.reporting != nullptr &&
+               ReportScriptType(engine.reporting->structs, name, size, alignment, SpanOf(defaults, defaultsSize), 0);
+    }
+
+    /**
+     * @brief A script assembly reports one field of the component or struct `owner` it reported last under that name,
+     * while it loads: its kind as the API description spells it (`i32`, `struct`, `fixed-string`), for an array the
+     * kind of its elements in `elementKind` (empty otherwise), the struct or reference target it names (empty when
+     * none), its offset and size in bytes, its count (an array's elements, a fixed string's bytes) and whether it is
+     * `[Transient]`.
+     * @return False when nothing is loading, no such owner was reported, or a kind is not one the API description
+     * spells.
+     */
+    bool RegisterScriptField(const CallContext&, Detail::EngineContext& engine, std::string_view owner,
+                             std::string_view name, std::string_view kind, std::string_view elementKind,
+                             std::string_view target, std::int32_t offset, std::int32_t size, std::int32_t count,
+                             bool transient)
+    {
+        if (engine.reporting == nullptr || name.empty() || offset < 0 || size <= 0 || count < 0)
         {
             return false;
         }
-        engine.reporting->components.push_back(
-            {std::string(name), static_cast<std::size_t>(size), static_cast<std::size_t>(alignment)});
+        const std::optional<Kind> fieldKind = Detail::KindNamed(kind);
+        const std::optional<Kind> element =
+            elementKind.empty() ? std::optional<Kind>(Kind::I32) : Detail::KindNamed(elementKind);
+        if (!fieldKind || !element)
+        {
+            return false;
+        }
+        // The last report of that name, a struct or a component: fields follow the type they belong to.
+        Detail::ScriptComponentDescription* type = nullptr;
+        for (auto* reported : {&engine.reporting->structs, &engine.reporting->components})
+        {
+            for (auto at = reported->rbegin(); type == nullptr && at != reported->rend(); ++at)
+            {
+                if (at->name == owner)
+                {
+                    type = &*at;
+                }
+            }
+        }
+        if (type == nullptr)
+        {
+            return false;
+        }
+        type->fields.push_back(Detail::ScriptFieldDescription{
+            .name = std::string(name),
+            .kind = *fieldKind,
+            .target = std::string(target),
+            .elementKind = *element,
+            .offset = static_cast<std::size_t>(offset),
+            .size = static_cast<std::size_t>(size),
+            .count = static_cast<std::size_t>(count),
+            .transient = transient,
+        });
         return true;
     }
 

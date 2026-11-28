@@ -23,7 +23,9 @@
 
 #include "FenrirApp/App.hpp"
 #include "FenrirECS/EntityList.hpp"
+#include "FenrirECS/TypeAttachments.hpp"
 #include "FenrirScripting/Scripting.hpp"
+#include "FenrirTypes/TypeRegistry.hpp"
 
 namespace
 {
@@ -251,6 +253,49 @@ namespace
         {
             INFO("Shutdown should have removed the queues");
             REQUIRE(app.FindEventQueue("Fenrir.ScriptFixture.Echo") == nullptr);
+        }
+    }
+
+    // Forget unregisters a generation's descriptions, and the next generation registers its own under the same names:
+    // the changed Counter with its new field. Stopping scripting unregisters them all.
+    void AReloadDescribesTheNewGenerationsComponentsAndStoppingForgetsThem()
+    {
+        WorkingFixture build;
+        HeadlessApp headless;
+        auto& app = headless.Get();
+        const auto& types = app.GetResource<TypeRegistry>();
+        {
+            auto scripting = Scripting::Install(app, build.Config(false));
+            {
+                INFO("The fixture did not load");
+                REQUIRE(scripting.HasScripts());
+            }
+            const TypeDescription* before = types.Find(CounterName);
+            {
+                INFO("Version 1 of Counter should be described with its two fields");
+                REQUIRE((before != nullptr && before->size == 16 && before->fields.size() == 2));
+            }
+
+            build.Overwrite(fixtureV2);
+            {
+                INFO("The new build did not load");
+                REQUIRE((scripting.Reload().Succeeded() && scripting.Generation() == 2));
+            }
+            const TypeDescription* after = types.Find(CounterName);
+            {
+                INFO("Version 2 of Counter should be described in its place, with its new field");
+                REQUIRE((after != nullptr && after->size == 24 && after->fields.size() == 3 &&
+                         after->fields[2].name == "Extra"));
+            }
+            {
+                INFO("ComponentType::ForName should reach the new layout");
+                const auto component = ComponentType::ForName(types, CounterName);
+                REQUIRE((component.has_value() && component->Size() == 24));
+            }
+        }
+        {
+            INFO("Stopping scripting should unregister the script's components");
+            REQUIRE((types.Find(CounterName) == nullptr && types.Find("Fenrir.ScriptFixture.Spot") == nullptr));
         }
     }
 
@@ -643,6 +688,11 @@ TEST_CASE("a released generation unloads and its copy is deleted", "[scripting]"
 TEST_CASE("a rebuilt assembly changes behaviour without a restart and keeps unchanged data", "[scripting]")
 {
     ARebuiltAssemblyChangesBehaviourWithoutARestartAndKeepsUnchangedData();
+}
+
+TEST_CASE("a reload describes the new generation's components, and stopping forgets them", "[scripting][types]")
+{
+    AReloadDescribesTheNewGenerationsComponentsAndStoppingForgetsThem();
 }
 
 TEST_CASE("a changed layout drops the component and the events, and nothing reads stale bytes", "[scripting]")

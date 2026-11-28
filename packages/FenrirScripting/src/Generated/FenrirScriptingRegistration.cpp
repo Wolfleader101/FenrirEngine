@@ -30,6 +30,8 @@ namespace Fenrir::Generated
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::EntitySetWorldTransform>("Fenrir.Scripting.Native.EntitySetWorldTransform"),
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::ComponentIdOf>("Fenrir.Scripting.Native.ComponentIdOf", static_cast<std::int32_t>(Fenrir::RegistryError::NotRegistered)),
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::RegisterScriptComponent>("Fenrir.Scripting.Native.RegisterScriptComponent"),
+            Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::RegisterScriptStruct>("Fenrir.Scripting.Native.RegisterScriptStruct"),
+            Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::RegisterScriptField>("Fenrir.Scripting.Native.RegisterScriptField"),
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::RegistryGeneration>("Fenrir.Scripting.Native.RegistryGeneration"),
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::ComponentGet>("Fenrir.Scripting.Native.ComponentGet"),
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::ComponentHas>("Fenrir.Scripting.Native.ComponentHas"),
