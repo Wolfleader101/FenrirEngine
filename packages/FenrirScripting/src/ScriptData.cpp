@@ -335,6 +335,9 @@ namespace Fenrir::Detail
                 return registered;
             }
         }
+        // The stop path forgets a generation before the next is admitted; this keeps a missed one from being dropped
+        // while the registry still points at its descriptions.
+        ForgetTypes();
         m_types = &types;
         m_scriptTypes = std::move(scriptTypes);
         const auto componentTypeOf = [this](std::string_view name) -> std::optional<ComponentType> {

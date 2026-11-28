@@ -109,10 +109,15 @@ TEST_CASE("the scene writer saves a C# component by its full name, leaving its t
         INFO("Admission should describe the C# component, with its four fields");
         REQUIRE(tagged != nullptr);
         REQUIRE(tagged->fields.size() == 4);
-        CHECK(tagged->fields[0].type.kind == Kind::Entity);
-        CHECK((tagged->fields[1].type.kind == Kind::Reference && tagged->fields[1].type.target == "Fenrir::Image"));
-        CHECK((tagged->fields[2].type.kind == Kind::FixedString && tagged->fields[2].type.count == 16));
-        CHECK((tagged->fields[3].name == "Frames" && tagged->fields[3].transient));
+        REQUIRE(tagged->fields[0].type.kind == Kind::Entity);
+        REQUIRE((tagged->fields[1].type.kind == Kind::Reference && tagged->fields[1].type.target == "Fenrir::Image"));
+        REQUIRE((tagged->fields[2].type.kind == Kind::FixedString && tagged->fields[2].type.count == 16));
+        REQUIRE((tagged->fields[3].name == "Frames" && tagged->fields[3].transient));
+    }
+    {
+        INFO("Each field should be at the offset C# laid it out at: 0, 16, 24 and 40, in 48 bytes");
+        REQUIRE((tagged->fields[0].offset == 0 && tagged->fields[1].offset == 16 && tagged->fields[2].offset == 24 &&
+                 tagged->fields[3].offset == 40 && tagged->size == 48));
     }
     const std::optional<ComponentType> component = ComponentType::ForName(types, TaggedName);
     {
@@ -121,14 +126,21 @@ TEST_CASE("the scene writer saves a C# component by its full name, leaving its t
     }
 
     const AssetHandle<Image> icon = test.Store().Load<Image>("icons/flag.png", AssetOwner::App()).handle;
-    REQUIRE(test.Store().IsValid(icon));
+    {
+        INFO("The icon should load from the temporary root");
+        REQUIRE(test.Store().IsValid(icon));
+    }
     Scene& scene = test.Get().CreateScene("Tagged");
     EntityList& entities = scene.GetEntityList();
     Entity target = entities.CreateEntity();
     Entity holder = entities.CreateEntity();
-    REQUIRE(entities.Add(*component, holder.GetId()));
-    auto* bytes = static_cast<std::byte*>(entities.Get(*component, holder.GetId()));
-    REQUIRE(bytes != nullptr);
+    auto* bytes = entities.Add(*component, holder.GetId())
+                      ? static_cast<std::byte*>(entities.Get(*component, holder.GetId()))
+                      : nullptr;
+    {
+        INFO("The C# component should be added through the ComponentType ForName gave");
+        REQUIRE(bytes != nullptr);
+    }
     std::memcpy(bytes + OffsetOf(*tagged, "Target"), &target, sizeof(target));
     std::memcpy(bytes + OffsetOf(*tagged, "Icon"), &icon, sizeof(icon));
     std::memcpy(bytes + OffsetOf(*tagged, "Label"), "banner", 7);
@@ -142,13 +154,13 @@ TEST_CASE("the scene writer saves a C# component by its full name, leaving its t
     const std::string text = ReadText(root.path / ScenePath);
     INFO(text);
     INFO("The component should be written under its full name, with its label and the path of its icon");
-    CHECK(text.find("\"AssetsScriptFixture.Tagged\"") != std::string::npos);
-    CHECK(text.find("banner") != std::string::npos);
-    CHECK(text.find("icons/flag.png") != std::string::npos);
+    REQUIRE(text.find("\"AssetsScriptFixture.Tagged\"") != std::string::npos);
+    REQUIRE(text.find("banner") != std::string::npos);
+    REQUIRE(text.find("icons/flag.png") != std::string::npos);
     INFO("Its target should be written as the id of the entity it names");
-    CHECK(text.find("Target") != std::string::npos);
+    REQUIRE(text.find("Target") != std::string::npos);
     INFO("Its transient field should be left out");
-    CHECK(text.find("Frames") == std::string::npos);
+    REQUIRE(text.find("Frames") == std::string::npos);
 
     const SceneLoadResult loaded = test.Store().LoadScene(test.Get(), ScenePath, "Loaded");
     INFO("The file should load back");
@@ -165,11 +177,11 @@ TEST_CASE("the scene writer saves a C# component by its full name, leaving its t
         }
         ++found;
         INFO("The label should read back, and the transient field stay at its default");
-        CHECK(std::string(reinterpret_cast<const char*>(readBytes + OffsetOf(*tagged, "Label"))) == "banner");
+        REQUIRE(std::string(reinterpret_cast<const char*>(readBytes + OffsetOf(*tagged, "Label"))) == "banner");
         std::int32_t readFrames = -1;
         std::memcpy(&readFrames, readBytes + OffsetOf(*tagged, "Frames"), sizeof(readFrames));
-        CHECK(readFrames == 0);
+        REQUIRE(readFrames == 0);
     }
     INFO("One entity should have read the component back");
-    CHECK(found == 1);
+    REQUIRE(found == 1);
 }

@@ -68,9 +68,6 @@ namespace Fenrir::Detail
          */
         [[nodiscard]] bool Unregister(TypeRegistry& types);
 
-        /** @brief Whether any description is registered. */
-        [[nodiscard]] bool IsRegistered() const noexcept;
-
       private:
         struct Entry;
 

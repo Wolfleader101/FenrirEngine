@@ -362,16 +362,4 @@ namespace Fenrir::Detail
         }
         return all;
     }
-
-    bool ScriptTypes::IsRegistered() const noexcept
-    {
-        for (const auto& entry : m_entries)
-        {
-            if (entry->registered)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
 } // namespace Fenrir::Detail

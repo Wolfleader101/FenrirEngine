@@ -57,7 +57,8 @@ namespace Fenrir::Detail
         bool editorOnly = false;
     };
 
-    // An event type a script assembly reported while it loaded: a name, a size and an alignment, as for a component.
+    // An event type a script assembly reported while it loaded: a name, a size and an alignment, as for a component. An
+    // event reports no fields, defaults or flags; only components are described to the type registry.
     using ScriptEventDescription = ScriptComponentDescription;
 
     // The script report: what a script assembly says it defines when it loads, the C# components and events, each with

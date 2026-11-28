@@ -787,17 +787,18 @@ TEST_CASE("admission describes each script component and the structs it holds to
     REQUIRE((spot->role == Role::Nested && spot->size == 8 && spot->fields.size() == 2));
     INFO("Each field should carry the kind, offset and target the script reported");
     REQUIRE(seen->fields.size() == 7);
-    CHECK(
+    REQUIRE(
         (seen->fields[0].name == "Target" && seen->fields[0].type.kind == Kind::Entity && seen->fields[0].offset == 0));
-    CHECK((seen->fields[1].type.kind == Kind::Reference && seen->fields[1].type.target == "Fenrir::Mesh" &&
-           seen->fields[1].offset == 16));
-    CHECK((seen->fields[2].type.kind == Kind::FixedString && seen->fields[2].type.count == 16 &&
-           seen->fields[2].offset == 24));
-    CHECK((seen->fields[3].type.kind == Kind::Struct && seen->fields[3].type.type == spot));
-    CHECK((seen->fields[4].type.kind == Kind::Struct && seen->fields[4].type.type == types.Find("Fenrir::Math::Vec3")));
-    CHECK((seen->fields[5].name == "Frames" && seen->fields[5].transient && !seen->fields[0].transient));
-    CHECK((seen->fields[6].type.kind == Kind::Array && seen->fields[6].type.count == 2 &&
-           seen->fields[6].type.element != nullptr && seen->fields[6].type.element->kind == Kind::I32));
+    REQUIRE((seen->fields[1].type.kind == Kind::Reference && seen->fields[1].type.target == "Fenrir::Mesh" &&
+             seen->fields[1].offset == 16));
+    REQUIRE((seen->fields[2].type.kind == Kind::FixedString && seen->fields[2].type.count == 16 &&
+             seen->fields[2].offset == 24));
+    REQUIRE((seen->fields[3].type.kind == Kind::Struct && seen->fields[3].type.type == spot));
+    REQUIRE(
+        (seen->fields[4].type.kind == Kind::Struct && seen->fields[4].type.type == types.Find("Fenrir::Math::Vec3")));
+    REQUIRE((seen->fields[5].name == "Frames" && seen->fields[5].transient && !seen->fields[0].transient));
+    REQUIRE((seen->fields[6].type.kind == Kind::Array && seen->fields[6].type.count == 2 &&
+             seen->fields[6].type.element != nullptr && seen->fields[6].type.element->kind == Kind::I32));
 
     INFO("Its default should be the bytes of its new T()");
     std::vector<std::byte> constructed(seen->size);

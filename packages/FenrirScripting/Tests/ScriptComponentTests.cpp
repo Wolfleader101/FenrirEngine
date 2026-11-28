@@ -505,41 +505,41 @@ namespace
         const auto& fields = described->fields;
         {
             INFO("The entity, at 0");
-            CHECK((fields[0].name == "Target" && fields[0].type.kind == Kind::Entity && fields[0].offset == 0));
+            REQUIRE((fields[0].name == "Target" && fields[0].type.kind == Kind::Entity && fields[0].offset == 0));
         }
         {
             INFO("The fixed byte buffer, a 16-byte fixed string at 16");
-            CHECK((fields[1].name == "Label" && fields[1].type.kind == Kind::FixedString &&
-                   fields[1].type.count == 16 && fields[1].offset == 16));
+            REQUIRE((fields[1].name == "Label" && fields[1].type.kind == Kind::FixedString &&
+                     fields[1].type.count == 16 && fields[1].offset == 16));
         }
         {
             INFO("The [InlineArray] struct, an 8-byte fixed string at 32");
-            CHECK((fields[2].name == "Short" && fields[2].type.kind == Kind::FixedString && fields[2].type.count == 8 &&
-                   fields[2].offset == 32));
+            REQUIRE((fields[2].name == "Short" && fields[2].type.kind == Kind::FixedString &&
+                     fields[2].type.count == 8 && fields[2].offset == 32));
         }
         {
             INFO("The Vector3, described by the engine's Math::Vec3, at 40");
-            CHECK((fields[3].name == "Offset" && fields[3].type.kind == Kind::Struct &&
-                   fields[3].type.type == types.Find("Fenrir::Math::Vec3") && fields[3].offset == 40));
+            REQUIRE((fields[3].name == "Offset" && fields[3].type.kind == Kind::Struct &&
+                     fields[3].type.type == types.Find("Fenrir::Math::Vec3") && fields[3].offset == 40));
         }
         {
             INFO("The script's own struct, at 52");
-            CHECK((fields[4].name == "Spot" && fields[4].type.kind == Kind::Struct && fields[4].type.type == spot &&
-                   fields[4].offset == 52));
+            REQUIRE((fields[4].name == "Spot" && fields[4].type.kind == Kind::Struct && fields[4].type.type == spot &&
+                     fields[4].offset == 52));
             REQUIRE(spot->fields.size() == 2);
-            CHECK((spot->fields[0].name == "Height" && spot->fields[0].type.kind == Kind::F32 &&
-                   spot->fields[1].name == "Count" && spot->fields[1].offset == 4));
+            REQUIRE((spot->fields[0].name == "Height" && spot->fields[0].type.kind == Kind::F32 &&
+                     spot->fields[1].name == "Count" && spot->fields[1].offset == 4));
         }
         {
             INFO("The transient field, flagged, at 60");
-            CHECK((fields[5].name == "Frames" && fields[5].transient && fields[5].offset == 60));
-            CHECK(!fields[4].transient);
+            REQUIRE((fields[5].name == "Frames" && fields[5].transient && fields[5].offset == 60));
+            REQUIRE(!fields[4].transient);
         }
         {
             INFO("The fixed int buffer, an array of two i32s at 64");
-            CHECK((fields[6].name == "Slots" && fields[6].type.kind == Kind::Array && fields[6].type.count == 2 &&
-                   fields[6].type.element != nullptr && fields[6].type.element->kind == Kind::I32 &&
-                   fields[6].offset == 64));
+            REQUIRE((fields[6].name == "Slots" && fields[6].type.kind == Kind::Array && fields[6].type.count == 2 &&
+                     fields[6].type.element != nullptr && fields[6].type.element->kind == Kind::I32 &&
+                     fields[6].offset == 64));
         }
         {
             INFO("Its default should be its new T(): the field initialiser's Spot");
@@ -549,22 +549,22 @@ namespace
             std::int32_t count = 0;
             std::memcpy(&height, value.data() + 52, sizeof(height));
             std::memcpy(&count, value.data() + 56, sizeof(count));
-            CHECK((height == 2.0f && count == 3));
+            REQUIRE((height == 2.0f && count == 3));
         }
         {
             INFO("[Transient] and [EditorOnly] on a component should mark its description");
             const TypeDescription* scratch = types.Find("Fenrir.ScriptFixture.Scratch");
             const TypeDescription* gizmo = types.Find("Fenrir.ScriptFixture.Gizmo");
             REQUIRE((scratch != nullptr && gizmo != nullptr));
-            CHECK((scratch->transient && !scratch->editorOnly && gizmo->editorOnly && !gizmo->transient));
+            REQUIRE((scratch->transient && !scratch->editorOnly && gizmo->editorOnly && !gizmo->transient));
         }
         {
             INFO("ComponentType::ForName should find the component scripts store, and NameOf name it back");
             const auto component = ComponentType::ForName(types, "Fenrir.ScriptFixture.Described");
             REQUIRE(component.has_value());
-            CHECK(component->Size() == 80);
-            CHECK(ComponentType::NameOf(types, scripting.FindComponent("Fenrir.ScriptFixture.Described")->type) ==
-                  std::optional<std::string_view>("Fenrir.ScriptFixture.Described"));
+            REQUIRE(component->Size() == 80);
+            REQUIRE(ComponentType::NameOf(types, scripting.FindComponent("Fenrir.ScriptFixture.Described")->type) ==
+                    std::optional<std::string_view>("Fenrir.ScriptFixture.Described"));
         }
     }
 } // namespace
