@@ -23,10 +23,6 @@ namespace Fenrir::Serialisation
 
     namespace Detail
     {
-        // The key a tagged union's tag is written under, whatever the tag field is named in the type (`m_type` in the
-        // engine's unions): `ToTree` writes it and `FromTree` reads it (Bridge.hpp).
-        inline constexpr std::string_view UnionTagKey = "kind";
-
         // Keeps, in the order a visit pushes them, every field but a transient one (FieldInfo::transient): read-back
         // state that stays in the type's layout and that no file holds, so the bridge never writes, compares or reads
         // it.

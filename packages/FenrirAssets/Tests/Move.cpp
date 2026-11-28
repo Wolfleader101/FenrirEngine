@@ -691,3 +691,112 @@ TEST_CASE("A scene file that does not parse, or is no scene envelope, is named a
     INFO("the hosts are rewritten as before");
     REQUIRE(result.changed == Sorted(ChangedByTheFortMove));
 }
+
+namespace
+{
+    // A banner and a scene each naming the sword's icon from the painted look of a tagged union, whose tag field is
+    // `m_type` and which a file spells `kind`; `{icon}` marks each reference, which a move of the icon rewrites.
+    constexpr std::string_view BannerPath = "banners/painted.asset.json5";
+    constexpr std::string_view BannerTemplate = R"(// A banner painted with the sword's icon.
+{
+  format: 1,
+  type: "AssetsTest::BannerData",
+  version: 1,
+  data: {
+    look: {
+      kind: "Painted",
+      // The icon, twice its size.
+      image: "{icon}",
+      scale: 2,
+    },
+  },
+}
+)";
+
+    constexpr std::string_view HallPath = "levels/hall.scene.json5";
+    constexpr std::string_view HallTemplate = R"(// A hall with the sword's icon painted on its wall.
+{
+  format: 1,
+  type: "Fenrir::Scene",
+  version: 1,
+  data: {
+    resources: {},
+    entities: [
+      {
+        id: "wa11d",
+        components: {
+          "Fenrir::Name": {name: "Wall"},
+          "AssetsTest::Decal": {
+            look: {
+              kind: "Painted",
+              image: "{icon}", // the sword's icon
+              scale: 3,
+            },
+          },
+        },
+      },
+    ],
+  },
+}
+)";
+
+    std::string WithIcon(std::string_view text, std::string_view icon)
+    {
+        return ReplacedAll(std::string(text), "{icon}", icon);
+    }
+} // namespace
+
+TEST_CASE("A reference inside a tagged union's live alternative, in an envelope and in a scene, is rewritten, keeping "
+          "every other byte",
+          "[assets][move][union]")
+{
+    TempRoot root;
+    root.Copy(Fixtures() / "fourbytwo.png", "icons/sword.png");
+    root.Write(BannerPath, WithIcon(BannerTemplate, "icons/sword.png"));
+    root.Write(HallPath, WithIcon(HallTemplate, "icons/sword.png"));
+    DataApp app({root.Path()});
+    INFO("the test package's types register into the app's registry");
+    REQUIRE(app.registered);
+
+    const Fenrir::MoveResult result = Fenrir::Assets::Move(root.Path(), "icons/sword.png", "icons/blade.png",
+                                                           app.app.GetResource<Fenrir::TypeRegistry>());
+
+    INFO(result.problem);
+    INFO("the move succeeds, and both files are scanned");
+    REQUIRE(result.status == Fenrir::MoveStatus::Succeeded);
+    REQUIRE(result.unscanned.empty());
+    INFO("the union's tag is found under `kind`, so the banner's and the decal's images are the references rewritten");
+    REQUIRE(result.changed == Sorted({std::string(BannerPath), std::string(HallPath)}));
+    REQUIRE(result.references == 2);
+    INFO("the banner's image names the new path, and every other byte, its comments included, stays");
+    REQUIRE(ReadFile(root.Path() / BannerPath) == WithIcon(BannerTemplate, "icons/blade.png"));
+    INFO("the decal's image names the new path, and every other byte stays");
+    REQUIRE(ReadFile(root.Path() / HallPath) == WithIcon(HallTemplate, "icons/blade.png"));
+}
+
+TEST_CASE("After a move, a banner loads with its painted look naming the moved image", "[assets][move][union][load]")
+{
+    TempRoot root;
+    root.Copy(Fixtures() / "fourbytwo.png", "icons/sword.png");
+    root.Write(BannerPath, WithIcon(BannerTemplate, "icons/sword.png"));
+    {
+        DataApp before({root.Path()});
+        INFO("the move succeeds");
+        REQUIRE(Fenrir::Assets::Move(root.Path(), "icons/sword.png", "icons/blade.png",
+                                     before.app.GetResource<Fenrir::TypeRegistry>())
+                    .status == Fenrir::MoveStatus::Succeeded);
+    }
+
+    DataApp app({root.Path()});
+    const Fenrir::LoadResult<AssetsTest::BannerData> banner =
+        app.store.Load<AssetsTest::BannerData>(BannerPath, Fenrir::AssetOwner::App());
+
+    INFO("the banner loads whole");
+    REQUIRE(banner.Status() == Fenrir::LoadStatus::Succeeded);
+    REQUIRE(app.errors->empty());
+    const AssetsTest::Look& look = app.store.TryGet<AssetsTest::BannerData>(banner.handle)->look;
+    INFO("its look is painted");
+    REQUIRE(look.Type() == AssetsTest::LookType::Painted);
+    INFO("with the image at its new path");
+    REQUIRE(app.store.PathOf(look.Painted().image) == std::optional<std::string>("icons/blade.png"));
+}

@@ -23,6 +23,13 @@ namespace Fenrir
 namespace Fenrir::Serialisation
 {
     /**
+     * @brief The key a tagged union's tag is written under in a file, whatever the tag field is named in its type
+     * (`m_type` in the engine's unions): `ToTree` writes it as the union object's first member and `FromTree` reads
+     * it. A caller walking a written tree beside a description finds the tag here, not under `tag.name`.
+     */
+    inline constexpr std::string_view UnionTagKey = "kind";
+
+    /**
      * @brief How the bridge turns `reference` and `entity` fields into the strings a file holds and back (ADR-0076 §2,
      * ADR-0078 §3): the caller's, since the bridge never knows an asset path's meaning, a store or an id map.
      *
