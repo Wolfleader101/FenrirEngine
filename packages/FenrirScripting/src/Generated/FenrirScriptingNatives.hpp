@@ -26,6 +26,7 @@ namespace Fenrir::ScriptingNatives
     bool RegisterScriptComponent(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::string_view name, std::int32_t size, std::int32_t alignment, const std::uint8_t* defaults, std::int32_t defaultsSize, std::int32_t flags);
     bool RegisterScriptStruct(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::string_view name, std::int32_t size, std::int32_t alignment, const std::uint8_t* defaults, std::int32_t defaultsSize);
     bool RegisterScriptField(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::string_view owner, std::string_view name, std::string_view kind, std::string_view elementKind, std::string_view target, std::int32_t offset, std::int32_t size, std::int32_t count, bool transient);
+    bool RegisterScriptDataAsset(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, const std::uint8_t* entry, std::int32_t entrySize);
     std::uint32_t RegistryGeneration(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&);
     void* ComponentGet(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::int32_t id, const Fenrir::Entity* entity);
     bool ComponentHas(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::int32_t id, const Fenrir::Entity* entity);

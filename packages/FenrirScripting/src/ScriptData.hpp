@@ -10,6 +10,7 @@
 
 #include "ComponentRegistry.hpp"
 #include "EngineContext.hpp"
+#include "ScriptDataAssets.hpp"
 #include "ScriptTypes.hpp"
 
 namespace Fenrir::Detail
@@ -65,6 +66,15 @@ namespace Fenrir::Detail
          * mismatching field
          */
         [[nodiscard]] virtual Iris::CallResult<void> CheckNativeAgainstCSharp(const ComponentRegistry& registry) = 0;
+
+        /**
+         * @brief The assembly's data asset table, bound by name: its one upgrade step for its C# data asset types, and
+         * the call that drops its codecs. Both are good while the assembly stays loaded, which is longer than they are
+         * kept, since Forget removes the upgraders and drops the codecs before the generation is released.
+         *
+         * @return the calls, or why the assembly has none (it defines no data asset types, or its table lacks one)
+         */
+        [[nodiscard]] virtual Iris::CallResult<DataAssetTableCalls> FindDataAssetTable() = 0;
     };
 
     /**
@@ -80,6 +90,11 @@ namespace Fenrir::Detail
      * script reported: a fixed-layout description of each, and a nested one of each struct they hold, owned by the
      * generation's ScriptTypes, with the component's ComponentType attached, so the scene writer and reader treat a C#
      * component as they treat a native one. Forget unregisters them.
+     *
+     * Its C# data asset types are described there too (ADR-0083), each as a tree-backed `data-asset` description in
+     * the generation's ScriptDataAssets, with its upgraders bound to the script's `Upgrade`, all or nothing with the
+     * rest of the report. Forget removes the upgraders, then unregisters the types, topmost first; a type the asset
+     * store's records still hold is kept, with a warning, until a later Forget finds it free.
      */
     class ScriptData
     {
@@ -97,23 +112,33 @@ namespace Fenrir::Detail
         /**
          * @brief Admits a freshly loaded script assembly: its report is discovered and checked, every native component,
          * event, shared struct and resource is checked against its C# struct, its components and events are
-         * registered, its components described to `app`'s type registry (which this keeps, for Forget), and only then
-         * is what the previous generation left in `app` compared with these definitions (unchanged data stays, anything
-         * else goes with a warning) and the queues of new events made.
+         * registered, its components and data asset types described to `app`'s type registry (which this keeps, for
+         * Forget), and only then is what the previous generation left in `app` compared with these definitions
+         * (unchanged data stays, anything else goes with a warning) and the queues of new events made.
          *
-         * @return success, or why the assembly was refused; a refusal leaves the registry as Forget would, and the
-         * data as it was before the stale layouts were dropped, or as that drop left it
+         * @return success, or why the assembly was refused; a refusal leaves the registry as Forget would, the data as
+         * it was before the stale layouts were dropped, or as that drop left it, and the script's codecs dropped
          */
         [[nodiscard]] Iris::CallResult<void> Admit(App& app, ScriptAssembly& assembly);
 
         /**
-         * @brief Forgets the registry's script-defined components and events, and unregisters their descriptions from
-         * the type registry. The data and its layouts stay.
+         * @brief Forgets the registry's script-defined components and events, drops the script's data asset codecs, and
+         * unregisters their descriptions and upgraders from the type registry, keeping a data asset type the store
+         * holds. The data and its layouts stay.
          */
         void Forget();
 
         /** @brief Removes the data of every owned script component and event from `app`, and forgets them. */
         void Drop(App& app);
+
+        /**
+         * @brief What the asset store says about C# data asset types, from the extensions: the asset kinds a reference
+         * may target, and what holds a type. Empty until set: no asset kinds, and nothing held.
+         */
+        void SetDataAssetStore(DataAssetStore store)
+        {
+            m_store = std::move(store);
+        }
 
         /** @brief The layouts of the script components whose data is alive. */
         [[nodiscard]] const OwnedLayouts& OwnedComponents() const noexcept
@@ -128,17 +153,29 @@ namespace Fenrir::Detail
         }
 
       private:
+        // Admission once the report is in: everything but dropping the codecs of a refused report.
+        [[nodiscard]] Iris::CallResult<void> AdmitReport(App& app, ScriptAssembly& assembly, const ScriptReport& report,
+                                                         const DataAssetTableCalls& table);
+
         // Unregisters the generation's descriptions, and any a refusal left behind before.
         void ForgetTypes();
 
         ComponentRegistry& m_registry;
         OwnedLayouts m_components;
         OwnedLayouts m_events;
-        // The App's type registry, from the last admission; null before one.
+        // The App and its type registry, from the last admission; null before one.
+        App* m_app = nullptr;
         TypeRegistry* m_types = nullptr;
+        DataAssetStore m_store;
         // The descriptions of the admitted generation's components and the structs they hold.
         std::unique_ptr<ScriptTypes> m_scriptTypes;
-        // Descriptions the registry refused to unregister: they must outlive it, so they stay until it lets them go.
+        // The admitted generation's data asset types, the structs they hold and their enums, and the call that drops
+        // its codecs when it is forgotten.
+        std::unique_ptr<ScriptDataAssets> m_dataAssets;
+        std::function<void()> m_forgetCodecs;
+        // Descriptions the registry refused to unregister, or the store holds: they must outlive the registry, so they
+        // stay until it lets them go.
         std::vector<std::unique_ptr<ScriptTypes>> m_stranded;
+        std::vector<std::unique_ptr<ScriptDataAssets>> m_strandedDataAssets;
     };
 } // namespace Fenrir::Detail

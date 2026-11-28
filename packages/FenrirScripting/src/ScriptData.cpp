@@ -291,9 +291,11 @@ namespace Fenrir::Detail
     } // namespace
 
     // Admission, in an order that puts the one irreversible step as late as it can go and undoes everything after it:
-    //   1. discover what the script defines, kind by kind, and check it, with the descriptions of its components;
+    //   1. discover what the script defines, kind by kind, and check it, with the descriptions of its components and
+    //      its data asset types, and find its upgrade step if they have upgraders;
     //   2. check every native component's, event's, shared struct's and resource's mapping against its C# struct;
-    //   3. register what the script defines, and describe its components to the type registry (undone by Forget);
+    //   3. register what the script defines, and describe its components, then its data asset types, to the type
+    //      registry (undone by Forget);
     //   4. drop what the previous generation left that no longer matches (irreversible);
     //   5. make the queues of new events (undone by removing them);
     //   6. record the definitions as owned.
@@ -302,10 +304,30 @@ namespace Fenrir::Detail
     Result ScriptData::Admit(App& app, ScriptAssembly& assembly)
     {
         ScriptReport report;
-        if (auto reported = assembly.Report(report); !reported.Succeeded())
+        const auto reported = assembly.Report(report);
+        // The data asset table registered the script's codecs as it reported, so they go again unless the generation
+        // is kept: nothing in DataAssetCodecs may keep a refused assembly alive.
+        DataAssetTableCalls table;
+        if (auto found = assembly.FindDataAssetTable(); found.Succeeded() && found.value)
         {
-            return reported;
+            table = std::move(*found.value);
         }
+        auto admitted = reported.Succeeded() ? AdmitReport(app, assembly, report, table) : reported;
+        if (!admitted.Succeeded())
+        {
+            if (table.forget)
+            {
+                table.forget();
+            }
+            return admitted;
+        }
+        m_forgetCodecs = std::move(table.forget);
+        return admitted;
+    }
+
+    Result ScriptData::AdmitReport(App& app, ScriptAssembly& assembly, const ScriptReport& report,
+                                   const DataAssetTableCalls& table)
+    {
         std::vector<SchemaPass> passes;
         passes.emplace_back(ComponentKind(m_registry, app), m_components);
         passes.emplace_back(EventKind(m_registry, app, m_events), m_events);
@@ -323,6 +345,15 @@ namespace Fenrir::Detail
         {
             return described;
         }
+        auto dataAssets = std::make_unique<ScriptDataAssets>();
+        if (auto described = dataAssets->Build(report, types, m_store); !described.Succeeded())
+        {
+            return described;
+        }
+        if (dataAssets->HasUpgraders() && !table.upgrade)
+        {
+            return Failed("The script's data asset types have upgraders, but its data asset table has no Upgrade.");
+        }
         if (auto validated = assembly.CheckNativeAgainstCSharp(m_registry); !validated.Succeeded())
         {
             return validated;
@@ -338,13 +369,21 @@ namespace Fenrir::Detail
         // The stop path forgets a generation before the next is admitted; this keeps a missed one from being dropped
         // while the registry still points at its descriptions.
         ForgetTypes();
+        m_app = &app;
         m_types = &types;
         m_scriptTypes = std::move(scriptTypes);
+        m_dataAssets = std::move(dataAssets);
         const auto componentTypeOf = [this](std::string_view name) -> std::optional<ComponentType> {
             const auto* component = m_registry.Components().Get(m_registry.Components().Find(name));
             return component != nullptr ? std::optional<ComponentType>(component->type) : std::nullopt;
         };
         if (auto described = m_scriptTypes->Register(types, componentTypeOf); !described.Succeeded())
+        {
+            Forget();
+            return described;
+        }
+        // After the components: a data asset's field may hold one.
+        if (auto described = m_dataAssets->Register(types, app, table.upgrade); !described.Succeeded())
         {
             Forget();
             return described;
@@ -384,8 +423,18 @@ namespace Fenrir::Detail
         {
             return;
         }
-        // Holders go before what they hold, which ScriptTypes keeps to; what the registry still refuses stays alive
+        // Holders go before what they hold, which ScriptTypes and ScriptDataAssets keep to, and data asset types before
+        // components, which their fields may hold; what the registry still refuses, or the store holds, stays alive
         // here.
+        const ScriptDataAssets::Held held = [this](std::string_view name) { return m_store.Held(*m_app, name); };
+        std::erase_if(m_strandedDataAssets, [&](const std::unique_ptr<ScriptDataAssets>& stranded) {
+            return stranded->Unregister(*m_types, *m_app, held);
+        });
+        if (m_dataAssets != nullptr && !m_dataAssets->Unregister(*m_types, *m_app, held))
+        {
+            m_strandedDataAssets.push_back(std::move(m_dataAssets));
+        }
+        m_dataAssets.reset();
         std::erase_if(m_stranded,
                       [this](const std::unique_ptr<ScriptTypes>& stranded) { return stranded->Unregister(*m_types); });
         if (m_scriptTypes != nullptr && !m_scriptTypes->Unregister(*m_types))
@@ -397,6 +446,12 @@ namespace Fenrir::Detail
 
     void ScriptData::Forget()
     {
+        if (m_forgetCodecs)
+        {
+            const auto forget = std::move(m_forgetCodecs);
+            m_forgetCodecs = nullptr;
+            forget();
+        }
         ForgetTypes();
         m_registry.RemoveScriptDefined();
     }

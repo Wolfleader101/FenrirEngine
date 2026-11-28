@@ -61,6 +61,18 @@ namespace Fenrir::Detail
             return m_stages;
         }
 
+        /** @brief Every extension's asset kinds, in extension order; a kind two extensions list is here twice. */
+        [[nodiscard]] const std::vector<std::string>& AssetKinds() const noexcept
+        {
+            return m_assetKinds;
+        }
+
+        /** @brief The type-held checks the extensions give, in extension order; one that gives none is not here. */
+        [[nodiscard]] const std::vector<ScriptingExtension::TypeHeld>& TypeHolders() const noexcept
+        {
+            return m_typeHolders;
+        }
+
       private:
         ExtensionSet() = default;
 
@@ -73,5 +85,7 @@ namespace Fenrir::Detail
         std::vector<std::shared_ptr<void>> m_states;
         std::vector<std::filesystem::path> m_sharedAssemblies;
         std::vector<DeclaredStages> m_stages;
+        std::vector<std::string> m_assetKinds;
+        std::vector<ScriptingExtension::TypeHeld> m_typeHolders;
     };
 } // namespace Fenrir::Detail

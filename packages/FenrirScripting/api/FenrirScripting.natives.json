@@ -308,6 +308,33 @@
       ]
     },
     {
+      "name": "RegisterScriptDataAsset",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "A script assembly reports a data asset type it defines, while it loads: its description entry (name, version, base, fields, the structs and enums they hold, upgrader versions and default) as a tree in the tree encoding, `entrySize` bytes of it. Admission reads and checks it with the rest of the report.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "False when nothing is loading or the entry is empty."
+      },
+      "parameters": [
+        {
+          "name": "entry",
+          "type": "const std::uint8_t*",
+          "kind": "pointer",
+          "pointee": "std::uint8_t",
+          "pointeeKind": "u8",
+          "const": true
+        },
+        {
+          "name": "entrySize",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
       "name": "RegistryGeneration",
       "namespace": "Fenrir::ScriptingNatives",
       "source": "../src/Bindings.cpp",

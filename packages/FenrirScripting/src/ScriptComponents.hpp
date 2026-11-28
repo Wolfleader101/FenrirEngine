@@ -62,14 +62,20 @@ namespace Fenrir::Detail
     using ScriptEventDescription = ScriptComponentDescription;
 
     // The script report: what a script assembly says it defines when it loads, the C# components and events, each with
-    // its size and alignment, in the order it reports them, and the structs its components hold by value. The engine
-    // checks it before it keeps the assembly.
+    // its size and alignment, in the order it reports them, the structs its components hold by value, and its data
+    // asset types. The engine checks it before it keeps the assembly.
     struct ScriptReport
     {
         std::vector<ScriptComponentDescription> components;
         std::vector<ScriptEventDescription> events;
         /** @brief The script-defined structs the components' fields hold, each with its fields, reported once. */
         std::vector<ScriptComponentDescription> structs;
+        /**
+         * @brief Each C# data asset type's description entry, a tree in the tree encoding (ADR-0083), bases before the
+         * types extending them: `{name, version, formerly, base, transient, editorOnly, fields, structs, enums,
+         * upgraders, default}`, as `DataAssetCodec.Entry` writes it. Admission reads and checks them.
+         */
+        std::vector<std::vector<std::byte>> dataAssets;
     };
 
     // The ECS's description of the component type a script reported.

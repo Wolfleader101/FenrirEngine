@@ -4,6 +4,7 @@
 // assembly that lies.
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <catch2/generators/catch_generators_range.hpp>
 
 #include "HeadlessApp.hpp"
 #include "RulesTypes.hpp"
@@ -14,11 +15,20 @@
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/TypeAttachments.hpp"
+#include "FenrirSerialisation/Encoding.hpp"
+#include "FenrirSerialisation/Text.hpp"
+#include "FenrirSerialisation/Upgrade.hpp"
 #include "FenrirTypes/TypeRegistry.hpp"
 
+#include <cstdint>
 #include <cstring>
 #include <map>
+#include <memory>
+#include <optional>
+#include <span>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 namespace
@@ -46,6 +56,10 @@ namespace
         std::vector<ScriptComponentDescription> components;
         std::vector<ScriptComponentDescription> events;
         std::vector<ScriptComponentDescription> structs;
+        std::vector<std::vector<std::byte>> dataAssets; // Description entries, in the tree encoding.
+        // The data asset table's Upgrade; an assembly with none says it has no table.
+        Fenrir::Detail::DataAssetUpgrade upgrade;
+        int forgets = 0;                                 // How many times the table's Forget dropped the codecs.
         std::map<std::string, std::string> fingerprints; // By name; a name with none has an empty fingerprint.
         Iris::CallResult<void> report = Succeeded();     // What giving the report fails with, if it does.
         Iris::CallResult<void> nativeCheck = Succeeded();
@@ -60,6 +74,7 @@ namespace
             found.components = components;
             found.events = events;
             found.structs = structs;
+            found.dataAssets = dataAssets;
             return Succeeded();
         }
 
@@ -73,6 +88,19 @@ namespace
         {
             ++nativeChecks;
             return nativeCheck;
+        }
+
+        Iris::CallResult<Fenrir::Detail::DataAssetTableCalls> FindDataAssetTable() override
+        {
+            if (!upgrade)
+            {
+                return {Iris::CallStatus::NotFound, std::nullopt, "the literal assembly has no data asset table",
+                        false};
+            }
+            return {Iris::CallStatus::Success,
+                    Fenrir::Detail::DataAssetTableCalls{upgrade, [this] { ++forgets; }},
+                    {},
+                    false};
         }
     };
 
@@ -921,4 +949,354 @@ TEST_CASE("a report whose descriptions cannot be made is refused whole, leaving 
     REQUIRE(ScriptTypeCount(types) == before);
     REQUIRE((types.Find("Rules.Plain") == nullptr && types.Find("Rules.Spot") == nullptr));
     REQUIRE(world.ScriptDefinedCount() == 0);
+}
+
+// The C# data asset types a report carries (ADR-0083): each entry, as DataAssetCodec.Entry writes it in the tree
+// encoding, is admitted all or nothing with the rest of the report, as a tree-backed description with its upgraders
+// bound to the script's Upgrade, and Forget takes them away again.
+namespace
+{
+    using Fenrir::Detail::DataAssetStore;
+
+    // One description entry, as JSON5, with the members every entry has.
+    struct AssetEntry
+    {
+        std::string name;
+        std::string base = "null";
+        int version = 1;
+        std::string fields = "[]";
+        std::string structs = "[]";
+        std::string enums = "[]";
+        std::string upgraders = "[]";
+
+        [[nodiscard]] std::string Text() const
+        {
+            return "{name: \"" + name + "\", version: " + std::to_string(version) + ", formerly: [], base: " + base +
+                   ", transient: false, editorOnly: false, fields: " + fields + ", structs: " + structs +
+                   ", enums: " + enums + ", upgraders: " + upgraders + ", default: {}}";
+        }
+    };
+
+    // `json5` in the tree encoding, as the script hands an entry over.
+    std::vector<std::byte> Encoded(App& app, const std::string& json5)
+    {
+        auto read = Serialisation::ReadText(json5, "entry", *app.Logger());
+        INFO(json5);
+        REQUIRE(read.tree.has_value());
+        return Serialisation::EncodeTree(*read.tree, Serialisation::Trivia::Drop);
+    }
+
+    // A base with a field of most kinds a data asset holds: a string, an enum and a struct of the script's, a list,
+    // an optional, a reference to an asset kind and an engine struct.
+    AssetEntry Item()
+    {
+        AssetEntry item;
+        item.name = "Test.Item";
+        item.fields = R"([
+            {name: "Name", type: {kind: "string"}, display: "Item name"},
+            {name: "Rarity", type: {kind: "enum", target: "Test.Rarity"}},
+            {name: "Stats", type: {kind: "struct", target: "Test.Stats"}},
+            {name: "Levels", type: {kind: "list", element: {kind: "struct", target: "Test.Stats"}}},
+            {name: "Charges", type: {kind: "optional", element: {kind: "i32"}}},
+            {name: "Model", type: {kind: "reference", target: "Fenrir::Mesh"}},
+            {name: "Offset", type: {kind: "struct", target: "Fenrir::Math::Vec3"}},
+        ])";
+        item.structs = R"([{name: "Test.Stats", fields: [
+            {name: "Speed", type: {kind: "f32"}, range: [0, 10]},
+            {name: "Tags", type: {kind: "list", element: {kind: "string"}}},
+        ]}])";
+        item.enums =
+            R"([{name: "Test.Rarity", kind: "u8", enumerators: [{name: "Common", value: 0}, {name: "Rare", value: 1}]}])";
+        return item;
+    }
+
+    // A subtype at version 3 with upgraders from 1 and 2, referring to its base.
+    AssetEntry Weapon()
+    {
+        AssetEntry weapon;
+        weapon.name = "Test.Weapon";
+        weapon.base = "\"Test.Item\"";
+        weapon.version = 3;
+        weapon.upgraders = "[1, 2]";
+        weapon.fields = R"([
+            {name: "Damage", type: {kind: "i32"}, formerly: ["Dmg"], range: [0, 100]},
+            {name: "Ammo", type: {kind: "reference", target: "Test.Item"}},
+        ])";
+        return weapon;
+    }
+
+    // The world, told the store's asset kinds and what it holds, and an assembly whose Upgrade marks each step it
+    // takes in the tree.
+    struct AssetWorld
+    {
+        World world;
+        LiteralAssembly assembly;
+        std::vector<std::pair<std::string, std::uint32_t>> steps;
+        // What the store says holds a type: a reason by name.
+        std::shared_ptr<std::map<std::string, std::string>> held =
+            std::make_shared<std::map<std::string, std::string>>();
+
+        AssetWorld()
+        {
+            DataAssetStore store;
+            store.assetKinds = {"Fenrir::Mesh"};
+            store.typeHeld = {[held = held](App&, std::string_view name) -> std::optional<std::string> {
+                const auto found = held->find(std::string(name));
+                return found == held->end() ? std::nullopt : std::optional<std::string>(found->second);
+            }};
+            world.data.SetDataAssetStore(std::move(store));
+            assembly.upgrade = [this](std::string_view type, std::uint32_t from,
+                                      std::span<const std::byte> bytes) -> Iris::CallResult<std::vector<std::byte>> {
+                steps.emplace_back(std::string(type), from);
+                auto tree = Serialisation::DecodeTree(bytes, "upgrade", *world.headless.Get().Logger()).tree;
+                if (!tree)
+                {
+                    return {Iris::CallStatus::InvalidArgument, std::nullopt, "not a tree", false};
+                }
+                tree->AsObject().Add("from" + std::to_string(from), true);
+                return {Iris::CallStatus::Success,
+                        Serialisation::EncodeTree(*tree, Serialisation::Trivia::Drop),
+                        {},
+                        false};
+            };
+        }
+
+        void Report(const std::vector<AssetEntry>& entries)
+        {
+            assembly.dataAssets.clear();
+            for (const auto& entry : entries)
+            {
+                assembly.dataAssets.push_back(Encoded(world.headless.Get(), entry.Text()));
+            }
+        }
+
+        [[nodiscard]] TypeRegistry& Types()
+        {
+            return world.headless.Get().GetResource<TypeRegistry>();
+        }
+
+        // Whether none of the names a sound report of Item and Weapon registers is registered.
+        [[nodiscard]] bool NoneRegistered()
+        {
+            for (const char* name : {"Test.Item", "Test.Weapon", "Test.Stats", "Test.Rarity", "Rules.Plain"})
+            {
+                if (Types().Find(name) != nullptr)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+    };
+} // namespace
+
+TEST_CASE("admission registers each data asset type as a tree-backed description, with its structs and enums",
+          "[script-data][data-assets]")
+{
+    AssetWorld test;
+    test.Report({Item(), Weapon()});
+
+    const auto result = test.world.Admit(test.assembly);
+    INFO(result.diagnostic);
+    REQUIRE(result.Succeeded());
+
+    auto& types = test.Types();
+    const TypeDescription* weapon = types.Find("Test.Weapon");
+    const TypeDescription* item = types.Find("Test.Item");
+    REQUIRE((weapon != nullptr && item != nullptr));
+    INFO("Both should be tree-backed data asset types, the subtype is-a its base, at its version");
+    REQUIRE(
+        (weapon->treeBacked && weapon->role == Role::DataAsset && weapon->version == 3 && weapon->base == "Test.Item"));
+    REQUIRE((item->treeBacked && item->base.empty() && !item->defaultTree.empty()));
+    REQUIRE(types.IsA("Test.Weapon", "Test.Item"));
+
+    INFO("Each field should carry its kind, target and metadata, and no offset");
+    REQUIRE(item->fields.size() == 7);
+    REQUIRE((item->fields[0].type.kind == Kind::String && item->fields[0].metadata.display == "Item name"));
+    REQUIRE((item->fields[1].type.kind == Kind::Enum && item->fields[1].type.type == types.Find("Test.Rarity")));
+    REQUIRE((item->fields[2].type.kind == Kind::Struct && item->fields[2].type.type == types.Find("Test.Stats")));
+    REQUIRE(
+        (item->fields[3].type.kind == Kind::List && item->fields[3].type.element->type == types.Find("Test.Stats")));
+    REQUIRE((item->fields[4].type.kind == Kind::Optional && item->fields[4].type.element->kind == Kind::I32));
+    REQUIRE((item->fields[5].type.kind == Kind::Reference && item->fields[5].type.target == "Fenrir::Mesh"));
+    REQUIRE(item->fields[6].type.type == types.Find("Fenrir::Math::Vec3"));
+    REQUIRE((weapon->fields[0].formerly.size() == 1 && weapon->fields[0].formerly[0] == "Dmg" &&
+             weapon->fields[0].metadata.range.has_value() && weapon->fields[0].metadata.range->max == 100.0));
+    for (const FieldInfo& field : item->fields)
+    {
+        REQUIRE(field.offset == 0);
+    }
+
+    INFO("The struct should be a tree-backed nested type, the enum an enum of its kind");
+    const TypeDescription* stats = types.Find("Test.Stats");
+    REQUIRE((stats->treeBacked && stats->role == Role::Nested && stats->fields.size() == 2));
+    const TypeDescription* rarity = types.Find("Test.Rarity");
+    REQUIRE((rarity->role == Role::Enum && rarity->underlying == Kind::U8 && rarity->enumerators.size() == 2 &&
+             rarity->enumerators[1].name == "Rare"));
+}
+
+TEST_CASE("a data asset type's upgraders run the script's Upgrade, one step at a time", "[script-data][data-assets]")
+{
+    AssetWorld test;
+    test.Report({Item(), Weapon()});
+    REQUIRE(test.world.Admit(test.assembly).Succeeded());
+
+    Serialisation::Value tree = Serialisation::Object{};
+    tree.AsObject().Add("Dmg", 4);
+    const auto upgraded = Serialisation::Upgrade(test.Types(), "Test.Weapon", 1, tree, "weapon.asset.json5",
+                                                 *test.world.headless.Get().Logger());
+
+    INFO("Both steps should run in the script, in order, and their trees come back");
+    REQUIRE(upgraded.status == Serialisation::UpgradeStatus::Succeeded);
+    REQUIRE(upgraded.version == 3);
+    REQUIRE(test.steps == std::vector<std::pair<std::string, std::uint32_t>>{{"Test.Weapon", 1}, {"Test.Weapon", 2}});
+    REQUIRE((tree.AsObject().Find("Dmg") != nullptr && tree.AsObject().Find("from1") != nullptr &&
+             tree.AsObject().Find("from2") != nullptr));
+}
+
+TEST_CASE("a data asset report that breaks a rule is refused whole, leaving the registry as forget would",
+          "[script-data][data-assets]")
+{
+    AssetWorld test;
+    std::vector<AssetEntry> entries = {Item(), Weapon()};
+    std::string expected;
+    const int refusal = GENERATE(range(0, 9));
+    switch (refusal)
+    {
+    case 0:
+        entries.push_back(Item());
+        expected = "The script reported the data asset type 'Test.Item' more than once.";
+        break;
+    case 1:
+        entries[0].name = "Fenrir::Transform";
+        expected = "The script defines a data asset type 'Fenrir::Transform', but the engine already has a type of "
+                   "that name, from FenrirECS.";
+        break;
+    case 2:
+        entries[1].base = "\"Test.Missing\"";
+        expected = "The C# data asset type 'Test.Weapon' extends 'Test.Missing', which is not a data asset type the "
+                   "engine has or the script reports before it.";
+        break;
+    case 3:
+        entries[1].base = "\"Fenrir::Transform\"";
+        expected = "The C# data asset type 'Test.Weapon' extends 'Fenrir::Transform', which is not a data asset type "
+                   "the engine has or the script reports before it.";
+        break;
+    case 4:
+        std::swap(entries[0], entries[1]);
+        expected = "The C# data asset type 'Test.Weapon' extends 'Test.Item', which is not a data asset type the "
+                   "engine has or the script reports before it.";
+        break;
+    case 5:
+        entries[1].fields = R"([{name: "Owner", type: {kind: "entity"}}])";
+        expected = "The field 'Owner' of the script's data asset type 'Test.Weapon' holds an entity, which a data "
+                   "asset never does (ADR-0075).";
+        break;
+    case 6:
+        entries[1].fields = R"([{name: "Ammo", type: {kind: "reference", target: "Test.Nowhere"}}])";
+        expected = "The field 'Ammo' of the script's data asset type 'Test.Weapon' refers to 'Test.Nowhere', which is "
+                   "neither a data asset type the engine or the script has nor an asset kind.";
+        break;
+    case 7:
+        entries[1].version = 4;
+        entries[1].upgraders = "[1, 3]";
+        expected = "The C# data asset type 'Test.Weapon' is at version 4 with upgraders from [1, 3], which are not "
+                   "consecutive below it: they must step one version at a time, with no gap, up to version 4.";
+        break;
+    case 8:
+        entries[1].upgraders = "[1]";
+        expected = "The C# data asset type 'Test.Weapon' is at version 3 with upgraders from [1], which are not "
+                   "consecutive below it: they must step one version at a time, with no gap, up to version 3.";
+        break;
+    default:
+        break;
+    }
+    test.Report(entries);
+    // A component beside them, so the refusal is seen to take the whole report.
+    test.assembly.components = {Component("Rules.Plain")};
+
+    const auto result = test.world.Admit(test.assembly);
+
+    INFO("Refusal " << refusal << " should refuse the whole report");
+    REQUIRE(!result.Succeeded());
+    REQUIRE(result.diagnostic == expected);
+    INFO("Nothing of it should be registered, in either registry, nothing upgraded, and the codecs dropped");
+    REQUIRE(test.NoneRegistered());
+    REQUIRE(test.world.ScriptDefinedCount() == 0);
+    REQUIRE(test.steps.empty());
+    REQUIRE(test.assembly.forgets == 1);
+}
+
+TEST_CASE("data asset types with upgraders are refused from an assembly with no Upgrade", "[script-data][data-assets]")
+{
+    AssetWorld test;
+    test.Report({Item(), Weapon()});
+    test.assembly.upgrade = nullptr;
+
+    const auto result = test.world.Admit(test.assembly);
+
+    REQUIRE(!result.Succeeded());
+    REQUIRE(result.diagnostic.find("has no Upgrade") != std::string::npos);
+    REQUIRE(test.NoneRegistered());
+}
+
+TEST_CASE("forget removes a generation's data asset types and upgraders, and a reload registers the new shape",
+          "[script-data][data-assets]")
+{
+    AssetWorld test;
+    test.Report({Item(), Weapon()});
+    REQUIRE(test.world.Admit(test.assembly).Succeeded());
+
+    test.world.ReleaseGeneration();
+
+    INFO("Forget should drop the codecs and unregister every type, and the upgraders with them");
+    REQUIRE(test.assembly.forgets == 1);
+    REQUIRE(test.NoneRegistered());
+    REQUIRE(test.Types().Attachment<Serialisation::UpgradersTag>("Test.Weapon") == nullptr);
+
+    INFO("The next generation's changed shape should be registered in their place");
+    AssetEntry changed = Weapon();
+    changed.version = 4;
+    changed.upgraders = "[1, 2, 3]";
+    changed.fields = R"([{name: "Power", type: {kind: "f32"}}])";
+    test.Report({Item(), changed});
+    const auto again = test.world.Admit(test.assembly);
+    INFO(again.diagnostic);
+    REQUIRE(again.Succeeded());
+    const TypeDescription* weapon = test.Types().Find("Test.Weapon");
+    REQUIRE((weapon != nullptr && weapon->version == 4 && weapon->fields.size() == 1 &&
+             weapon->fields[0].name == "Power" && weapon->fields[0].type.kind == Kind::F32));
+    const auto* upgraders = test.Types().Attachment<Serialisation::UpgradersTag>("Test.Weapon");
+    REQUIRE((upgraders != nullptr && upgraders->size() == 3));
+}
+
+TEST_CASE("forget keeps a data asset type live records hold, with a warning, until a later forget finds it free",
+          "[script-data][data-assets]")
+{
+    AssetWorld test;
+    test.Report({Item(), Weapon()});
+    REQUIRE(test.world.Admit(test.assembly).Succeeded());
+    (*test.held)["Test.Weapon"] = "a live record of it is loaded";
+
+    test.world.ReleaseGeneration();
+
+    INFO("The held type should stay, and what it extends and holds with it; its upgraders should go");
+    auto& types = test.Types();
+    REQUIRE((types.Find("Test.Weapon") != nullptr && types.Find("Test.Item") != nullptr &&
+             types.Find("Test.Stats") != nullptr));
+    REQUIRE(types.Attachment<Serialisation::UpgradersTag>("Test.Weapon") == nullptr);
+    REQUIRE(test.world.headless.Logger().Contains(Testing::LogLevel::Warn,
+                                                  "the C# data asset type 'Test.Weapon' stays registered, since a live "
+                                                  "record of it is loaded"));
+
+    INFO("A next generation of the same name should be refused while the type is kept");
+    const auto refused = test.world.Admit(test.assembly);
+    REQUIRE(!refused.Succeeded());
+    REQUIRE(refused.diagnostic.find("kept while live data holds it") != std::string::npos);
+
+    INFO("Once nothing holds it, the next forget should take it all away");
+    test.held->clear();
+    test.world.ReleaseGeneration();
+    REQUIRE(test.NoneRegistered());
+    REQUIRE(test.world.Admit(test.assembly).Succeeded());
 }

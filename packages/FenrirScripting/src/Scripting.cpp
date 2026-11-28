@@ -505,6 +505,10 @@ namespace Fenrir
                     return StartupFailure{std::move(installed.diagnostic), {}};
                 }
                 state->extensions = std::move(*installed);
+                // What the asset store's extension says about C# data asset types: the kinds a reference may target,
+                // and what holds a type that Forget would unregister.
+                state->scriptData.SetDataAssetStore(
+                    {state->extensions->AssetKinds(), state->extensions->TypeHolders()});
                 // The extensions that host stages, each told of a generation's groups as its systems start and told to
                 // let them go as they stop. Their changes play back when the extension's own work returns.
                 std::vector<Detail::StageHost> stageHosts;

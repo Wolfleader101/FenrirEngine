@@ -93,6 +93,15 @@ internal static unsafe partial class Native
                                                    ReadOnlySpan<char> target, int offset, int size, int count,
                                                    bool transient);
 
+    /// <summary>
+    /// A script assembly reports a data asset type it defines, while it loads: its description entry (name, version,
+    /// base, fields, the structs and enums they hold, upgrader versions and default) as a tree in the tree encoding,
+    /// `entrySize` bytes of it. Admission reads and checks it with the rest of the report.
+    /// </summary>
+    /// <returns>False when nothing is loading or the entry is empty.</returns>
+    [NativeFunction]
+    public static partial bool RegisterScriptDataAsset(ReadOnlySpan<byte> entry);
+
     /// <summary>Which registry ids belong to: it changes every time a registry is created.</summary>
     [NativeFunction]
     public static partial uint RegistryGeneration();

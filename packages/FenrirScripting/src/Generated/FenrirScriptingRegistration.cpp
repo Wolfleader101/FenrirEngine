@@ -32,6 +32,7 @@ namespace Fenrir::Generated
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::RegisterScriptComponent>("Fenrir.Scripting.Native.RegisterScriptComponent"),
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::RegisterScriptStruct>("Fenrir.Scripting.Native.RegisterScriptStruct"),
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::RegisterScriptField>("Fenrir.Scripting.Native.RegisterScriptField"),
+            Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::RegisterScriptDataAsset>("Fenrir.Scripting.Native.RegisterScriptDataAsset"),
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::RegistryGeneration>("Fenrir.Scripting.Native.RegistryGeneration"),
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::ComponentGet>("Fenrir.Scripting.Native.ComponentGet"),
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::ComponentHas>("Fenrir.Scripting.Native.ComponentHas"),

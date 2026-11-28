@@ -248,6 +248,25 @@ namespace Fenrir::ScriptingNatives
         return true;
     }
 
+    /**
+     * @brief A script assembly reports a data asset type it defines, while it loads: its description entry (name,
+     * version, base, fields, the structs and enums they hold, upgrader versions and default) as a tree in the tree
+     * encoding, `entrySize` bytes of it. Admission reads and checks it with the rest of the report.
+     * @return False when nothing is loading or the entry is empty.
+     */
+    bool RegisterScriptDataAsset(const CallContext&, Detail::EngineContext& engine, const std::uint8_t* entry,
+                                 std::int32_t entrySize)
+    {
+        const std::span<const std::uint8_t> bytes = SpanOf(entry, entrySize);
+        if (engine.reporting == nullptr || bytes.empty())
+        {
+            return false;
+        }
+        auto& reported = engine.reporting->dataAssets.emplace_back(bytes.size());
+        std::memcpy(reported.data(), bytes.data(), bytes.size());
+        return true;
+    }
+
     /** @brief Which registry ids belong to: it changes every time a registry is created. */
     std::uint32_t RegistryGeneration(const CallContext&, Detail::EngineContext& engine)
     {

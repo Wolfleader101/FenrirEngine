@@ -47,6 +47,19 @@ internal static class GeneratedNames
     /// <summary><c>static void Register()</c> on each table.</summary>
     public const string Register = "Register";
 
+    /// <summary>
+    /// <c>static byte[]? Upgrade(string name, int fromVersion, byte[] tree)</c> on the data asset table: the tree, in the
+    /// tree encoding, of a value of the data asset type <c>name</c> written at <c>fromVersion</c>, upgraded one version;
+    /// null when the script defines no such type.
+    /// </summary>
+    public const string Upgrade = "Upgrade";
+
+    /// <summary>
+    /// <c>static void Forget()</c> on the data asset table: drops the script's codecs from <c>DataAssetCodecs</c>, so
+    /// nothing there keeps the assembly alive once its generation is refused or stops.
+    /// </summary>
+    public const string Forget = "Forget";
+
     /// <summary>The hint name of the source file holding the generated type <paramref name="type"/>.</summary>
     public static string HintName(string type) => Namespace + "." + type + ".g.cs";
 }

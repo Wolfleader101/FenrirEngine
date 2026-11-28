@@ -65,6 +65,7 @@ add_library(FenrirScripting STATIC
     src/ChangeBuffer.hpp
     src/ScriptData.cpp
     src/ScriptTypes.cpp
+    src/ScriptDataAssets.cpp
     src/ScriptSystems.cpp
     src/ScriptSystems.hpp
     src/SystemHost.hpp
@@ -74,6 +75,7 @@ add_library(FenrirScripting STATIC
     src/GenerationLifecycle.hpp
     src/ScriptData.hpp
     src/ScriptTypes.hpp
+    src/ScriptDataAssets.hpp
     src/ScriptComponents.hpp
     src/ComponentRegistry.hpp
     include/FenrirScripting/BoundMappings.hpp
@@ -96,6 +98,9 @@ target_link_libraries(FenrirScripting PUBLIC FenrirApp FenrirLogger Iris::Iris)
 # The reload watcher that decides when a rebuilt script assembly is ready is FenrirCore's, shared with the asset store
 # (ADR-0081). Only the private GenerationLifecycle uses it.
 target_link_libraries(FenrirScripting PRIVATE FenrirCore)
+# Admission reads a C# data asset type's description entry from the tree encoding, and registers its upgraders (ADR-0083,
+# ADR-0077). Only the private ScriptDataAssets uses it.
+target_link_libraries(FenrirScripting PRIVATE FenrirSerialisation)
 
 # The built-in extension's binding (ADR-0042): the engine's components (Transform, Name, Relationship) and the entity
 # link they hold are written once, in FenrirECS's headers (../FenrirECS/api/FenrirECS.api.json, with FenrirMath's vector
