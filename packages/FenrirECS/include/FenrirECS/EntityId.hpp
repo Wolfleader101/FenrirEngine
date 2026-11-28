@@ -40,4 +40,10 @@ namespace Fenrir
      * unchanged. Empty for any other text, upper case included.
      */
     [[nodiscard]] std::optional<EntityId> ParseEntityId(std::string_view text);
+
+    /**
+     * @brief The id spelling `number` in lower-case Crockford base32 with no leading zeros, so 0 is `0`, 1 is `1` and
+     * 32 is `10`. None when the spelling would be above twelve characters (a number of 2^60 or more).
+     */
+    [[nodiscard]] std::optional<EntityId> NumberedEntityId(std::uint64_t number);
 } // namespace Fenrir

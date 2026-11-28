@@ -1,7 +1,13 @@
 #include "FenrirECS/EntityId.hpp"
 
+#include <algorithm>
 #include <bit>
+#include <cstddef>
+#include <cstdint>
+#include <optional>
 #include <random>
+#include <string>
+#include <string_view>
 
 namespace Fenrir
 {
@@ -68,5 +74,16 @@ namespace Fenrir
             value = (value << k_bitsPerCharacter) | static_cast<std::uint64_t>(digit);
         }
         return EntityId{value};
+    }
+
+    std::optional<EntityId> NumberedEntityId(std::uint64_t number)
+    {
+        // As many characters as the number has base32 digits, one at least; the leading 1 bit goes above them.
+        const int characters = std::max(1, (std::bit_width(number) + k_bitsPerCharacter - 1) / k_bitsPerCharacter);
+        if (static_cast<std::size_t>(characters) > k_maxCharacters)
+        {
+            return std::nullopt;
+        }
+        return EntityId{(std::uint64_t{1} << (k_bitsPerCharacter * characters)) | number};
     }
 } // namespace Fenrir

@@ -21,10 +21,10 @@
 #include "FenrirAssets/Assets.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirSerialisation/Bridge.hpp"
+#include "FenrirSerialisation/HeldFields.hpp"
 #include "FenrirSerialisation/Text.hpp"
 #include "FenrirSerialisation/Value.hpp"
 #include "FenrirTypes/FieldInfo.hpp"
-#include "FenrirTypes/FieldVisitor.hpp"
 #include "FenrirTypes/TypeDescription.hpp"
 #include "FenrirTypes/TypeRegistry.hpp"
 #include "FenrirTypes/ValueRef.hpp"
@@ -67,36 +67,9 @@ namespace Fenrir
             }
         };
 
-        // Each field a visit pushes, in the order pushed: for a data asset, its base's fields first.
-        struct VisitedField
-        {
-            const FieldInfo* info = nullptr;
-            ValueRef value;
-        };
-
-        class FieldCollector final : public FieldVisitor
-        {
-          public:
-            explicit FieldCollector(std::vector<VisitedField>& fields) noexcept : m_fields(fields)
-            {
-            }
-
-            void Field(const FieldInfo& field, ValueRef value) override
-            {
-                m_fields.push_back({&field, value});
-            }
-
-          private:
-            std::vector<VisitedField>& m_fields;
-        };
-
-        std::vector<VisitedField> FieldsOf(ValueRef value)
-        {
-            std::vector<VisitedField> fields;
-            FieldCollector collector(fields);
-            value.Visit(collector);
-            return fields;
-        }
+        // Each field a file holds, in the order a visit pushes it (for a data asset, its base's fields first), as
+        // FromTree reads them: a transient field is no file's, so none is walked.
+        using VisitedField = Ser::HeldField<ValueRef>;
 
         // Finds the reference strings in one entry's `data` tree and rewrites those naming the moved file. It walks the
         // tree as FromTree reads it, through a scratch instance of the entry's type, which gives a list its elements,
@@ -214,7 +187,7 @@ namespace Fenrir
                 if (type->role == Role::BoundType)
                 {
                     // A bound type is an array of its components, in the order its description visits them.
-                    const std::vector<VisitedField> components = FieldsOf(target);
+                    const std::vector<VisitedField> components = Ser::HeldFieldsOf(target);
                     if (node.Kind() == Ser::ValueKind::Array && node.AsArray().elements.size() == components.size())
                     {
                         for (std::size_t i = 0; i < components.size(); ++i)
@@ -233,7 +206,7 @@ namespace Fenrir
                     WalkUnion(node.AsObject(), target, *type);
                     return;
                 }
-                WalkFields(node.AsObject(), FieldsOf(target), {});
+                WalkFields(node.AsObject(), Ser::HeldFieldsOf(target), {});
             }
 
             // `kind` (Ser::UnionTagKey, never the tag field's own name) selects the live alternative, whose fields sit
@@ -252,7 +225,7 @@ namespace Fenrir
                 {
                     return;
                 }
-                const std::vector<VisitedField> fields = FieldsOf(target);
+                const std::vector<VisitedField> fields = Ser::HeldFieldsOf(target);
                 if (fields.size() < 2)
                 {
                     return;
@@ -262,7 +235,7 @@ namespace Fenrir
                 if (live.info->type.kind == Kind::Struct && alternative != nullptr &&
                     alternative->role != Role::BoundType && !alternative->IsTaggedUnion())
                 {
-                    WalkFields(object, FieldsOf(live.value), Ser::UnionTagKey);
+                    WalkFields(object, Ser::HeldFieldsOf(live.value), Ser::UnionTagKey);
                     return;
                 }
                 WalkFields(object, {live}, Ser::UnionTagKey);

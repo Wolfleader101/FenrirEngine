@@ -12,6 +12,7 @@
 #include "FenrirTypes/TypeRegistry.hpp"
 
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -110,6 +111,21 @@ TEST_CASE("text that is not a lower-case Crockford id does not parse", "[entity-
                  << "' is refused: empty, upper case, a letter Crockford leaves out, or above twelve characters");
         REQUIRE_FALSE(Fenrir::ParseEntityId(text).has_value());
     }
+}
+
+TEST_CASE("a numbered id spells its number in base32 with no leading zeros", "[entity-id]")
+{
+    INFO("zero is one character, thirty-one the last of one, thirty-two the first of two");
+    REQUIRE(Fenrir::SpellEntityId(Fenrir::NumberedEntityId(0).value()) == "0");
+    REQUIRE(Fenrir::SpellEntityId(Fenrir::NumberedEntityId(1).value()) == "1");
+    REQUIRE(Fenrir::SpellEntityId(Fenrir::NumberedEntityId(31).value()) == "z");
+    REQUIRE(Fenrir::SpellEntityId(Fenrir::NumberedEntityId(32).value()) == "10");
+    INFO("a numbered id is the id its spelling parses to");
+    REQUIRE(Fenrir::NumberedEntityId(1000)->value == Fenrir::ParseEntityId("z8")->value);
+    INFO("the largest number twelve characters spell has an id, and the next has none");
+    const std::uint64_t largest = (std::uint64_t{1} << 60) - 1;
+    REQUIRE(Fenrir::SpellEntityId(Fenrir::NumberedEntityId(largest).value()) == "zzzzzzzzzzzz");
+    REQUIRE_FALSE(Fenrir::NumberedEntityId(largest + 1).has_value());
 }
 
 TEST_CASE("no id spells as nothing", "[entity-id]")

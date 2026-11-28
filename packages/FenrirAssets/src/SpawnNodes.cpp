@@ -24,15 +24,7 @@ namespace Fenrir
 {
     EntityId ModelEntityId(std::uint64_t number)
     {
-        // The number's base32 digits, highest first, read back as an id, so FenrirECS keeps the packing.
-        constexpr std::string_view alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
-        std::string spelled;
-        do
-        {
-            spelled.insert(spelled.begin(), alphabet[number & 0x1f]);
-            number >>= 5;
-        } while (number != 0);
-        return ParseEntityId(spelled).value_or(EntityId{});
+        return NumberedEntityId(number).value_or(EntityId{});
     }
 
     bool AssetStore::RegisterModelSpawner(ModelSpawner& spawner)

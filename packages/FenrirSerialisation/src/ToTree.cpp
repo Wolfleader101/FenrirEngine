@@ -1,6 +1,6 @@
 #include "FenrirSerialisation/Bridge.hpp"
 
-#include "HeldFields.hpp"
+#include "FenrirSerialisation/HeldFields.hpp"
 #include "ResolverField.hpp"
 
 #include "FenrirTypes/FieldVisitor.hpp"
