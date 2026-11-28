@@ -67,6 +67,11 @@ namespace Fenrir::Serialisation
         return true;
     }
 
+    bool UnregisterUpgraders(TypeRegistry& registry, std::string_view typeName) noexcept
+    {
+        return registry.Detach<UpgradersTag>(typeName);
+    }
+
     UpgradeResult Upgrade(const TypeRegistry& registry, std::string_view typeName, std::uint32_t fromVersion,
                           Value& tree, std::string_view path, ILogger& logger)
     {

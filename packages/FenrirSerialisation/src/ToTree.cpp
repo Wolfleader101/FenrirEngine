@@ -3,6 +3,8 @@
 #include "FenrirSerialisation/HeldFields.hpp"
 #include "ResolverField.hpp"
 
+#include "FenrirLogger/ILogger.hpp"
+
 #include "FenrirTypes/FieldVisitor.hpp"
 #include "FenrirTypes/Kind.hpp"
 
@@ -379,8 +381,16 @@ namespace Fenrir::Serialisation
     } // namespace
 
     Value ToTree(const void* value, const TypeDescription& type, [[maybe_unused]] const TypeRegistry& registry,
-                 const Resolvers& resolvers, const Value* prior, const void* defaults)
+                 const Resolvers& resolvers, const Value* prior, const void* defaults, ILogger* logger)
     {
+        if (type.treeBacked)
+        {
+            if (logger != nullptr)
+                logger->Error("The type {} is tree-backed, so its value is a tree already and has no value in memory "
+                              "to write; nothing was written.",
+                              type.name);
+            return Value(nullptr);
+        }
         const ValueType valueType{.kind = Kind::Struct, .type = &type};
         const ConstValueRef baseline(defaults, valueType);
         Value tree =

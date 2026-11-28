@@ -20,9 +20,9 @@
 
 **Touches:** `packages/FenrirTypes/` (`include/FenrirTypes/TypeDescription.hpp`, `TypeRegistry.hpp`, `src/`, `Tests/`), `packages/FenrirSerialisation/` (`include/FenrirSerialisation/Upgrade.hpp`, `src/Upgrade.cpp`, the bridge's guard, `Tests/`)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A tree-backed type with `string`, `list` and `reference` fields registers, is found, and `IsA` its C++ base.
-- [ ] `Unregister` removes a type and its attachments. It is refused while a registered type names the type as its base.
-- [ ] A type's upgraders can be removed, and registered again after.
-- [ ] The bridge refuses to walk a tree-backed description, with a diagnostic.
+- [x] A tree-backed type with `string`, `list` and `reference` fields registers, is found, and `IsA` its C++ base.
+- [x] `Unregister` removes a type and its attachments. It is refused while a registered type names the type as its base.
+- [x] A type's upgraders can be removed, and registered again after.
+- [x] The bridge refuses to walk a tree-backed description, with a diagnostic.

@@ -29,10 +29,12 @@ namespace Fenrir
     }
 
     /**
-     * @brief The run-time description of one type: static, immutable data, held once per described type.
+     * @brief The run-time description of one type: immutable data, held once per described type.
      *
-     * A package's generated type registration holds one per type it describes and adds it to the type registry, and
-     * `Describe<T>` yields the same object. Nothing copies a description: the registry, value references and other
+     * A package's generated type registration holds one per type it describes, as static data, and adds it to the type
+     * registry, and `Describe<T>` yields the same object. A tree-backed description (`treeBacked`), one whose layout
+     * only the running engine learns such as a C# data asset type's, is made at run time instead, by a registrant that
+     * keeps it alive while it is registered. Nothing copies a description: the registry, value references and other
      * descriptions point at it.
      */
     struct TypeDescription
@@ -89,6 +91,18 @@ namespace Fenrir
          * visited through its fields' offsets.
          */
         void (*visit)(void* instance, FieldVisitor& visitor) = nullptr;
+        /**
+         * @brief Whether the type is tree-backed: C++ does not know its layout, so its values are only ever value
+         * trees, never instances in memory (ADR-0083). It has no `size`, `construct`, `destroy` or `visit`, its fields
+         * carry no offsets, and its default is `defaultTree`. Code that walks layouts never walks it.
+         */
+        bool treeBacked = false;
+        /**
+         * @brief For a tree-backed type: its default value, a value tree in the tree encoding (FenrirSerialisation's
+         * `EncodeTree`), held as bytes since FenrirTypes knows no tree. Empty for any other type, whose default is an
+         * instance `Construct` makes.
+         */
+        std::span<const std::byte> defaultTree;
 
         /** @brief Value-initialises an instance at `instance`, which has `size` bytes aligned to `alignment`. */
         void Construct(void* instance) const;
@@ -102,11 +116,14 @@ namespace Fenrir
          * Through `visit` when the type has one, else through each field's offset; a visitor cannot tell which. A
          * field of a nested struct arrives as one `Struct` value, which the visitor walks through `ValueRef::Visit`
          * if it wants its fields. A tagged union pushes its tag, then its live alternative alone; a member that is not
-         * live is never read.
+         * live is never read. A tree-backed type has no instance, so pushes nothing.
          */
         void Visit(void* instance, FieldVisitor& visitor) const;
 
-        /** @brief Pushes each field of the instance at `instance` to `visitor` once, in storage order, read-only. */
+        /**
+         * @brief Pushes each field of the instance at `instance` to `visitor` once, in storage order, read-only;
+         * nothing for a tree-backed type.
+         */
         void Visit(const void* instance, ConstFieldVisitor& visitor) const;
 
         /** @brief Whether the type is a tagged union: a tag, then one alternative live at a time. */

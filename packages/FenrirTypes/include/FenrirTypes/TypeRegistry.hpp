@@ -30,9 +30,9 @@ namespace Fenrir
     /**
      * @brief The run-time table of every described type the running engine knows, by canonical name (ADR-0074).
      *
-     * It holds the descriptions packages register, not copies: each must outlive the registry. A file reader, writer
-     * or inspector reaches a type's fields only through it. It never throws: a refused registration or attachment
-     * goes to the diagnostics function it was made with and returns false.
+     * It holds the descriptions packages register, not copies: each must outlive the registry, or its removal by
+     * `Unregister`. A file reader, writer or inspector reaches a type's fields only through it. It never throws: a
+     * refused registration, removal or attachment goes to the diagnostics function it was made with and returns false.
      */
     class TypeRegistry
     {
@@ -59,9 +59,30 @@ namespace Fenrir
          * admit one, or when a field is of an owning kind and the type has no visit function. A `Nested` type's owning
          * kinds are judged in the role of the type that holds it.
          *
+         * A tree-backed description (`TypeDescription::treeBacked`) needs no visit function for its owning fields, and
+         * may extend a C++ data asset type. It is refused when it is not a data asset or nested type, when it has a
+         * `size`, `construct`, `destroy` or `visit`, a field with an offset, alternatives or enumerators, or no
+         * `defaultTree`. A type that is not tree-backed is refused when it has a `defaultTree`, when its base is
+         * tree-backed, or when a field holds a tree-backed struct (itself, or through its elements or nested structs),
+         * since its layout would hold one.
+         *
          * @return Whether it was added.
          */
         bool Register(const TypeDescription& description);
+
+        /**
+         * @brief Removes the type registered under `name`, its canonical or a former one, with every name it holds and
+         * every attachment hung on it, so the same names can be registered again.
+         *
+         * For a type registered at run time, such as a C# data asset type a new script generation drops or changes; not
+         * for engine types, which their packages' code still names, though nothing but the base check below guards
+         * them. Refused with a diagnostic, changing nothing, when no type is registered under `name`, while another
+         * registered type names it as its base, or while another registered type's field holds a value of it (itself,
+         * or as an element), since that field points at its description. Holders go first.
+         *
+         * @return Whether it was removed.
+         */
+        bool Unregister(std::string_view name);
 
         /**
          * @brief The type registered under `name`, its canonical or a former one; null when none is.
@@ -92,6 +113,18 @@ namespace Fenrir
         {
             return AttachSlot(name, std::type_index(typeid(Tag)),
                               std::make_unique<Slot<typename Tag::Value>>(std::move(value)));
+        }
+
+        /**
+         * @brief Removes the value keyed by `Tag` from the type registered under `name`.
+         *
+         * @return Whether there was one to remove: false, with no diagnostic, when there was none or no type is
+         * registered under `name`.
+         */
+        template <AttachmentTag Tag>
+        bool Detach(std::string_view name) noexcept
+        {
+            return DetachSlot(name, std::type_index(typeid(Tag)));
         }
 
         /** @brief The value keyed by `Tag` on the type registered under `name`; null when there is none. */
@@ -133,6 +166,7 @@ namespace Fenrir
         };
 
         bool AttachSlot(std::string_view name, std::type_index tag, std::unique_ptr<SlotBase> slot);
+        bool DetachSlot(std::string_view name, std::type_index tag) noexcept;
         [[nodiscard]] SlotBase* FindSlot(std::string_view name, std::type_index tag) const noexcept;
         [[nodiscard]] const Entry* FindEntry(std::string_view name) const noexcept;
         void Report(const std::string& message) const;

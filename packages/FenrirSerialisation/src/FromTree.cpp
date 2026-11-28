@@ -599,6 +599,21 @@ namespace Fenrir::Serialisation
             result.status = BridgeStatus::UnknownType;
             return result;
         }
+        if (type.treeBacked)
+        {
+            const Location at = tree.location.value_or(Location{});
+            const Diagnostic diagnostic{.severity = DiagnosticSeverity::Error,
+                                        .path = std::string(path),
+                                        .line = at.line,
+                                        .column = at.column,
+                                        .message = std::format("The type {} is tree-backed, so its value is a tree and "
+                                                               "is never read into memory; nothing was read.",
+                                                               type.name)};
+            logger.Error("{}", FormatDiagnostic(diagnostic));
+            result.status = BridgeStatus::TreeBacked;
+            result.diagnostics.push_back(diagnostic);
+            return result;
+        }
 
         const ValueType valueType{.kind = Kind::Struct, .type = &type};
         Reader(resolvers, path, result).Read(tree, ValueRef(value, valueType), std::string());
