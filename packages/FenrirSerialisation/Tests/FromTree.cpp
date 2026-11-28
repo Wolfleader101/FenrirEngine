@@ -472,6 +472,31 @@ TEST_CASE("A tagged union read with kind Sphere holds a sphere with the file's r
     REQUIRE(result.status == BridgeStatus::Succeeded);
 }
 
+TEST_CASE("A tagged union whose tag field is not named kind is still written and read as kind",
+          "[serialisation][fromtree]")
+{
+    Shape original;
+    original.kind = ShapeKind::Sphere;
+    original.sphere = SphereShape{2.5f};
+
+    INFO("the file spells the tag kind, whatever the type names its tag field");
+    const Value tree = Written(&original, PrivateTagShapeDescription);
+    REQUIRE(tree.AsObject().Find("kind") != nullptr);
+    REQUIRE(tree.AsObject().Find("m_type") == nullptr);
+
+    Shape read;
+    RecordingLogger logger;
+    Fenrir::TypeRegistry registry;
+    RegisterBridgeTypes(registry);
+    const BridgeResult result = FromTree(tree, PrivateTagShapeDescription, registry, Resolvers{}, &read, Path, logger);
+
+    INFO("kind selected the sphere before radius filled it, with nothing defaulted or dropped");
+    REQUIRE(result.status == BridgeStatus::Succeeded);
+    REQUIRE(result.diagnostics.empty());
+    REQUIRE(read.kind == ShapeKind::Sphere);
+    REQUIRE(read.sphere.radius == 2.5f);
+}
+
 TEST_CASE("A tagged union with an unknown kind holds its default alternative, with one located error",
           "[serialisation][fromtree]")
 {

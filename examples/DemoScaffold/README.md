@@ -261,7 +261,11 @@ Environment variables, read when the scaffold is installed:
 - `FENRIR_DEMO_SMOKE=<frames>` runs every scene (or the one `FENRIR_DEMO_SCENE` names) that many frames of 1/60 s, with
   the scene's keys pressed in turn across them, then stops. It exits with 1 if anything logged an error (GL debug
   errors included: the renderer's debug validation is on for smoke runs in every build), else 0. Its window is hidden,
-  and vsync is off.
+  and vsync is off. After each scene's frames, the scene is saved with `AssetStore::SaveScene` to a temporary scene
+  file in a `.demo-smoke-<random>` folder of the asset root. It is loaded back into a second scene with `LoadScene`,
+  and that scene is saved too. When the two saves' counts of entities and components differ, an error names the scene
+  (`src/DemoRoundTrip.hpp`), so the smoke run fails. The scene's spawn functions stay code; the free-fly camera carries
+  `Transient`, so no file holds it. The temporary files are removed afterwards.
 - `FENRIR_DEMO_BACKEND=null|opengl` picks the renderer's backend; `opengl` by default. `null` needs no window or GPU.
 
 When the renderer cannot start (no OpenGL 4.6 core context), a smoke run exits with 4, which CTest reports as skipped.
@@ -298,7 +302,9 @@ The art-deco texture set comes with the scene that uses it.
 
 `FenrirDemoScaffoldTests` (CTest `FenrirDemoScaffold`) runs a demo app on the null backend with no window, its input
 fed through FenrirInput's feed and the App driven one frame at a time, or run as a smoke run: the scene list, the free-
-fly camera, the scene click, the help, and the smoke runs; and the demo
+fly camera (tagged `Transient`), the scene click, the help, and the smoke runs (each scene saved and loaded back with
+its Transient entities left out and its temporary files removed, and a lost component failing the round trip by the
+scene's name); and the demo
 UI kit, its root drawing into a capturing target the size of the null backend's surface: the help's key rows in order,
 F1 hiding the kit (its panel then taking no press) and hiding it from a focused button, a press on the panel sending
 no scene click and one beside it sending one, the pointer over the panel claimed and the game seeing no button of a

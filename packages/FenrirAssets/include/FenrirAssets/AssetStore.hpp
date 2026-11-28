@@ -877,7 +877,9 @@ namespace Fenrir
          * it. The second walks the blocks in file order: it completes the entity, adds its `EntityId`, then adds each
          * entry of `components` by canonical (or former) name, upgraded from the entry's `version` (1 when missing)
          * and filled field by field, then appends the entity to its `parent` with AddChild, so sibling order is the
-         * file's. An `entity` field names the block of its id; an id no block has leaves it empty with one error. An
+         * file's. The block lists every described component its entity has, `Fenrir::Name` and `Fenrir::Transform`
+         * too, as `{}` at their defaults, so a block listing neither loads without it, as the saved entity was. An
+         * `entity` field names the block of its id; an id no block has leaves it empty with one error. An
          * asset handle field loads its asset with the scene as its owner. A ComponentWatch sees one add per component
          * the file holds, and no event marks the load.
          *

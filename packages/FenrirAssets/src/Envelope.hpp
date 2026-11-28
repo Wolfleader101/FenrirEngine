@@ -216,6 +216,18 @@ namespace Fenrir::Detail
     inline constexpr std::string_view SpelledApart[] = {"Fenrir::Relationship", "Fenrir::EntityId", "Fenrir::Instance"};
 
     /**
+     * @brief `Fenrir::Name`, which every new entity has: a block's `components` lists it first, `{}` at its defaults,
+     * whenever the entity has it, so a block not listing it loads without it (ADR-0078 §5).
+     */
+    inline constexpr std::string_view NameType = "Fenrir::Name";
+
+    /**
+     * @brief `Fenrir::Transform`, which every new entity has: a block's `components` lists it after Name, `{}` at its
+     * defaults, whenever the entity has it, so a block not listing it loads without it (ADR-0078 §5).
+     */
+    inline constexpr std::string_view TransformType = "Fenrir::Transform";
+
+    /**
      * @brief Whether `entity` is a live entity of `entities`: false for an empty entity, a destroyed one, or one of
      * another scene. A merge's parent and a subtree's root must be.
      */

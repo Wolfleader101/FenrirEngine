@@ -310,12 +310,27 @@ namespace Fenrir
                         FillComponent(member, *components, entity, spelled, unknown, matchedEntity);
                     }
                 }
-                if (matchedEntity && read == Detail::SceneRead::Repatch &&
-                    (components == nullptr || components->AsObject().Find("Fenrir::Transform") == nullptr))
+                const auto lists = [&](std::string_view type) {
+                    return components != nullptr && components->AsObject().Find(type) != nullptr;
+                };
+                if (!matchedEntity)
                 {
-                    // Every entity has a transform, so one the source does not write is the identity a fresh
-                    // expansion gives, not what a host's override left there: the override, if still written, is
-                    // reapplied on top.
+                    // The block lists every described component its entity has, Name and Transform at their defaults
+                    // as `{}`, so one it leaves out the entity had not: CompleteEntity's goes (ADR-0078 §5).
+                    if (!lists(Detail::NameType))
+                    {
+                        handle.RemoveComponent<Name>();
+                    }
+                    if (!lists(Detail::TransformType))
+                    {
+                        handle.RemoveComponent<Transform>();
+                    }
+                }
+                else if (read == Detail::SceneRead::Repatch && !lists(Detail::TransformType) &&
+                         handle.HasComponent<Transform>())
+                {
+                    // A source that does not write a transform gives its entity none, so a transform there is a
+                    // host's override, reset to the identity: the override, if still written, is reapplied on top.
                     handle.GetComponent<Transform>() = Transform{};
                 }
                 if (matchedEntity)
