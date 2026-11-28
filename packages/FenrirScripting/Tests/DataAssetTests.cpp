@@ -371,37 +371,48 @@ namespace
 
     void TheFixturesDataAssetTypesAreRegisteredWhileItRuns()
     {
+        FixtureApp app;
+        const auto& types = app.headless.Get().GetResource<TypeRegistry>();
+        const TypeDescription* weapon = types.Find(WeaponName);
+        const TypeDescription* item = types.Find(ItemName);
+        INFO("Both data asset types should be tree-backed descriptions, the subtype is-a its C# base");
+        REQUIRE((weapon != nullptr && item != nullptr));
+        REQUIRE((weapon->treeBacked && weapon->role == Role::DataAsset && weapon->version == 3 &&
+                 weapon->base == ItemName));
+        REQUIRE(types.IsA(WeaponName, ItemName));
+        REQUIRE(types.Find("Fenrir.ScriptFixture.Thing") == item);
+        INFO("Its struct and enums should be described beside it");
+        REQUIRE((types.Find("Fenrir.ScriptFixture.Stats") != nullptr &&
+                 types.Find("Fenrir.ScriptFixture.Stats")->treeBacked));
+        REQUIRE((types.Find("Fenrir.ScriptFixture.Element") != nullptr &&
+                 types.Find("Fenrir.ScriptFixture.Element")->role == Role::Enum));
+    }
+
+    void ItsUpgradersRunTheScripts()
+    {
+        FixtureApp app;
+        const auto& types = app.headless.Get().GetResource<TypeRegistry>();
+        const auto* upgraders = types.Attachment<UpgradersTag>(WeaponName);
+        INFO("WeaponData should have its two upgraders registered");
+        REQUIRE((upgraders != nullptr && upgraders->size() == 2));
+        Value tree = Object{};
+        tree.AsObject().Add("Dmg", 8);
+        const auto upgraded = Upgrade(types, WeaponName, 1, tree, "weapon.asset.json5",
+                                      const_cast<RecordingLogger&>(app.headless.Logger()));
+        INFO("Upgrading from version 1 should run From1 (Dmg to I32) and From2 in the script");
+        REQUIRE(upgraded.status == UpgradeStatus::Succeeded);
+        REQUIRE((tree.AsObject().Find("I32") != nullptr && tree.AsObject().Find("Dmg") == nullptr));
+        REQUIRE(tree.AsObject().Find("I32")->AsNumber().AsSigned() == 8);
+    }
+
+    void StoppingUnregistersThem()
+    {
         HeadlessApp headless;
         const auto& types = headless.Get().GetResource<TypeRegistry>();
         {
             Scripting scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
             INFO("The fixture did not load: " + Errors(headless));
-            REQUIRE(scripting.HasScripts());
-
-            const TypeDescription* weapon = types.Find(WeaponName);
-            const TypeDescription* item = types.Find(ItemName);
-            INFO("Both data asset types should be tree-backed descriptions, the subtype is-a its C# base");
-            REQUIRE((weapon != nullptr && item != nullptr));
-            REQUIRE((weapon->treeBacked && weapon->role == Role::DataAsset && weapon->version == 3 &&
-                     weapon->base == ItemName));
-            REQUIRE(types.IsA(WeaponName, ItemName));
-            REQUIRE(types.Find("Fenrir.ScriptFixture.Thing") == item);
-            INFO("Its struct and enums should be described beside it");
-            REQUIRE((types.Find("Fenrir.ScriptFixture.Stats") != nullptr &&
-                     types.Find("Fenrir.ScriptFixture.Stats")->treeBacked));
-            REQUIRE((types.Find("Fenrir.ScriptFixture.Element") != nullptr &&
-                     types.Find("Fenrir.ScriptFixture.Element")->role == Role::Enum));
-
-            INFO("Its upgraders should run the script's, through the table's Upgrade");
-            const auto* upgraders = types.Attachment<UpgradersTag>(WeaponName);
-            REQUIRE((upgraders != nullptr && upgraders->size() == 2));
-            Value tree = Object{};
-            tree.AsObject().Add("Dmg", 8);
-            const auto upgraded = Upgrade(types, WeaponName, 1, tree, "weapon.asset.json5",
-                                          const_cast<RecordingLogger&>(headless.Logger()));
-            REQUIRE(upgraded.status == UpgradeStatus::Succeeded);
-            REQUIRE((tree.AsObject().Find("I32") != nullptr && tree.AsObject().Find("Dmg") == nullptr));
-            REQUIRE(tree.AsObject().Find("I32")->AsNumber().AsSigned() == 8);
+            REQUIRE((scripting.HasScripts() && types.Find(WeaponName) != nullptr));
         }
         INFO("Stopping should unregister the types and their upgraders");
         REQUIRE((types.Find(WeaponName) == nullptr && types.Find(ItemName) == nullptr &&
@@ -409,8 +420,18 @@ namespace
     }
 } // namespace
 
-TEST_CASE("the fixture's C# data asset types are registered while it runs, with upgraders, and go when it stops",
-          "[scripting][data-assets]")
+TEST_CASE("the fixture's C# data asset types are registered while it runs", "[scripting][data-assets]")
 {
     TheFixturesDataAssetTypesAreRegisteredWhileItRuns();
+}
+
+TEST_CASE("the fixture's data asset upgraders run the script's, through the table's Upgrade",
+          "[scripting][data-assets]")
+{
+    ItsUpgradersRunTheScripts();
+}
+
+TEST_CASE("stopping the fixture unregisters its data asset types", "[scripting][data-assets]")
+{
+    StoppingUnregistersThem();
 }

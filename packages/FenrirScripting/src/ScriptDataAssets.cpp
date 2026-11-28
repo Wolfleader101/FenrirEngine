@@ -966,17 +966,4 @@ namespace Fenrir::Detail
         }
         return all;
     }
-
-    std::vector<std::string> ScriptDataAssets::Names() const
-    {
-        std::vector<std::string> names;
-        for (const auto& entry : m_entries)
-        {
-            if (entry->what == Entry::What::DataAsset)
-            {
-                names.push_back(entry->name);
-            }
-        }
-        return names;
-    }
 } // namespace Fenrir::Detail

@@ -124,9 +124,6 @@ namespace Fenrir::Detail
          */
         [[nodiscard]] bool Unregister(TypeRegistry& types, App& app, const Held& held);
 
-        /** @brief The canonical names of the data asset types `Build` made, in report order. */
-        [[nodiscard]] std::vector<std::string> Names() const;
-
         /** @brief One description and what it points into; defined in the source file. */
         struct Entry;
 

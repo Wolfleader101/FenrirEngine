@@ -303,8 +303,9 @@ public sealed class DataAssetGenerator : IIncrementalGenerator
 
         string className = "DataAsset_" + Mangle(symbol);
         string typeCode = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-        string codec = ClassCodec(symbol, className, typeCode, CanonicalName(symbol), version, baseName, baseCode, fields, upgraders, walk);
-        return new Model(key, className, typeCode, CanonicalName(symbol), codec, walk.Structs.ToImmutableArray(), depth,
+        string canonical = CanonicalName(symbol);
+        string codec = ClassCodec(symbol, className, typeCode, canonical, version, baseName, baseCode, fields, upgraders, walk);
+        return new Model(key, className, typeCode, canonical, codec, walk.Structs.ToImmutableArray(), depth,
                          diagnostics.ToImmutableArray());
     }
 

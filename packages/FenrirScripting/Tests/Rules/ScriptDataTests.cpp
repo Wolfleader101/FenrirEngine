@@ -981,7 +981,7 @@ namespace
     std::vector<std::byte> Encoded(App& app, const std::string& json5)
     {
         auto read = Serialisation::ReadText(json5, "entry", *app.Logger());
-        INFO(json5);
+        INFO("The test's entry should be JSON5: " << json5);
         REQUIRE(read.tree.has_value());
         return Serialisation::EncodeTree(*read.tree, Serialisation::Trivia::Drop);
     }
@@ -1097,7 +1097,7 @@ TEST_CASE("admission registers each data asset type as a tree-backed description
     test.Report({Item(), Weapon()});
 
     const auto result = test.world.Admit(test.assembly);
-    INFO(result.diagnostic);
+    INFO("The sound report should be admitted: " << result.diagnostic);
     REQUIRE(result.Succeeded());
 
     auto& types = test.Types();
@@ -1139,7 +1139,11 @@ TEST_CASE("a data asset type's upgraders run the script's Upgrade, one step at a
 {
     AssetWorld test;
     test.Report({Item(), Weapon()});
-    REQUIRE(test.world.Admit(test.assembly).Succeeded());
+    {
+        const auto admitted = test.world.Admit(test.assembly);
+        INFO("The sound report should be admitted: " << admitted.diagnostic);
+        REQUIRE(admitted.Succeeded());
+    }
 
     Serialisation::Value tree = Serialisation::Object{};
     tree.AsObject().Add("Dmg", 4);
@@ -1160,7 +1164,7 @@ TEST_CASE("a data asset report that breaks a rule is refused whole, leaving the 
     AssetWorld test;
     std::vector<AssetEntry> entries = {Item(), Weapon()};
     std::string expected;
-    const int refusal = GENERATE(range(0, 9));
+    const int refusal = GENERATE(range(0, 11));
     switch (refusal)
     {
     case 0:
@@ -1208,6 +1212,17 @@ TEST_CASE("a data asset report that breaks a rule is refused whole, leaving the 
         expected = "The C# data asset type 'Test.Weapon' is at version 3 with upgraders from [1], which are not "
                    "consecutive below it: they must step one version at a time, with no gap, up to version 3.";
         break;
+    case 9:
+        entries[0].name = "Rules.Plain";
+        entries[1].base = "\"Rules.Plain\"";
+        expected = "The script reported the data asset type 'Rules.Plain', but also a component, struct or event of "
+                   "that name.";
+        break;
+    case 10:
+        entries[1].fields = R"([{name: "Raw", type: {kind: "pointer"}}])";
+        expected = "The field 'Raw' of the script's data asset type 'Test.Weapon' is of the kind pointer, which a C# "
+                   "data asset type cannot hold.";
+        break;
     default:
         break;
     }
@@ -1235,6 +1250,7 @@ TEST_CASE("data asset types with upgraders are refused from an assembly with no 
 
     const auto result = test.world.Admit(test.assembly);
 
+    INFO("The report should be refused for want of Upgrade, leaving nothing registered: " << result.diagnostic);
     REQUIRE(!result.Succeeded());
     REQUIRE(result.diagnostic.find("has no Upgrade") != std::string::npos);
     REQUIRE(test.NoneRegistered());
@@ -1245,7 +1261,11 @@ TEST_CASE("forget removes a generation's data asset types and upgraders, and a r
 {
     AssetWorld test;
     test.Report({Item(), Weapon()});
-    REQUIRE(test.world.Admit(test.assembly).Succeeded());
+    {
+        const auto admitted = test.world.Admit(test.assembly);
+        INFO("The sound report should be admitted: " << admitted.diagnostic);
+        REQUIRE(admitted.Succeeded());
+    }
 
     test.world.ReleaseGeneration();
 
@@ -1261,7 +1281,7 @@ TEST_CASE("forget removes a generation's data asset types and upgraders, and a r
     changed.fields = R"([{name: "Power", type: {kind: "f32"}}])";
     test.Report({Item(), changed});
     const auto again = test.world.Admit(test.assembly);
-    INFO(again.diagnostic);
+    INFO("The changed shape should be admitted: " << again.diagnostic);
     REQUIRE(again.Succeeded());
     const TypeDescription* weapon = test.Types().Find("Test.Weapon");
     REQUIRE((weapon != nullptr && weapon->version == 4 && weapon->fields.size() == 1 &&
@@ -1275,7 +1295,11 @@ TEST_CASE("forget keeps a data asset type live records hold, with a warning, unt
 {
     AssetWorld test;
     test.Report({Item(), Weapon()});
-    REQUIRE(test.world.Admit(test.assembly).Succeeded());
+    {
+        const auto admitted = test.world.Admit(test.assembly);
+        INFO("The sound report should be admitted: " << admitted.diagnostic);
+        REQUIRE(admitted.Succeeded());
+    }
     (*test.held)["Test.Weapon"] = "a live record of it is loaded";
 
     test.world.ReleaseGeneration();
@@ -1298,5 +1322,9 @@ TEST_CASE("forget keeps a data asset type live records hold, with a warning, unt
     test.held->clear();
     test.world.ReleaseGeneration();
     REQUIRE(test.NoneRegistered());
-    REQUIRE(test.world.Admit(test.assembly).Succeeded());
+    {
+        const auto admitted = test.world.Admit(test.assembly);
+        INFO("The sound report should be admitted: " << admitted.diagnostic);
+        REQUIRE(admitted.Succeeded());
+    }
 }

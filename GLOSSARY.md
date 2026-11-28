@@ -140,7 +140,7 @@ The data of the script components and events a generation of the script assembly
 *Avoid:* owned data, schema.
 
 **Admission**
-Keeping a generation's script report all or nothing: nothing of it is registered unless all of it is. In order, the report is discovered and checked, the native components, events, shared structs and resources are checked against their C# structs, the script's components and events are registered and its components described to the App's type registry (so scene files hold them by name), then stale script data is dropped and the queues of new events made. A failed admission leaves the registry as a stop would, so the previous generation can be admitted again.
+Keeping a generation's script report all or nothing: nothing of it is registered unless all of it is. In order, the report is discovered and checked, the native components, events, shared structs and resources are checked against their C# structs, the script's components and events are registered, its components described to the App's type registry (so scene files hold them by name) and its C# data asset types described there too, with their upgraders, then stale script data is dropped and the queues of new events made. A failed admission leaves the registry as a stop would, so the previous generation can be admitted again.
 *Avoid:* reconcile (the old function's name), validation (only the first part of it).
 
 **Scripting contract**

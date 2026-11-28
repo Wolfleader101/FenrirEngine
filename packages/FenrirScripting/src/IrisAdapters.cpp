@@ -251,34 +251,40 @@ namespace Fenrir::Detail
             return Found{table.status, std::nullopt, "the data asset table could not be read: " + table.diagnostic,
                          false};
         }
-        const auto method = table.value->FindMethod<std::optional<Bytes>(std::string_view, std::int32_t, const Bytes&)>(
-            GeneratedNames::Upgrade);
+        const auto upgradeMethod =
+            table.value->FindMethod<std::optional<Bytes>(std::string_view, std::int32_t, const Bytes&)>(
+                GeneratedNames::Upgrade);
         const auto forget = table.value->FindMethod<void()>(GeneratedNames::Forget);
-        if (!method.Succeeded() || !forget.Succeeded())
+        if (!upgradeMethod.Succeeded() || !forget.Succeeded())
         {
-            return Found{method.Succeeded() ? forget.status : method.status, std::nullopt,
-                         "the data asset table is missing a method: " + method.diagnostic + forget.diagnostic, false};
+            return Found{upgradeMethod.Succeeded() ? forget.status : upgradeMethod.status, std::nullopt,
+                         "the data asset table is missing a method: " + upgradeMethod.diagnostic + forget.diagnostic,
+                         false};
         }
         // The method and the component stay good while the generation is loaded, longer than the upgraders bound here.
         const Iris::Component* component = &m_component;
-        DataAssetUpgrade upgrade = [component, call = *method.value](
+        DataAssetUpgrade upgrade = [component, call = *upgradeMethod.value](
                                        std::string_view type, std::uint32_t fromVersion,
                                        std::span<const std::byte> tree) -> Iris::CallResult<std::vector<std::byte>> {
             using Upgraded = Iris::CallResult<std::vector<std::byte>>;
+            // A failed Iris call, as this step's failure.
+            const auto failed = [](const auto& call) {
+                return Upgraded{call.status, std::nullopt, call.diagnostic, call.diagnosticTruncated};
+            };
             auto in = Bytes::Create(*component, tree.size());
             if (!in.Succeeded())
             {
-                return Upgraded{in.status, std::nullopt, in.diagnostic, in.diagnosticTruncated};
+                return failed(in);
             }
             const std::span<const std::uint8_t> raw(reinterpret_cast<const std::uint8_t*>(tree.data()), tree.size());
             if (const auto copied = in.value->CopyIn(0, raw); !copied.Succeeded())
             {
-                return Upgraded{copied.status, std::nullopt, copied.diagnostic, copied.diagnosticTruncated};
+                return failed(copied);
             }
             const auto ran = call.Invoke(type, static_cast<std::int32_t>(fromVersion), *in.value);
             if (!ran.Succeeded())
             {
-                return Upgraded{ran.status, std::nullopt, ran.diagnostic, ran.diagnosticTruncated};
+                return failed(ran);
             }
             if (!ran.value->has_value())
             {
@@ -289,13 +295,13 @@ namespace Fenrir::Detail
             const auto length = out.Length();
             if (!length.Succeeded())
             {
-                return Upgraded{length.status, std::nullopt, length.diagnostic, length.diagnosticTruncated};
+                return failed(length);
             }
             std::vector<std::byte> bytes(*length.value);
             const std::span<std::uint8_t> room(reinterpret_cast<std::uint8_t*>(bytes.data()), bytes.size());
             if (const auto copied = out.CopyOut(0, room); !copied.Succeeded())
             {
-                return Upgraded{copied.status, std::nullopt, copied.diagnostic, copied.diagnosticTruncated};
+                return failed(copied);
             }
             return Upgraded{Iris::CallStatus::Success, std::move(bytes), {}, false};
         };
