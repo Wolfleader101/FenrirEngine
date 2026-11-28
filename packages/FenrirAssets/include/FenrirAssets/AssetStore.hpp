@@ -371,7 +371,9 @@ namespace Fenrir
         /** @brief The slot's generation when the asset was made; zero only in an empty handle. */
         std::uint32_t generation = 0;
 
+        /** @brief The empty handle, which names no asset. */
         DataAssetHandle() = default;
+        /** @brief The handle of the data asset in slot `slotIndex` at its generation `slotGeneration`. */
         DataAssetHandle(std::uint32_t slotIndex, std::uint32_t slotGeneration) noexcept
             : index(slotIndex), generation(slotGeneration)
         {
@@ -436,8 +438,11 @@ namespace Fenrir
         std::vector<std::byte> bytes;
         /** @brief The record's revision when the tree was taken. */
         std::uint32_t revision = 0;
-        /** @brief The canonical name of the record's type: the type loaded, or one extending it. */
-        std::string_view type;
+        /**
+         * @brief The canonical name of the record's type: the type loaded, or one extending it. A copy, since a
+         * tree-backed type's description goes when it is unregistered.
+         */
+        std::string type;
     };
 
     /**

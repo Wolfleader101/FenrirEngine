@@ -180,6 +180,20 @@ namespace Fenrir
             return std::format("the type registry has no `{}`: register its package's types first", type.name);
         }
 
+        // Why `type`, what the registry finds under `name`, is refused by a by-name door: none, or no data asset type.
+        std::optional<std::string> NotADataAssetType(const TypeDescription* type, std::string_view name)
+        {
+            if (type == nullptr)
+            {
+                return std::format("the type registry has no `{}`: register its type first", name);
+            }
+            if (type->role != Role::DataAsset)
+            {
+                return std::format("`{}` is a type, but no data asset type", type->name);
+            }
+            return std::nullopt;
+        }
+
         std::string_view ReasonText(LoadFailure reason)
         {
             if (reason == LoadFailure::FileNotFound)
@@ -1245,20 +1259,9 @@ namespace Fenrir
             }
             return nullptr;
         }
-        const void* instance = static_cast<const Detail::DataValue*>(record->data.get())->value;
-        if (instance == nullptr)
-        {
-            // A tree-backed type with no C++ base has only its tree: no C++ type reads it. IsA has passed, so this
-            // only meets a type registered without the base its description names.
-            const std::scoped_lock lock(m_state->readLogMutex);
-            if (record->logged.insert(std::format("read as {}", type.name)).second)
-            {
-                m_state->logger->Error("Could not read a data asset as `{}`: its `{}` is tree-backed, with no C++ base "
-                                       "to read",
-                                       type.name, record->typeName);
-            }
-        }
-        return instance;
+        // IsA has passed, so a C++ type up the record's base chain is `type` or extends it: the record's instance is
+        // of that type, its own or its materialised base.
+        return static_cast<const Detail::DataValue*>(record->data.get())->value;
     }
 
     std::span<const ShaderParameter> AssetStore::GetShaderParameters(AssetHandle<Shader> handle) const
@@ -1720,11 +1723,9 @@ namespace Fenrir
     {
         DataLoadResult result;
         const TypeDescription* type = m_state->types->Find(typeName);
-        if (type == nullptr || type->role != Role::DataAsset)
+        if (std::optional<std::string> problem = NotADataAssetType(type, typeName))
         {
-            std::string message = type == nullptr
-                                      ? std::format("the type registry has no `{}`: register its type first", typeName)
-                                      : std::format("`{}` is a type, but no data asset type", type->name);
+            std::string message = std::move(*problem);
             m_state->logger->Error("Could not load {} '{}' as {}: {} ({})", KindName(Detail::AssetKind::Data), path,
                                    typeName, ReasonText(LoadFailure::NotADataAsset), message);
             result.diagnostic = LoadDiagnostic{std::string(path), LoadFailure::NotADataAsset, std::move(message)};
@@ -1747,7 +1748,7 @@ namespace Fenrir
         const Serialisation::Value tree =
             Detail::ComposeDataTree(value, *m_state->types, Detail::WritingResolvers(*m_state), nullptr);
         return DataTree{Serialisation::EncodeTree(tree, Serialisation::Trivia::Drop), record->revision,
-                        value.type->name};
+                        std::string(value.type->name)};
     }
 
     std::uint32_t AssetStore::Revision(DataAssetHandle handle) const
@@ -1833,11 +1834,9 @@ namespace Fenrir
     {
         const std::string_view word = KindName(Detail::AssetKind::Data);
         const TypeDescription* type = m_state->types->Find(typeName);
-        if (type == nullptr || type->role != Role::DataAsset)
+        if (const std::optional<std::string> problem = NotADataAssetType(type, typeName))
         {
-            Refuse(word, "add",
-                   type == nullptr ? std::format("the type registry has no `{}`: register its type first", typeName)
-                                   : std::format("`{}` is a type, but no data asset type", type->name));
+            Refuse(word, "add", *problem);
             return {};
         }
         std::optional<Serialisation::Value> decoded = DecodeDataTree(tree, "add");

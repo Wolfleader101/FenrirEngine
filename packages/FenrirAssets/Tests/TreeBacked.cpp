@@ -297,14 +297,29 @@ TEST_CASE("Each by-name door round-trips a C++ type and a tree-backed type throu
         REQUIRE(std::filesystem::exists(root.Path() / copy));
     }
     REQUIRE(test.errors->empty());
+}
 
-    INFO("a stale handle and bytes that are no tree are refused, each with an error");
+TEST_CASE("The by-name doors refuse a stale handle and bytes that are no tree, each with an error",
+          "[assets][data][tree]")
+{
+    TreeApp test;
+    INFO("a stale handle has no tree, and is neither replaced nor saved");
     REQUIRE_FALSE(test.store.DataAssetTree({}).has_value());
     REQUIRE_FALSE(test.store.ReplaceDataAsset({}, Encoded(Ser::Value(Ser::Object{}))));
+    REQUIRE(CountContaining(*test.errors, "Could not replace a data asset: its handle is empty or stale") == 1);
+    REQUIRE(test.store.SaveDataAsset({}).status == Fenrir::SaveStatus::Failed);
+    REQUIRE(CountContaining(*test.errors, "the data asset handle is empty or stale") == 1);
+
+    INFO("bytes that are not the tree encoding add nothing");
     const std::array<std::byte, 2> junk{std::byte{1}, std::byte{2}};
     REQUIRE(test.store.AddDataAsset(DaggerName, junk, Fenrir::AssetOwner::App()).IsEmpty());
-    REQUIRE(test.store.SaveDataAsset({}).status == Fenrir::SaveStatus::Failed);
-    REQUIRE(test.errors->size() >= 4);
+    REQUIRE(CountContaining(*test.errors, "not a value tree in the tree encoding") == 1);
+
+    INFO("nor does a type the registry has as no data asset type");
+    REQUIRE(test.store
+                .AddDataAsset("AssetsTest::WeaponStats", Encoded(Ser::Value(Ser::Object{})), Fenrir::AssetOwner::App())
+                .IsEmpty());
+    REQUIRE(CountContaining(*test.errors, "`AssetsTest::WeaponStats` is a type, but no data asset type") == 1);
 }
 
 TEST_CASE("Loading by type name checks the file's type is the one named or extends it", "[assets][data][tree]")
@@ -392,4 +407,19 @@ TEST_CASE("A tree-backed type with no C++ base is read through its tree alone", 
     REQUIRE(test.store.TryGet(charm.As<WeaponData>()) == nullptr);
     REQUIRE(test.store.TryGet(charm.As<WeaponData>()) == nullptr);
     REQUIRE(CountContaining(*test.errors, "tree-backed with no C++ base") == 1);
+}
+
+TEST_CASE("Moving a file rewrites a tree-backed asset's references to it", "[assets][data][tree][move]")
+{
+    TempRoot root;
+    CopyDagger(root);
+    TreeApp test(Fenrir::AssetsConfig{root.Path()});
+    constexpr std::string_view BladePath = "data/blade.asset.json5";
+
+    const Fenrir::MoveResult moved = Fenrir::Assets::Move(root.Path(), SwordPath, BladePath, test.registry);
+    REQUIRE(moved.status == Fenrir::MoveStatus::Succeeded);
+    INFO("the dagger's own `companion` field, which only its description names, now names the sword's new path");
+    REQUIRE(moved.references == 1);
+    REQUIRE(ReadFile(root.Path() / DaggerPath).find("companion: \"data/blade.asset.json5\"") != std::string::npos);
+    REQUIRE(moved.unscanned.empty());
 }
