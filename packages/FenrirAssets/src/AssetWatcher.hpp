@@ -25,6 +25,8 @@ namespace Fenrir::Detail
     struct AssetStoreState;
     struct InstanceScope;
     struct SceneFileRecord;
+    /** @brief The instances a recorded scene expanded, by their roots' entity ids (AssetStoreState.hpp). */
+    using InstanceScopes = std::unordered_map<std::uint32_t, InstanceScope>;
 
     /** @brief What a file on disk looks like now (its modification time and size); none when it cannot be looked at. */
     [[nodiscard]] std::optional<ReloadWatcher::Stamp> StampOf(const std::filesystem::path& file);
@@ -125,8 +127,7 @@ namespace Fenrir::Detail
      * whose scene sources are watched too (ADR-0081 §4).
      */
     void RecordSceneFile(const std::shared_ptr<AssetStoreState>& state, Scene& scene, const std::string& fileKey,
-                         const std::string& assetPath, std::unordered_set<std::uint64_t> fileIds,
-                         std::unordered_map<std::uint32_t, InstanceScope> scopes,
+                         const std::string& assetPath, std::unordered_set<std::uint64_t> fileIds, InstanceScopes scopes,
                          std::optional<ReloadWatcher::Stamp> stamp);
 
     /**

@@ -38,41 +38,6 @@ namespace Fenrir
             return ReloadWatcher::Stamp{scope.stamp->first, scope.stamp->second};
         }
 
-        // Sets where the store records the instances expansions make, and puts the one before back after.
-        struct ScopeSink
-        {
-            Detail::InstanceScopes*& sink;
-            Detail::InstanceScopes* const before;
-
-            ScopeSink(Detail::InstanceScopes*& current, Detail::InstanceScopes& scopes) : sink(current), before(current)
-            {
-                sink = &scopes;
-            }
-            ScopeSink(const ScopeSink&) = delete;
-            ScopeSink& operator=(const ScopeSink&) = delete;
-            ~ScopeSink()
-            {
-                sink = before;
-            }
-        };
-
-        // Sets the store's source trees for one run, so each source is read once, and clears them after.
-        struct TreesRun
-        {
-            Detail::SourceTrees*& current;
-            Detail::SourceTrees trees;
-
-            explicit TreesRun(Detail::SourceTrees*& state) : current(state)
-            {
-                current = &trees;
-            }
-            TreesRun(const TreesRun&) = delete;
-            TreesRun& operator=(const TreesRun&) = delete;
-            ~TreesRun()
-            {
-                current = nullptr;
-            }
-        };
     } // namespace
 
     namespace Detail
@@ -176,9 +141,11 @@ namespace Fenrir
                 records.push_back(record);
             }
         }
+        // One run for the patch and the re-patch, so a file that fills scenes and is instanced in others too is read,
+        // and a failure to read it said, once.
+        const Detail::SourceTreesRun run(m_state->sourceTrees);
         if (!records.empty())
         {
-            const TreesRun run(m_state->sourceTrees);
             const std::string assetPath = records.front()->assetPath;
             // Read and checked once, so a file that is no scene changes nothing and is reported once for this change.
             if (const Ser::Value* tree = SceneSourceTree(assetPath, fileKey, "patch the scenes filled from"))
@@ -191,7 +158,7 @@ namespace Fenrir
                     Scene& scene = *record->scene;
                     const std::vector<std::string> before = Detail::SceneSourceKeys(*record);
                     {
-                        const ScopeSink sink(m_state->scopeSink, record->scopes);
+                        const Detail::PointedAt<Detail::InstanceScopes> sink(m_state->scopeSink, record->scopes);
                         (void)ReadSceneTree(
                             copy, assetPath, assetPath, fileKey, [&]() -> Scene& { return scene; }, {},
                             Detail::SceneRead::Patch, {}, &record->fileIds);
@@ -221,15 +188,15 @@ namespace Fenrir
         {
             return;
         }
-        const TreesRun run(m_state->sourceTrees);
+        const Detail::SourceTreesRun run(m_state->sourceTrees);
         for (Detail::SceneFileRecord* record : records)
         {
             Scene& scene = *record->scene;
             EntityList& entities = scene.GetEntityList();
-            // Each instance of the source, nested or not, is re-patched through the top-level instance holding it, so
-            // every diff over it, the host's and those of the files between, is reapplied in order. They are taken in
-            // the scene's order, so a run re-patches the same way each time.
-            std::unordered_set<std::uint32_t> holding;
+            // Each instance of the source, nested or not, with the instances holding it out to the top: the nearest
+            // the host writes is re-patched, so every diff over the source, the host's and those of the files between,
+            // is reapplied in order. They are taken in the scene's order, so a run re-patches the same way each time.
+            std::unordered_map<std::uint32_t, std::vector<Entity>> chainOf;
             for (const auto& [id, scope] : record->scopes)
             {
                 Entity entity = entities.GetEntity(id);
@@ -237,26 +204,29 @@ namespace Fenrir
                 {
                     continue;
                 }
-                Entity top = entity;
+                std::vector<Entity> chain{entity};
                 for (Entity above = entity.GetComponent<Relationship>().parent; above.IsValid();
                      above = above.GetComponent<Relationship>().parent)
                 {
                     if (above.HasComponent<Instance>())
                     {
-                        top = above;
+                        chain.push_back(above);
                     }
                 }
-                holding.insert(top.GetId());
+                chainOf.emplace(id, std::move(chain));
             }
-            std::vector<Entity> tops;
+            std::vector<std::vector<Entity>> chains;
             entities.ForEachEntity([&](auto handle) {
-                if (holding.contains(static_cast<std::uint32_t>(handle)))
+                if (const auto found = chainOf.find(static_cast<std::uint32_t>(handle)); found != chainOf.end())
                 {
-                    tops.push_back(entities.GetEntity(static_cast<std::uint32_t>(handle)));
+                    chains.push_back(std::move(found->second));
                 }
             });
-            if (tops.empty())
+            const std::vector<std::string> before = Detail::SceneSourceKeys(*record);
+            if (chains.empty())
             {
+                // Only scopes of instances since destroyed name the source: forgotten, with their watches.
+                Detail::SyncSceneWatches(*m_state, *record, before);
                 continue;
             }
             // The host file is read, never written: its blocks hold the diffs reapplied on top.
@@ -267,10 +237,9 @@ namespace Fenrir
                 continue;
             }
             Ser::Value copy = *host;
-            const std::vector<std::string> before = Detail::SceneSourceKeys(*record);
             {
-                const ScopeSink sink(m_state->scopeSink, record->scopes);
-                RepatchHostInstances(scene, copy, record->assetPath, record->fileKey, tops);
+                const Detail::PointedAt<Detail::InstanceScopes> sink(m_state->scopeSink, record->scopes);
+                RepatchHostInstances(scene, copy, record->assetPath, record->fileKey, chains);
             }
             Detail::SyncSceneWatches(*m_state, *record, before);
         }

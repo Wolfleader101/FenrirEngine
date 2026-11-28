@@ -134,44 +134,6 @@ namespace Fenrir
             return single;
         }
 
-        // Every entity below `top`, depth-first, parents before their children.
-        std::vector<Entity> Below(const Entity& top)
-        {
-            std::vector<Entity> below;
-            top.ForEachChild([&](const Entity& child) { below.push_back(child); });
-            for (std::size_t i = 0; i < below.size(); ++i)
-            {
-                below[i].ForEachChild([&](const Entity& child) { below.push_back(child); });
-            }
-            return below;
-        }
-
-        // Sets the store's source trees for one re-patch run, unless a run is going already, and puts them back after.
-        struct SourceTreesRun
-        {
-            Detail::SourceTrees*& current;
-            Detail::SourceTrees own;
-            bool owned = false;
-
-            explicit SourceTreesRun(Detail::SourceTrees*& trees) : current(trees)
-            {
-                if (current == nullptr)
-                {
-                    current = &own;
-                    owned = true;
-                }
-            }
-            SourceTreesRun(const SourceTreesRun&) = delete;
-            SourceTreesRun& operator=(const SourceTreesRun&) = delete;
-            ~SourceTreesRun()
-            {
-                if (owned)
-                {
-                    current = nullptr;
-                }
-            }
-        };
-
         // A block's id as its diagnostics name it: `?` when it has none that parses.
         std::string Spelled(const std::optional<EntityId>& id)
         {
@@ -952,8 +914,11 @@ namespace Fenrir
                         // read leaves it as it was.
                         Entity root = entities.GetEntity(entry.entity);
                         ++result.entities;
-                        if (repatch && repatch(root))
+                        if (repatch)
                         {
+                            // Over the source read again, or, when it does not read, over the instance as it was, so
+                            // an edit to the diff shows either way.
+                            (void)repatch(root);
                             ApplyDiff(*entry.block, *entry.at, root, Spelled(entry.id));
                         }
                         Detach(root);
@@ -1034,9 +999,14 @@ namespace Fenrir
         {
             return false;
         }
-        const SourceTreesRun run(m_state->sourceTrees);
+        const Detail::SourceTreesRun run(m_state->sourceTrees);
         // Unordered map elements stay put as nested expansions add theirs, so the scope can be held throughout.
         Detail::InstanceScope& scope = (*scopes)[root.GetId()];
+        if (!scope.source.empty() && scope.source != std::string_view(root.GetComponent<Instance>().source))
+        {
+            // A scope left by an instance since destroyed, whose entity's slot another instance now holds.
+            scope = {};
+        }
         if (scope.source.empty())
         {
             // An instance no read recorded, as one whose source did not load: its source from its Instance, and no
@@ -1060,7 +1030,7 @@ namespace Fenrir
             }
             Ser::Value copy = *tree;
             std::unordered_set<std::uint64_t> ids = scope.ids;
-            std::optional<std::uint64_t> rootId;
+            std::optional<std::uint64_t> rootId = scope.rootId;
             const SceneLoadResult read = ReadSceneTree(
                 copy, scope.source, scope.source, scope.sourceKey, [&]() -> Scene& { return scene; }, root,
                 Detail::SceneRead::Repatch, {}, &ids, &rootId);
@@ -1080,16 +1050,25 @@ namespace Fenrir
         {
             return false;
         }
+        const std::uint32_t revision =
+            m_state->Find(Detail::AssetKind::Model, {model.handle.index, model.handle.generation})->revision;
+        if (revision == scope.revision && !scope.ids.empty())
+        {
+            // The import is the one spawned, so the instance's entities stand, and keep their handles; only its diff,
+            // the caller's, is applied again.
+            return true;
+        }
+        // The model's entities are those in the root's own scope: an instance below one of them (another model
+        // attached at run time, whose ids are numbers too) is in its own, and stays, as a run-time child does.
         std::vector<Entity> old;
         std::unordered_set<std::uint32_t> oldSet;
-        for (const Entity& entity : Below(root))
-        {
+        Detail::ForEachInInstance(root, [&](const Entity& entity) {
             if (entity.HasComponent<EntityId>() && scope.ids.contains(entity.GetComponent<EntityId>().value) &&
                 oldSet.insert(entity.GetId()).second)
             {
                 old.push_back(entity);
             }
-        }
+        });
         const SpawnedNodes spawned = m_state->modelSpawner != nullptr
                                          ? m_state->modelSpawner->Spawn(scene, model.handle, root)
                                          : SpawnNodes(scene, model.handle, root);
@@ -1145,11 +1124,12 @@ namespace Fenrir
         }
         Detail::DestroySubtree(entities, fresh);
         scope.ids = std::move(madeIds);
+        scope.revision = revision;
         return true;
     }
 
     void AssetStore::RepatchHostInstances(Scene& scene, Ser::Value& tree, const std::string& assetPath,
-                                          const std::string& fileKey, const std::vector<Entity>& tops)
+                                          const std::string& fileKey, const std::vector<std::vector<Entity>>& chains)
     {
         Ser::Value* data = nullptr;
         if (Detail::CheckSceneEnvelope(tree, data))
@@ -1174,16 +1154,7 @@ namespace Fenrir
                            m_state->root,
                            m_state->scenesReading,
                            [&](std::string_view source) { return ExpandInstance(scene, source); }};
-        EntityList& entities = scene.GetEntityList();
-        entities.ForEachEntity([&](auto handle) {
-            const Entity entity = entities.GetEntity(static_cast<std::uint32_t>(handle));
-            if (entity.HasComponent<EntityId>() && !Detail::InsideInstance(entity))
-            {
-                filler.ids.emplace(entity.GetComponent<EntityId>().value, entity.GetId());
-            }
-        });
-
-        // The host's instance blocks by id, the first of each.
+        // The host's blocks by id, the first of each.
         std::unordered_map<std::uint64_t, Ser::Element*> blocks;
         if (Ser::Value* listed = data->AsObject().Find("entities");
             listed != nullptr && listed->Kind() == Ser::ValueKind::Array)
@@ -1204,26 +1175,54 @@ namespace Fenrir
                 }
             }
         }
-
-        for (const Entity& top : tops)
-        {
-            if (!Detail::LiveIn(entities, top) || !top.HasComponent<EntityId>() || !top.HasComponent<Instance>())
+        // Each host entity by its id: those at the top, and those the host added inside an instance, whose ids are
+        // its blocks'.
+        EntityList& entities = scene.GetEntityList();
+        entities.ForEachEntity([&](auto handle) {
+            const Entity entity = entities.GetEntity(static_cast<std::uint32_t>(handle));
+            if (entity.HasComponent<EntityId>() &&
+                (!Detail::InsideInstance(entity) || blocks.contains(entity.GetComponent<EntityId>().value)))
             {
-                continue;
+                filler.ids.emplace(entity.GetComponent<EntityId>().value, entity.GetId());
             }
-            const EntityId id = top.GetComponent<EntityId>();
-            const auto found = blocks.find(id.value);
-            // An instance the host file no longer has as one of this source is the host's patch's to change.
+        });
+        // The host block writing `entity` as an instance of its source, or null: a host's, not a source's.
+        const auto hostBlock = [&](const Entity& entity) -> Ser::Element* {
+            if (!Detail::LiveIn(entities, entity) || !entity.HasComponent<EntityId>() ||
+                !entity.HasComponent<Instance>())
+            {
+                return nullptr;
+            }
+            const auto found = blocks.find(entity.GetComponent<EntityId>().value);
             const Ser::Value* instance =
                 found != blocks.end() ? found->second->value.AsObject().Find("instance") : nullptr;
             if (instance == nullptr || instance->Kind() != Ser::ValueKind::String ||
-                instance->AsString() != std::string_view(top.GetComponent<Instance>().source))
+                instance->AsString() != std::string_view(entity.GetComponent<Instance>().source))
             {
-                continue;
+                return nullptr;
             }
-            if (RepatchInstance(scene, top))
+            return found->second;
+        };
+
+        // Each chain runs from an instance of the source out to the top-level instance holding it; the instance
+        // re-patched is the nearest the host writes, so one the host added inside another is re-patched itself. One
+        // the host no longer writes as an instance of this source is the host's patch's to change.
+        std::unordered_set<std::uint32_t> done;
+        for (const std::vector<Entity>& chain : chains)
+        {
+            for (const Entity& entity : chain)
             {
-                filler.ApplyDiff(found->second->value.AsObject(), found->second->value, top, SpellEntityId(id));
+                Ser::Element* block = hostBlock(entity);
+                if (block == nullptr)
+                {
+                    continue;
+                }
+                if (done.insert(entity.GetId()).second && RepatchInstance(scene, entity))
+                {
+                    filler.ApplyDiff(block->value.AsObject(), block->value, entity,
+                                     SpellEntityId(entity.GetComponent<EntityId>()));
+                }
+                break;
             }
         }
     }
@@ -1370,6 +1369,8 @@ namespace Fenrir
             }
             root = spawned.root;
             scope.model = true;
+            scope.revision =
+                m_state->Find(Detail::AssetKind::Model, {model.handle.index, model.handle.generation})->revision;
             result.load.scene = &scene;
             result.load.roots.push_back(root);
             result.load.entities = 1;
@@ -1501,10 +1502,14 @@ namespace Fenrir
             const Ser::Object* rootBlock = SingleRootBlock(*data);
             if (rootBlock != nullptr && rootBlock->Find("instance") != nullptr)
             {
-                m_state->logger->Warn(
-                    "Could not re-patch the instances of '{}': its root is an instance of another file "
-                    "(a variant), which only a load expands again; they are left as they were",
-                    named);
+                // Said once per run, however many instances the variant has.
+                if (m_state->sourceTrees == nullptr || m_state->sourceTrees->try_emplace("variant:" + fileKey).second)
+                {
+                    m_state->logger->Warn(
+                        "Could not re-patch the instances of '{}': its root is an instance of another file "
+                        "(a variant), which only a load expands again; they are left as they were",
+                        named);
+                }
                 result.status = LoadStatus::Failed;
                 return result;
             }
@@ -1518,6 +1523,20 @@ namespace Fenrir
                         singleRoot = parsed->value;
                     }
                 }
+            }
+            // A root that changed from the file's single root to a synthetic one, or back, holds the other's
+            // components, which a patch by id cannot undo.
+            const bool hadIds = fileIds != nullptr && !fileIds->empty();
+            if (hadIds && rootId != nullptr && rootId->has_value() != singleRoot.has_value())
+            {
+                if (m_state->sourceTrees == nullptr || m_state->sourceTrees->try_emplace("roots:" + fileKey).second)
+                {
+                    m_state->logger->Warn("Could not re-patch the instances of '{}': it changed between one root and "
+                                          "several, which only a load expands again; they are left as they were",
+                                          named);
+                }
+                result.status = LoadStatus::Failed;
+                return result;
             }
         }
 

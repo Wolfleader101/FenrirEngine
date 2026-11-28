@@ -59,9 +59,13 @@ namespace Fenrir::Detail
          * root holding one is the source's, and any other (a run-time child, or one a host added) is left alone.
          */
         std::unordered_set<std::uint64_t> ids;
-        /** @brief The id of the source file's single root block, whose entity is the instance's root; none for a
-         * synthetic root. */
+        /**
+         * @brief The id of the source file's single root block, whose entity is the instance's root; none for a
+         * synthetic root. A re-patch refuses a source whose root changed between the two, which only a load expands.
+         */
         std::optional<std::uint64_t> rootId;
+        /** @brief For a model, the revision of the import spawned: an unchanged one is not spawned again. */
+        std::uint32_t revision = 0;
         /**
          * @brief What a scene source looked like before it was read (its modification time and size), which its watch
          * starts from; none when it could not be looked at. Spelled apart from ReloadWatcher's stamp, since FenrirCore
@@ -78,6 +82,46 @@ namespace Fenrir::Detail
      * or none when it did not read as a scene, which was said once.
      */
     using SourceTrees = std::unordered_map<std::string, std::optional<Serialisation::Value>>;
+
+    /**
+     * @brief Points `current` at `value` while it lives, and puts back what it pointed at before: the store's scope
+     * sink, or its source trees, for one read or one run.
+     */
+    template <typename T>
+    struct PointedAt
+    {
+        T*& current;
+        T* const before;
+
+        PointedAt(T*& pointer, T& value) : current(pointer), before(pointer)
+        {
+            current = &value;
+        }
+        PointedAt(const PointedAt&) = delete;
+        PointedAt& operator=(const PointedAt&) = delete;
+        ~PointedAt()
+        {
+            current = before;
+        }
+    };
+
+    /**
+     * @brief The source trees of one patch run: its own, unless a run is going already, whose trees it shares, so a
+     * source read in either is read, and its failure said, once.
+     */
+    struct SourceTreesRun
+    {
+        SourceTrees own;
+        std::optional<PointedAt<SourceTrees>> pointed;
+
+        explicit SourceTreesRun(SourceTrees*& current)
+        {
+            if (current == nullptr)
+            {
+                pointed.emplace(current, own);
+            }
+        }
+    };
 
     /**
      * @brief A data asset's instance (ADR-0075): of its file's type, which may extend the type it was loaded as, so it

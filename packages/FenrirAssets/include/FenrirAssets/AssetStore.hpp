@@ -1343,12 +1343,12 @@ namespace Fenrir
          */
         bool RepatchInstance(Scene& scene, Entity root);
         /**
-         * @brief Re-patches each instance of `tops`, top-level instances of `scene`, that the host file's `tree` (its
-         * asset path `assetPath`, its key `fileKey`) still writes as a block of the same source, then reapplies that
-         * block's diff on top.
+         * @brief For each of `chains`, an instance of a changed source in `scene` and the instances holding it out to
+         * the top, re-patches the nearest the host file's `tree` (its asset path `assetPath`, its key `fileKey`) still
+         * writes as a block of the same source, then reapplies that block's diff on top.
          */
         void RepatchHostInstances(Scene& scene, Serialisation::Value& tree, const std::string& assetPath,
-                                  const std::string& fileKey, const std::vector<Entity>& tops);
+                                  const std::string& fileKey, const std::vector<std::vector<Entity>>& chains);
         /**
          * @brief The tree of the scene file `assetPath` (its key `fileKey`) for this patch run, read and checked once,
          * or null when it does not read as a scene, said once, prefixed `what`.
