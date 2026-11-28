@@ -28,9 +28,9 @@
 
 **Touches:** `packages/FenrirScripting/Managed/` (`Fenrir.Scripting/` attributes and `ScriptComponents.cs`, `Fenrir.Scripting.Generators/ComponentFieldsGenerator.cs`), `packages/FenrirScripting/src/` (`ScriptComponents.hpp`, `ScriptData.*`), `packages/FenrirScripting/Tests/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A fixture component with an `Entity`, an `AssetHandle<T>`, a `[FixedString]` buffer and a `[Transient]` field reports all four, with the right kinds and offsets.
-- [ ] After admission, `ComponentType::ForName` finds it, and FenrirAssets' scene writer saves it by canonical name with its transient field left out.
-- [ ] `Forget` unregisters it, and a reload registers it again.
-- [ ] A `string` field in a component is still refused at compile time.
+- [x] A fixture component with an `Entity`, an `AssetHandle<T>`, a `[FixedString]` buffer and a `[Transient]` field reports all four, with the right kinds and offsets.
+- [x] After admission, `ComponentType::ForName` finds it, and FenrirAssets' scene writer saves it by canonical name with its transient field left out.
+- [x] `Forget` unregisters it, and a reload registers it again.
+- [x] A `string` field in a component is still refused at compile time.
