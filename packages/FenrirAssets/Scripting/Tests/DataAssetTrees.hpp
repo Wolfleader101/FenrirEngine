@@ -34,6 +34,7 @@ namespace Fenrir::Testing
         static const TypeRegistry registry = [] {
             TypeRegistry types;
             const bool registered = Generated::RegisterDataAssetsTestPackageTypes(types);
+            INFO("The data asset test package's types did not register");
             REQUIRE(registered);
             return types;
         }();
@@ -46,8 +47,10 @@ namespace Fenrir::Testing
         if (!array.has_value())
             return std::nullopt;
         const auto length = array->Length();
+        INFO("The managed byte[]'s length could not be read: " << length.diagnostic);
         REQUIRE(length.Succeeded());
         std::vector<std::uint8_t> bytes(*length.value);
+        INFO("The managed byte[]'s bytes could not be copied out");
         REQUIRE(array->CopyOut(0, std::span<std::uint8_t>(bytes)).Succeeded());
         std::vector<std::byte> result(bytes.size());
         for (std::size_t i = 0; i < bytes.size(); ++i)
@@ -101,6 +104,7 @@ namespace Fenrir::Testing
         if (!type.base.empty())
         {
             const TypeDescription* base = DataAssetTestTypes().Find(type.base);
+            INFO("The base " << type.base << " of " << type.name << " is not registered");
             REQUIRE(base != nullptr);
             count += WrittenFields(*base);
         }
@@ -125,18 +129,27 @@ namespace Fenrir::Testing
         const std::vector<std::byte> native = TreeBytes(T{});
 
         const auto written = CallForBytes(component, defaultsClass, method, false);
-        REQUIRE(written.has_value());
+        {
+            INFO("C#'s tree of " << type.name << ", defaults left out, is null");
+            REQUIRE(written.has_value());
+        }
         {
             INFO("C#'s codec, leaving out the fields at their defaults, should write C++'s " << type.name << "{} tree");
             REQUIRE(*written == native);
         }
 
         const auto whole = CallForBytes(component, defaultsClass, method, true);
-        REQUIRE(whole.has_value());
+        {
+            INFO("C#'s whole tree of " << type.name << " is null");
+            REQUIRE(whole.has_value());
+        }
         RecordingLogger logger;
         const Serialisation::ReadTreeResult decoded = Serialisation::DecodeTree(*whole, "C#'s new T()", logger);
-        REQUIRE(decoded.tree.has_value());
-        REQUIRE(decoded.tree->Kind() == Serialisation::ValueKind::Object);
+        {
+            INFO("C#'s whole tree of " << type.name << " is not one object in the tree encoding");
+            REQUIRE(decoded.tree.has_value());
+            REQUIRE(decoded.tree->Kind() == Serialisation::ValueKind::Object);
+        }
         {
             INFO("C#'s whole tree of " << type.name << " should hold every field C++ writes, and no other");
             REQUIRE(decoded.tree->AsObject().members.size() == WrittenFields(type));

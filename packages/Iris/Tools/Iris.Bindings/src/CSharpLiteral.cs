@@ -53,8 +53,14 @@ internal static class CSharpLiteral
             throw new BindingException($"{where}: a text's default is a string, not {value}");
         }
 
+        return Text(value.GetString()!);
+    }
+
+    /// <summary>Text as a C# string literal: printable ASCII as it is, the rest escaped.</summary>
+    public static string Text(string value)
+    {
         var text = new System.Text.StringBuilder("\"");
-        foreach (var c in value.GetString()!)
+        foreach (var c in value)
         {
             text.Append(c switch
             {

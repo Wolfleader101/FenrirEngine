@@ -246,9 +246,11 @@ internal static class DataAssetWriter
         ListShape => field.Default is { ValueKind: JsonValueKind.Array } list && list.GetArrayLength() == 0
                          ? "new()"
                          : throw new BindingException($"{where}: a list's default is []"),
-        OptionalShape or ReferenceShape => field.Default.ValueKind is JsonValueKind.Null or JsonValueKind.Object
-                                               ? null
-                                               : throw new BindingException($"{where}: an optional's default is null"),
+        OptionalShape => field.Default.ValueKind == JsonValueKind.Null
+                             ? null
+                             : throw new BindingException($"{where}: an optional's default is null, its only recorded default"),
+        // A reference's null default is read as its handle struct's own defaults ({}): the empty handle.
+        ReferenceShape => null,
         _ => binding.IsZeroDefault(field) && shape is not StructShape
                  ? null
                  : CSharpWriter.Default(binding, field.Kind.Kind, field.Kind.Type, field.Default, where),
@@ -413,7 +415,7 @@ internal static class DataAssetWriter
         var name = binding.CSharpName(type);
         var mangled = Mangle(type.Name);
         var shapes = type.Fields.Select(field => (Field: field, Shape: FieldShape(binding, type, field))).ToList();
-        text.Line($"/// <summary>{Escape(type.Name)}'s entry in a data asset's description: its name and fields.</summary>");
+        text.Line($"/// <summary>{CSharpWriter.Escape(type.Name)}'s entry in a data asset's description: its name and fields.</summary>");
         text.Line($"internal static TreeNode {mangled}Entry()");
         text.Line("{");
         text.Indent();
@@ -427,7 +429,7 @@ internal static class DataAssetWriter
         text.Outdent();
         text.Line("}");
         text.Line();
-        text.Line($"/// <summary>The tree of a {Escape(type.Name)}: its fields that differ from the defaults, or every one when full.</summary>");
+        text.Line($"/// <summary>The tree of a {CSharpWriter.Escape(type.Name)}: its fields that differ from the defaults, or every one when full.</summary>");
         text.Line($"internal static TreeNode {mangled}ToTree({name} value, {name} defaults, bool full)");
         text.Line("{");
         text.Indent();
@@ -441,7 +443,7 @@ internal static class DataAssetWriter
         text.Outdent();
         text.Line("}");
         text.Line();
-        text.Line($"/// <summary>The {Escape(type.Name)} a tree holds, what it lacks or cannot be read kept from the fallback.</summary>");
+        text.Line($"/// <summary>The {CSharpWriter.Escape(type.Name)} a tree holds, what it lacks or cannot be read kept from the fallback.</summary>");
         text.Line($"internal static {name} {mangled}FromTree(TreeNode tree, {name} fallback)");
         text.Line("{");
         text.Indent();
@@ -462,8 +464,6 @@ internal static class DataAssetWriter
     // two names share one.
     private static string Mangle(string name) =>
         string.Concat(name.Replace("_", "__").Replace("::", "_").Select(c => char.IsAsciiLetterOrDigit(c) || c == '_' ? c : '_'));
-
-    private static string Escape(string text) => text.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
 
     // ---- The entry ----
 
@@ -501,7 +501,7 @@ internal static class DataAssetWriter
         text.Indent();
         text.Line($".Add(\"name\", TreeNode.From(\"{type.Name}\"))");
         text.Line($".Add(\"version\", TreeNode.From({type.Version}L))");
-        text.Line($".Add(\"formerly\", TreeCodec.Strings({string.Join(", ", type.Formerly.Select(former => $"\"{former}\""))}))");
+        text.Line($".Add(\"formerly\", TreeCodec.Strings({string.Join(", ", type.Formerly.Select(CSharpLiteral.Text))}))");
         text.Line($".Add(\"base\", {(type.Base == null ? "TreeNode.Null" : $"TreeNode.From(\"{type.Base}\")")})");
         text.Line($".Add(\"transient\", TreeNode.From({(type.Transient ? "true" : "false")}))");
         text.Line($".Add(\"editorOnly\", TreeNode.From({(type.EditorOnly ? "true" : "false")}))");
@@ -554,7 +554,7 @@ internal static class DataAssetWriter
         text.Line($"var field = TreeNode.NewObject().Add(\"name\", TreeNode.From(\"{field.Name}\")).Add(\"type\", {TypeEntry(shape)});");
         if (field.Formerly.Count > 0)
         {
-            text.Line($"field.Add(\"formerly\", TreeCodec.Strings({string.Join(", ", field.Formerly.Select(former => $"\"{former}\""))}));");
+            text.Line($"field.Add(\"formerly\", TreeCodec.Strings({string.Join(", ", field.Formerly.Select(CSharpLiteral.Text))}));");
         }
 
         if (field.Metadata is { } metadata)
@@ -577,7 +577,11 @@ internal static class DataAssetWriter
         text.Line("}");
     }
 
-    private static string Number(JsonElement value) => value.GetDouble().ToString("R", CultureInfo.InvariantCulture) + "d";
+    // A metadata number as a double literal; describe-api records only finite numbers there.
+    private static string Number(JsonElement value) =>
+        value.ValueKind == JsonValueKind.Number && double.IsFinite(value.GetDouble())
+            ? value.GetDouble().ToString("R", CultureInfo.InvariantCulture) + "d"
+            : throw new BindingException($"a metadata number is a finite JSON number, not {value}");
 
     private static string TypeEntry(DataShape shape) => shape switch
     {
@@ -659,7 +663,7 @@ internal static class DataAssetWriter
     private static void ReadField(Binding binding, Writer text, Field field, string member, DataShape shape)
     {
         var value = $"value.{member}";
-        var formerly = string.Concat(field.Formerly.Select(name => $", \"{name}\""));
+        var formerly = string.Concat(field.Formerly.Select(name => ", " + CSharpLiteral.Text(name)));
         text.Line("{");
         text.Indent();
         text.Line($"if (TreeCodec.Find(tree, \"{field.Name}\"{formerly}) is {{ }} node)");

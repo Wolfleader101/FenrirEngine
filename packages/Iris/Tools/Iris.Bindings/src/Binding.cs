@@ -58,7 +58,7 @@ internal sealed class Binding
     /// The types that get a mirror with a layout here: every mirrored type but the data assets and the nested structs
     /// only they reach, which C# holds by member (<see cref="DescribedType.ByMember" />).
     /// </summary>
-    public IEnumerable<DescribedType> Laid => Mirrored.Where(type => !type.ByMember);
+    public IEnumerable<DescribedType> LaidOut => Mirrored.Where(type => !type.ByMember);
 
     /// <summary>The data assets this binding generates a class for, bases first as the descriptions order them.</summary>
     public IEnumerable<DescribedType> DataAssets => Mirrored.Where(type => type.Role == Role.DataAsset);

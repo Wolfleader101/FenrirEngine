@@ -20,12 +20,12 @@ internal static class CSharpWriter
     public static IEnumerable<KeyValuePair<string, string>> Mirrors(Binding binding, NativesDescription? natives,
                                                                     IReadOnlyList<BoundNative> bound)
     {
-        foreach (var type in binding.Laid)
+        foreach (var type in binding.LaidOut)
         {
             CheckDefaults(binding, type);
         }
 
-        return binding.Laid.Select(type => KeyValuePair.Create(
+        return binding.LaidOut.Select(type => KeyValuePair.Create(
             binding.CSharpName(type) + ".cs",
             Mirror(binding, type, natives, bound.Where(native => native.FacadeMirror == type).ToList())));
     }
@@ -755,7 +755,7 @@ internal static class CSharpWriter
     }
 
     // Only what XML text needs: quotes and apostrophes stay as written.
-    private static string Escape(string text) => text.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+    internal static string Escape(string text) => text.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
 
     private static void Wrap(Writer text, string paragraph, int width)
     {
