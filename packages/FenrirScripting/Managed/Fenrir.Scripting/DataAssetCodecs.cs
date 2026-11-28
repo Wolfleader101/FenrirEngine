@@ -168,10 +168,13 @@ public sealed class ValueCodec<T> where T : struct
         m_fromTree = fromTree;
     }
 
+    /// <summary>The C++ type's canonical name, which a description entry names the struct by.</summary>
     public string Name { get; }
 
+    /// <summary>The tree of <paramref name="value"/>: its fields that differ from <paramref name="defaults"/>, or every one when <paramref name="full"/>.</summary>
     public TreeNode ToTree(T value, T defaults, bool full) => m_toTree(value, defaults, full);
 
+    /// <summary>The value <paramref name="node"/> holds, what it lacks or cannot be read kept from <paramref name="fallback"/>.</summary>
     public T FromTree(TreeNode node, T fallback) => m_fromTree(node, fallback);
 }
 
@@ -317,9 +320,11 @@ public static class TreeCodec
         return null;
     }
 
+    /// <summary>An integer from <paramref name="min"/> to <paramref name="max"/>, of either sign; the fallback otherwise.</summary>
     public static long ReadSigned(TreeNode node, long min, long max, long fallback) =>
         node.TryGetInt64(out long value) && value >= min && value <= max ? value : fallback;
 
+    /// <summary>An integer from 0 to <paramref name="max"/>, of either sign; the fallback otherwise.</summary>
     public static ulong ReadUnsigned(TreeNode node, ulong max, ulong fallback) =>
         node.TryGetUInt64(out ulong value) && value <= max ? value : fallback;
 
@@ -335,16 +340,27 @@ public static class TreeCodec
         return (float)value;
     }
 
+    /// <summary>Any number; the fallback otherwise.</summary>
     public static double ReadDouble(TreeNode node, double fallback) => node.TryGetDouble(out double value) ? value : fallback;
 
+    /// <summary>A bool; the fallback otherwise.</summary>
     public static bool ReadBool(TreeNode node, bool fallback) => node.Kind == TreeKind.Bool ? node.AsBool : fallback;
 
+    /// <summary>A string; the fallback otherwise.</summary>
     public static string ReadString(TreeNode node, string fallback) => node.Kind == TreeKind.String ? node.AsString : fallback;
 
-    /// <summary>An enum is written as its number, in its underlying type's sign; read from that number, or an enumerator's name.</summary>
-    public static TreeNode WriteEnum<TEnum>(TEnum value) where TEnum : struct, Enum =>
-        IsUnsigned<TEnum>() ? TreeNode.From(Convert.ToUInt64(value)) : TreeNode.From(Convert.ToInt64(value));
+    /// <summary>
+    /// An enum as its enumerator's name, as C++ writes one; as its number, in its underlying type's sign, when no
+    /// enumerator has it.
+    /// </summary>
+    public static TreeNode WriteEnum<TEnum>(TEnum value) where TEnum : struct, Enum
+    {
+        if (Enum.GetName(value) is { } name)
+            return TreeNode.From(name);
+        return IsUnsigned<TEnum>() ? TreeNode.From(Convert.ToUInt64(value)) : TreeNode.From(Convert.ToInt64(value));
+    }
 
+    /// <summary>An enumerator's name, or a number the underlying type holds, as C++ reads one; the fallback otherwise.</summary>
     public static TEnum ReadEnum<TEnum>(TreeNode node, TEnum fallback) where TEnum : struct, Enum
     {
         if (node.Kind == TreeKind.String)

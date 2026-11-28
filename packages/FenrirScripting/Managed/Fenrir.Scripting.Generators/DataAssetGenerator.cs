@@ -8,6 +8,7 @@ using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using static Fenrir.Scripting.Generators.GeneratorSymbols;
 
 namespace Fenrir.Scripting.Generators;
 
@@ -93,9 +94,6 @@ public sealed class DataAssetGenerator : IIncrementalGenerator
         "FENRIR0039", "A data asset is made with new T()",
         "Data asset '{0}' must be a non-abstract class with a public or internal parameterless constructor: its default and every value read are a new instance",
         "Fenrir.Scripting", DiagnosticSeverity.Error, isEnabledByDefault: true);
-
-    // The rule FENRIR0006 states for components too: [FixedString] marks only a byte buffer, which no data asset holds.
-    private static DiagnosticDescriptor FixedStringNotBytes => SharedDiagnostics.FixedStringNotBytes;
 
     // FenrirMath's bound types (glm's, ADR-0043): written as an array of their components in the order each lists them,
     // as the engine writes them, so a data asset holds them as C++ does.
@@ -218,7 +216,7 @@ public sealed class DataAssetGenerator : IIncrementalGenerator
             {
                 LocationInfo at = declaration.BaseList is { Types.Count: > 0 } list ? LocationInfo.From(list.Types[0].GetLocation()) : location;
                 diagnostics.Add(new DiagnosticInfo(RefusedBase, at, new[] { symbol.Name, baseType.ToDisplayString() }));
-                return new Model(key, "", null, ImmutableArray<GeneratedSource>.Empty, 0, diagnostics.ToImmutableArray());
+                return Refused(key, diagnostics);
             }
             baseName = NativeName(baseType) ?? CanonicalName(baseType);
             baseCode = baseType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
@@ -264,7 +262,7 @@ public sealed class DataAssetGenerator : IIncrementalGenerator
         }
 
         if (diagnostics.Count > 0)
-            return new Model(key, "", null, ImmutableArray<GeneratedSource>.Empty, 0, diagnostics.ToImmutableArray());
+            return Refused(key, diagnostics);
 
         int version = 1;
         if (symbol.GetAttributes().FirstOrDefault(static a => a.AttributeClass?.ToDisplayString() == VersionAttribute) is { } versionAttribute &&
@@ -284,15 +282,20 @@ public sealed class DataAssetGenerator : IIncrementalGenerator
     // ---- What a data asset holds ----
 
     // A described member: a field or an auto-property, with its attributes read.
-    private sealed record Member(string Name, ITypeSymbol Type, LocationInfo Location, bool Path, bool Transient, bool FixedString,
+    private sealed record Member(string Name, ITypeSymbol Type, LocationInfo Location, bool Path, bool FixedString,
         string[] Formerly, string? Metadata, bool FixedBuffer, Shape? Shape = null);
 
-    // The public instance fields that are not readonly, and the public read-write auto-properties, in declaration order.
+    // The public instance fields that are not readonly, and the public read-write auto-properties, in declaration order,
+    // but those marked [Transient].
     private static IEnumerable<Member> Members(INamedTypeSymbol type)
     {
         foreach (ISymbol symbol in type.GetMembers())
         {
             if (symbol.IsStatic || symbol.IsImplicitlyDeclared || symbol.DeclaredAccessibility != Accessibility.Public)
+                continue;
+            // A [Transient] field of a data asset is code wiring no file holds: it is left out of the description
+            // altogether (ADR-0084), so it is neither checked nor written.
+            if (HasAttribute(symbol, TransientAttribute))
                 continue;
             ITypeSymbol memberType;
             bool fixedBuffer = false;
@@ -315,10 +318,8 @@ public sealed class DataAssetGenerator : IIncrementalGenerator
                 continue;
             }
             LocationInfo location = LocationInfo.From(symbol.Locations[0]);
-            string[] formerly = symbol.GetAttributes().Where(static a => a.AttributeClass?.ToDisplayString() == FormerlyAttribute)
-                                      .Select(static a => a.ConstructorArguments.Length == 1 ? a.ConstructorArguments[0].Value as string : null)
-                                      .Where(static name => name != null).Select(static name => name!).ToArray();
-            yield return new Member(symbol.Name, memberType, location, HasAttribute(symbol, PathAttribute), HasAttribute(symbol, TransientAttribute),
+            string[] formerly = FormerNames(symbol);
+            yield return new Member(symbol.Name, memberType, location, HasAttribute(symbol, PathAttribute),
                 HasAttribute(symbol, FixedStringAttribute), formerly, MetadataCode(symbol), fixedBuffer);
         }
     }
@@ -331,7 +332,8 @@ public sealed class DataAssetGenerator : IIncrementalGenerator
     // A number or bool, as `Kind` (i32, u8, f32, bool, char16...) with its C# type.
     private sealed record PlainShape(string Kind, string Type) : Shape;
     private sealed record TextShape(bool Path) : Shape;
-    private sealed record EnumShape(string Kind, string Type) : Shape;
+    // An enum: its underlying kind, its C# type and its canonical name.
+    private sealed record EnumShape(string Kind, string Type, string Name) : Shape;
     private sealed record ListShape(Shape Element, string ElementType) : Shape;
     private sealed record OptionalShape(Shape Held, string HeldType) : Shape;
     private sealed record ReferenceShape(string Target, string Type) : Shape;
@@ -357,15 +359,18 @@ public sealed class DataAssetGenerator : IIncrementalGenerator
 
         public List<GeneratedSource> Structs { get; } = new();
 
-        // The structs the type's fields hold, each once, as the class names of their codecs.
-        public IEnumerable<string> StructClasses => Structs.Select(static s => s.ClassName);
+        // The entry of each enum the type's fields hold, once each, as code.
+        public List<string> Enums { get; } = new();
+
+        private readonly HashSet<string> m_enums = new(StringComparer.Ordinal);
+
 
         // The member's shape, or null with a diagnostic at `outer` (the data asset's own member) when it is refused.
         public Shape? Classify(Member member, string path, LocationInfo? outer = null)
         {
             LocationInfo at = outer ?? member.Location;
             if (member.FixedString && !(member.FixedBuffer || IsInlineArray(member.Type)))
-                return Fail(FixedStringNotBytes, at, path, m_owner);
+                return Fail(SharedDiagnostics.FixedStringNotBytes, at, path, m_owner);
             if (member.FixedBuffer || IsInlineArray(member.Type))
                 return Refuse(at, path, "a fixed-size buffer");
             Shape? shape = Classify(member.Type, path, at);
@@ -391,8 +396,13 @@ public sealed class DataAssetGenerator : IIncrementalGenerator
             }
             if (type.ToDisplayString() == "Fenrir.Scripting.Entity")
                 return Fail(EntityField, at, path, m_owner);
-            if (type is INamedTypeSymbol { TypeKind: TypeKind.Enum, EnumUnderlyingType: { } underlying })
-                return new EnumShape(PlainKind(underlying)!, code);
+            if (type is INamedTypeSymbol { TypeKind: TypeKind.Enum, EnumUnderlyingType: { } underlying } enumType)
+            {
+                var shape = new EnumShape(PlainKind(underlying)!, code, CanonicalName(enumType));
+                if (m_enums.Add(shape.Name))
+                    Enums.Add(EnumEntry(enumType, shape));
+                return shape;
+            }
             if (PlainKind(type) is { } plain)
                 return new PlainShape(plain, code);
             if (type.SpecialType == SpecialType.System_String)
@@ -504,6 +514,25 @@ public sealed class DataAssetGenerator : IIncrementalGenerator
 
     // ---- The code written ----
 
+    // An enum's entry, as code: its canonical name, its underlying kind and its enumerators in declaration order.
+    private static string EnumEntry(INamedTypeSymbol type, EnumShape shape)
+    {
+        bool unsigned = shape.Kind.StartsWith("u", StringComparison.Ordinal);
+        var enumerators = new StringBuilder(Node + ".NewArray()");
+        foreach (IFieldSymbol member in type.GetMembers().OfType<IFieldSymbol>())
+        {
+            if (!member.HasConstantValue || member.ConstantValue is null)
+                continue;
+            string number = unsigned
+                ? Convert.ToUInt64(member.ConstantValue, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture) + "UL"
+                : Convert.ToInt64(member.ConstantValue, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture) + "L";
+            enumerators.Append(".Add(").Append(Node).Append(".NewObject().Add(\"name\", ").Append(Node).Append(".From(").Append(Literal(member.Name))
+                       .Append(")).Add(\"value\", ").Append(Node).Append(".From(").Append(number).Append(")))");
+        }
+        return Node + ".NewObject().Add(\"name\", " + Node + ".From(" + Literal(shape.Name) + ")).Add(\"kind\", " + Node + ".From(" +
+               Literal(shape.Kind) + ")).Add(\"enumerators\", " + enumerators + ")";
+    }
+
     private static string ClassCodec(INamedTypeSymbol symbol, string className, string typeCode, string name, int version, string? baseName,
         string? baseCode, List<Member> fields, List<(int Version, string Method)> upgraders, Walk walk)
     {
@@ -536,14 +565,15 @@ public sealed class DataAssetGenerator : IIncrementalGenerator
         foreach (Member field in fields)
             source.Append(FieldEntry(field, "            "));
         source.Append("            var structs = ").Append(Node).Append(".NewArray();\n");
-        foreach (string structClass in walk.StructClasses)
+        foreach (string structClass in walk.Structs.Select(static s => s.ClassName))
             source.Append("            structs.Add(").Append(structClass).Append(".Entry());\n");
+        source.Append("            var enums = ").Append(Node).Append(".NewArray();\n");
+        foreach (string enumEntry in walk.Enums)
+            source.Append("            enums.Add(").Append(enumEntry).Append(");\n");
         source.Append("            var upgraders = ").Append(Node).Append(".NewArray();\n");
         foreach ((int from, _) in upgraders.OrderBy(static u => u.Version))
             source.Append("            upgraders.Add(").Append(Node).Append(".From(").Append(from.ToString(CultureInfo.InvariantCulture)).Append("L));\n");
-        string[] formerly = symbol.GetAttributes().Where(static a => a.AttributeClass?.ToDisplayString() == FormerlyAttribute)
-                                  .Select(static a => a.ConstructorArguments.Length == 1 ? a.ConstructorArguments[0].Value as string : null)
-                                  .Where(static n => n != null).Select(static n => n!).ToArray();
+        string[] formerly = FormerNames(symbol);
         source.Append("            return ").Append(Node).Append(".NewObject()\n");
         source.Append("                .Add(\"name\", ").Append(Node).Append(".From(").Append(Literal(name)).Append("))\n");
         source.Append("                .Add(\"version\", ").Append(Node).Append(".From(").Append(version.ToString(CultureInfo.InvariantCulture)).Append("L))\n");
@@ -553,6 +583,7 @@ public sealed class DataAssetGenerator : IIncrementalGenerator
         source.Append("                .Add(\"editorOnly\", ").Append(Node).Append(".From(").Append(HasAttribute(symbol, EditorOnlyAttribute) ? "true" : "false").Append("))\n");
         source.Append("                .Add(\"fields\", fields)\n");
         source.Append("                .Add(\"structs\", structs)\n");
+        source.Append("                .Add(\"enums\", enums)\n");
         source.Append("                .Add(\"upgraders\", upgraders)\n");
         source.Append("                .Add(\"default\", Codec.ToTree(new ").Append(typeCode).Append("(), null));\n");
         source.Append("        }\n\n");
@@ -606,8 +637,6 @@ public sealed class DataAssetGenerator : IIncrementalGenerator
     // tree is a local function, written once.
     private static string WriteField(Member field, string defaults, string indent)
     {
-        if (field.Transient)
-            return "";
         string key = Literal(field.Name);
         string value = "value." + Identifier(field.Name);
         string fallback = defaults + "." + Identifier(field.Name);
@@ -627,7 +656,7 @@ public sealed class DataAssetGenerator : IIncrementalGenerator
             code.Append(inner).Append("        tree.Add(").Append(key).Append(", Write(held, ").Append(fresh).Append(", true));\n");
             code.Append(inner).Append("    else if (").Append(fallback).Append(" is not { } heldDefault)\n");
             code.Append(inner).Append("        tree.Add(").Append(key).Append(", Write(held, ").Append(fresh).Append(", false));\n");
-            code.Append(inner).Append("    else if (!Write(held, ").Append(fresh).Append(", true).SameAs(Write(heldDefault, ").Append(fresh).Append(", true)))\n");
+            code.Append(inner).Append("    else if (!").Append(Same(shape, "held", "heldDefault", fresh)).Append(")\n");
             code.Append(inner).Append("        tree.Add(").Append(key).Append(", Write(held, heldDefault, false));\n");
             code.Append(inner).Append("}\n");
             code.Append(inner).Append("else if (full || ").Append(fallback).Append(" is not null)\n");
@@ -639,12 +668,18 @@ public sealed class DataAssetGenerator : IIncrementalGenerator
         {
             code.Append(inner).Append("if (full)\n");
             code.Append(inner).Append("    tree.Add(").Append(key).Append(", Write(").Append(value).Append(", ").Append(fresh).Append(", true));\n");
-            code.Append(inner).Append("else if (!Write(").Append(value).Append(", ").Append(fresh).Append(", true).SameAs(Write(").Append(fallback).Append(", ").Append(fresh).Append(", true)))\n");
+            code.Append(inner).Append("else if (!").Append(Same(shape, value, fallback, fresh)).Append(")\n");
             code.Append(inner).Append("    tree.Add(").Append(key).Append(", Write(").Append(value).Append(", ").Append(fallback).Append(", false));\n");
         }
         code.Append(indent).Append("}\n");
         return code.ToString();
     }
+
+    // Whether two values of a shape are the same, as the bridge compares them: a reference by its handle, anything else
+    // by its whole tree, a float by its bits.
+    private static string Same(Shape shape, string a, string b, string fresh) => shape is ReferenceShape
+        ? "((" + a + ").Index == (" + b + ").Index && (" + a + ").Generation == (" + b + ").Generation)"
+        : "Write(" + a + ", " + fresh + ", true).SameAs(Write(" + b + ", " + fresh + ", true))";
 
     // The C# type a shape's values have.
     private static string TypeOf(Shape shape) => shape switch
@@ -663,8 +698,6 @@ public sealed class DataAssetGenerator : IIncrementalGenerator
 
     private static string ReadField(Member field, string indent)
     {
-        if (field.Transient)
-            return "";
         string value = "value." + Identifier(field.Name);
         string formerly = string.Concat(field.Formerly.Select(static name => ", " + Literal(name)));
         return indent + "{\n" +
@@ -825,8 +858,6 @@ public sealed class DataAssetGenerator : IIncrementalGenerator
             .Append(")).Add(\"type\", ").Append(TypeEntry(field.Shape!)).Append(");\n");
         if (field.Formerly.Length > 0)
             code.Append(indent).Append("    field.Add(\"formerly\", ").Append(Codec).Append(".Strings(").Append(string.Join(", ", field.Formerly.Select(Literal))).Append("));\n");
-        if (field.Transient)
-            code.Append(indent).Append("    field.Add(\"transient\", ").Append(Node).Append(".From(true));\n");
         if (field.Metadata != null)
             code.Append(field.Metadata.Replace("$indent", indent + "    "));
         code.Append(indent).Append("    fields.Add(field);\n");
@@ -837,7 +868,7 @@ public sealed class DataAssetGenerator : IIncrementalGenerator
     private static string TypeEntry(Shape shape) => shape switch
     {
         PlainShape plain => Codec + ".Type(" + Literal(plain.Kind) + ")",
-        EnumShape enumShape => Codec + ".Type(" + Literal(enumShape.Kind) + ")",
+        EnumShape enumShape => Codec + ".Type(\"enum\", " + Literal(enumShape.Name) + ")",
         TextShape text => Codec + ".Type(" + Literal(text.Path ? "path" : "string") + ")",
         ReferenceShape reference => Codec + ".Type(\"reference\", " + Literal(reference.Target) + ")",
         ListShape list => Codec + ".Type(\"list\", null, " + TypeEntry(list.Element) + ")",
@@ -909,10 +940,13 @@ public sealed class DataAssetGenerator : IIncrementalGenerator
 
     // ---- Names ----
 
-    private static bool IsDataAsset(INamedTypeSymbol type) => type.AllInterfaces.Any(static i => i.ToDisplayString() == DataAssetInterface);
+    // The names a type's or member's [Formerly] attributes give, in the order written.
+    private static string[] FormerNames(ISymbol symbol) =>
+        symbol.GetAttributes().Where(static a => a.AttributeClass?.ToDisplayString() == FormerlyAttribute)
+              .Select(static a => a.ConstructorArguments.Length == 1 ? a.ConstructorArguments[0].Value as string : null)
+              .Where(static name => name != null).Select(static name => name!).ToArray();
 
-    private static bool HasAttribute(ISymbol symbol, string attribute) =>
-        symbol.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == attribute);
+    private static bool IsDataAsset(INamedTypeSymbol type) => type.AllInterfaces.Any(static i => i.ToDisplayString() == DataAssetInterface);
 
     private static string? NativeName(INamedTypeSymbol type) =>
         type.GetAttributes().FirstOrDefault(static a => a.AttributeClass?.ToDisplayString() == NativeDataAssetAttribute) is { ConstructorArguments.Length: 1 } attribute
@@ -947,17 +981,6 @@ public sealed class DataAssetGenerator : IIncrementalGenerator
         return string.Join("_", parts.Select(static part => part.Replace("_", "__")));
     }
 
-    private static IEnumerable<INamedTypeSymbol> Chain(INamedTypeSymbol symbol)
-    {
-        var chain = new List<INamedTypeSymbol>();
-        for (INamedTypeSymbol? current = symbol; current != null; current = current.ContainingType)
-            chain.Insert(0, current);
-        return chain;
-    }
-
-    private static bool HasHiddenContainer(INamedTypeSymbol symbol) =>
-        Chain(symbol).Any(static s => s.DeclaredAccessibility is Accessibility.Private or Accessibility.Protected or Accessibility.ProtectedAndInternal);
-
     private static bool IsInlineArray(ITypeSymbol type) =>
         type.GetAttributes().Any(static a => a.AttributeClass?.ToDisplayString() == InlineArrayAttribute);
 
@@ -981,18 +1004,15 @@ public sealed class DataAssetGenerator : IIncrementalGenerator
         _ => null,
     };
 
-    private static string Literal(string text) => SymbolDisplay.FormatLiteral(text, quote: true);
-
-    private static string Identifier(string name) =>
-        SyntaxFacts.GetKeywordKind(name) != SyntaxKind.None || SyntaxFacts.GetContextualKeywordKind(name) != SyntaxKind.None
-            ? "@" + name
-            : name;
-
     private static Model Refused(string key, List<DiagnosticInfo> diagnostics, DiagnosticDescriptor descriptor, LocationInfo location, string name)
     {
         diagnostics.Add(new DiagnosticInfo(descriptor, location, new[] { name }));
-        return new Model(key, "", null, ImmutableArray<GeneratedSource>.Empty, 0, diagnostics.ToImmutableArray());
+        return Refused(key, diagnostics);
     }
+
+    // A class that gets no codecs, only its diagnostics.
+    private static Model Refused(string key, List<DiagnosticInfo> diagnostics) =>
+        new(key, "", null, ImmutableArray<GeneratedSource>.Empty, 0, diagnostics.ToImmutableArray());
 
     // One generated codec class: its name and its source.
     private sealed record GeneratedSource(string ClassName, string Source);

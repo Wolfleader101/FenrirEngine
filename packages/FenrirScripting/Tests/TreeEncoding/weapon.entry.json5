@@ -52,7 +52,10 @@
     },
     {
       name: "Element",
-      type: {kind: "i32"},
+      type: {
+        kind: "enum",
+        target: "Fenrir.ScriptFixture.Element",
+      },
     },
     {
       name: "Description",
@@ -141,11 +144,6 @@
       },
     },
     {
-      name: "Scratch",
-      type: {kind: "i32"},
-      transient: true,
-    },
-    {
       name: "Secret",
       type: {kind: "i32"},
       hidden: true,
@@ -175,12 +173,22 @@
       ],
     },
   ],
+  enums: [
+    {
+      name: "Fenrir.ScriptFixture.Element",
+      kind: "i32",
+      enumerators: [
+        {name: "Fire", value: -1},
+        {name: "Ice", value: 2},
+      ],
+    },
+  ],
   upgraders: [1, 2],
   default: {
     Name: "item",
     Weight: 1,
     Price: 10,
-    Rarity: 0,
+    Rarity: "Common",
     I8: -1,
     I16: -2,
     I32: -3,
@@ -192,7 +200,7 @@
     F64: 0.25,
     Sharp: true,
     Letter: 119,
-    Element: 2,
+    Element: "Ice",
     Description: "",
     Icon: "icons/sword.png",
     Combo: [1, 2, 3],

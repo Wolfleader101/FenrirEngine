@@ -19,8 +19,10 @@ public interface IDataAsset
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
 public sealed class VersionAttribute : Attribute
 {
+    /// <param name="version">The version, 1 or more.</param>
     public VersionAttribute(int version) => Version = version;
 
+    /// <summary>The version files of the type are written at.</summary>
     public int Version { get; }
 }
 
@@ -31,8 +33,10 @@ public sealed class VersionAttribute : Attribute
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = true, Inherited = false)]
 public sealed class FormerlyAttribute : Attribute
 {
+    /// <param name="name">The former name: a canonical type name on a type, a field name on a field.</param>
     public FormerlyAttribute(string name) => Name = name;
 
+    /// <summary>The former name.</summary>
     public string Name { get; }
 }
 
@@ -44,6 +48,7 @@ public sealed class FormerlyAttribute : Attribute
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = false)]
 public sealed class UpgraderAttribute : Attribute
 {
+    /// <param name="fromVersion">The version of the trees the method takes.</param>
     public UpgraderAttribute(int fromVersion) => FromVersion = fromVersion;
 
     /// <summary>The version of the trees the method takes.</summary>
@@ -63,6 +68,7 @@ public sealed class PathAttribute : Attribute
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
 public sealed class NativeDataAssetAttribute : Attribute
 {
+    /// <param name="name">The C++ type's canonical name.</param>
     public NativeDataAssetAttribute(string name) => Name = name;
 
     /// <summary>The C++ type's canonical name, such as <c>AssetsTest::WeaponData</c>.</summary>
@@ -73,13 +79,18 @@ public sealed class NativeDataAssetAttribute : Attribute
 [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
 public sealed class RangeAttribute : Attribute
 {
+    /// <param name="min">The least value an inspector offers.</param>
+    /// <param name="max">The greatest value an inspector offers.</param>
     public RangeAttribute(double min, double max)
     {
         Min = min;
         Max = max;
     }
 
+    /// <summary>The least value an inspector offers.</summary>
     public double Min { get; }
+
+    /// <summary>The greatest value an inspector offers.</summary>
     public double Max { get; }
 }
 
@@ -87,8 +98,10 @@ public sealed class RangeAttribute : Attribute
 [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
 public sealed class StepAttribute : Attribute
 {
+    /// <param name="step">The increment.</param>
     public StepAttribute(double step) => Step = step;
 
+    /// <summary>The increment an inspector steps the number by.</summary>
     public double Step { get; }
 }
 
@@ -96,8 +109,10 @@ public sealed class StepAttribute : Attribute
 [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
 public sealed class DisplayNameAttribute : Attribute
 {
+    /// <param name="text">The name an inspector shows.</param>
     public DisplayNameAttribute(string text) => Text = text;
 
+    /// <summary>The name an inspector shows.</summary>
     public string Text { get; }
 }
 
@@ -105,8 +120,10 @@ public sealed class DisplayNameAttribute : Attribute
 [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
 public sealed class GroupAttribute : Attribute
 {
+    /// <param name="text">The group an inspector shows the field under.</param>
     public GroupAttribute(string text) => Text = text;
 
+    /// <summary>The group an inspector shows the field under.</summary>
     public string Text { get; }
 }
 
@@ -114,8 +131,10 @@ public sealed class GroupAttribute : Attribute
 [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
 public sealed class UnitsAttribute : Attribute
 {
+    /// <param name="text">The units an inspector shows.</param>
     public UnitsAttribute(string text) => Text = text;
 
+    /// <summary>The units an inspector shows.</summary>
     public string Text { get; }
 }
 

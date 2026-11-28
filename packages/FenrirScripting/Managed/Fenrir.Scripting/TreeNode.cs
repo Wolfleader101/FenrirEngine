@@ -64,6 +64,7 @@ public sealed class TreeNode
     /// <summary><c>null</c>.</summary>
     public static TreeNode Null => s_null;
 
+    /// <summary><c>true</c> or <c>false</c>.</summary>
     public static TreeNode From(bool value) => value ? s_true : s_false;
 
     /// <summary>A signed integer.</summary>

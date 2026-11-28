@@ -13,6 +13,8 @@ namespace Fenrir.Scripting;
 /// <summary>A buffer that is not one whole tree encoding: what was expected, and the byte offset it is about.</summary>
 public sealed class TreeFormatException : FormatException
 {
+    /// <param name="offset">The byte the buffer went wrong at, counted from 0.</param>
+    /// <param name="message">What was expected there, and what was found.</param>
     public TreeFormatException(long offset, string message) : base($"at byte {offset}, {message}") => Offset = offset;
 
     /// <summary>The byte the buffer went wrong at, counted from 0.</summary>

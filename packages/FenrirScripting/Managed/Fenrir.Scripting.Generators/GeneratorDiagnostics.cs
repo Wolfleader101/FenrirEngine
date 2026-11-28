@@ -25,7 +25,7 @@ internal sealed record DiagnosticInfo(DiagnosticDescriptor Descriptor, LocationI
     public override int GetHashCode() => (Descriptor.Id, Location).GetHashCode();
 }
 
-// Diagnostics more than one generator reports, declared once so each id has one descriptor.
+/// <summary>Diagnostics more than one generator reports, declared once so each id has one descriptor.</summary>
 internal static class SharedDiagnostics
 {
     /// <summary>[FixedString] on anything but a byte buffer: a component's field, or any data asset's.</summary>

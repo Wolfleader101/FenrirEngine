@@ -25,15 +25,29 @@
     },
     {
       name: "Rarity",
-      type: {kind: "u8"},
+      type: {
+        kind: "enum",
+        target: "Fenrir.ScriptFixture.Rarity",
+      },
     },
   ],
   structs: [],
+  enums: [
+    {
+      name: "Fenrir.ScriptFixture.Rarity",
+      kind: "u8",
+      enumerators: [
+        {name: "Common", value: 0},
+        {name: "Rare", value: 1},
+        {name: "Epic", value: 2},
+      ],
+    },
+  ],
   upgraders: [],
   default: {
     Name: "item",
     Weight: 1,
     Price: 10,
-    Rarity: 0,
+    Rarity: "Common",
   },
 }
