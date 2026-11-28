@@ -360,6 +360,87 @@ namespace Fenrir
     };
 
     /**
+     * @brief A data asset handle without its type: what the store's by-name doors (AssetStore::LoadDataAsset and the
+     * rest) take and give, for scripting and tools, which know a type by its name alone. It names the same asset as
+     * the AssetHandle with its numbers.
+     */
+    struct DataAssetHandle
+    {
+        /** @brief The slot in the store's data asset table. */
+        std::uint32_t index = 0;
+        /** @brief The slot's generation when the asset was made; zero only in an empty handle. */
+        std::uint32_t generation = 0;
+
+        DataAssetHandle() = default;
+        DataAssetHandle(std::uint32_t slotIndex, std::uint32_t slotGeneration) noexcept
+            : index(slotIndex), generation(slotGeneration)
+        {
+        }
+        /** @brief The data asset `handle` names. */
+        template <Detail::DataAssetType T>
+        DataAssetHandle(AssetHandle<T> handle) noexcept : index(handle.index), generation(handle.generation)
+        {
+        }
+
+        /** @brief The handle of `T` with these numbers: the record must be a `T`, or extend it, for TryGet to read it.
+         */
+        template <Detail::DataAssetType T>
+        [[nodiscard]] AssetHandle<T> As() const noexcept
+        {
+            return {index, generation};
+        }
+
+        /** @brief Whether this is the empty handle, which names no asset. */
+        [[nodiscard]] bool IsEmpty() const noexcept
+        {
+            return generation == 0;
+        }
+
+        friend bool operator==(const DataAssetHandle&, const DataAssetHandle&) = default;
+    };
+
+    /** @brief What AssetStore::LoadDataAsset gives back: a LoadResult with the handle by name. */
+    struct DataLoadResult
+    {
+        /** @brief The loaded asset; empty when the load failed. */
+        DataAssetHandle handle;
+        /** @brief Why the load failed; empty when it succeeded. */
+        std::optional<LoadDiagnostic> diagnostic;
+        /** @brief The located diagnostics of its file's read, as LoadResult::diagnostics are. */
+        std::vector<Serialisation::Diagnostic> diagnostics;
+        /** @brief Whether its fields' read left something out that no diagnostic names, as LoadResult::incomplete. */
+        bool incomplete = false;
+
+        /** @brief Whether the load gave a handle: it succeeded, wholly or in part. */
+        [[nodiscard]] bool Ok() const noexcept
+        {
+            return !diagnostic.has_value();
+        }
+
+        /** @brief Whether the load succeeded, in part, or failed. */
+        [[nodiscard]] LoadStatus Status() const noexcept
+        {
+            if (diagnostic.has_value())
+            {
+                return LoadStatus::Failed;
+            }
+            return diagnostics.empty() && !incomplete ? LoadStatus::Succeeded : LoadStatus::Partial;
+        }
+    };
+
+    /** @brief What AssetStore::DataAssetTree gives: a data asset's value tree in the tree encoding, and its revision.
+     */
+    struct DataTree
+    {
+        /** @brief The value's fields (an envelope's `data`), in the tree encoding (ADR-0083 §2), with no comments. */
+        std::vector<std::byte> bytes;
+        /** @brief The record's revision when the tree was taken. */
+        std::uint32_t revision = 0;
+        /** @brief The canonical name of the record's type: the type loaded, or one extending it. */
+        std::string_view type;
+    };
+
+    /**
      * @brief What AssetStore::SaveScene gives back (ADR-0078, ADR-0079): how it went, what it wrote, what it left out,
      * and the diagnostics. Named apart from a data asset's SaveResult, whose file holds no entities.
      */
@@ -796,6 +877,89 @@ namespace Fenrir
         {
             return SaveData({handle.index, handle.generation}, Describe<T>::Description(), path);
         }
+
+        /**
+         * @name The by-name doors
+         * Untyped doors over a data asset, for scripting and tools, which know a type by its canonical name alone
+         * (ADR-0083). Each takes or gives a value's fields (an envelope's `data`) as a value tree in the tree encoding.
+         * A C++ type's tree crosses through the bridge, its references as asset paths; a tree-backed type's
+         * (TypeDescription::treeBacked) is the record's value itself, kept as given once checked against its
+         * description, its C++ base's members (when it extends a C++ type) read into the base TryGet and Edit give.
+         *
+         * A record of a tree-backed type holds its tree, not an instance. Load reads it as Load<T> reads any data asset
+         * (upgraded, then checked against its description: a key no field names, and a value of the wrong kind, are
+         * dropped with a located diagnostic, and a reference loads its target); Save writes it back with the file's
+         * comments; and a reload replaces it under the same handle, bumping its revision. When it extends a C++ data
+         * asset type, `TryGet<Base>` reads, and `Edit<Base>` changes, a materialised struct of that base, refreshed on
+         * every replace and reload, whose edits are in the record's tree at once. A tree-backed type with no C++ base
+         * is read through the tree alone: TryGet of any C++ type gives null, logged once.
+         * @{
+         */
+
+        /**
+         * @brief Loads the data asset at `path` for `owner` as the type named `typeName` (its canonical or a former
+         * name), as Load<T> does: the file's type must be it or extend it (LoadFailure::WrongType), and it must be a
+         * data asset type the store's registry has (LoadFailure::NotADataAsset).
+         */
+        [[nodiscard]] DataLoadResult LoadDataAsset(std::string_view path, std::string_view typeName, AssetOwner owner);
+
+        /**
+         * @brief The value tree of the data asset `handle` names, in the tree encoding with no comments, with its
+         * revision and type: its fields as its file's `data` would hold them, each reference as its target's asset
+         * path (`null` for one with none), and a C++ type's fields at their defaults left out. None when the handle is
+         * empty or stale.
+         */
+        [[nodiscard]] std::optional<DataTree> DataAssetTree(DataAssetHandle handle) const;
+
+        /** @brief The revision of the data asset `handle` names, as Revision gives; 0 when the handle does not resolve.
+         */
+        [[nodiscard]] std::uint32_t Revision(DataAssetHandle handle) const;
+
+        /**
+         * @brief Swaps the value of the data asset `handle` names for `tree`, a value of the record's own type in the
+         * tree encoding, and bumps its revision, as Replace does: its owners, path and handle stay, and a pointer
+         * TryGet or Edit gave keeps pointing at it. `tree` is read as a file's `data` is, at the type's version, so a
+         * value that does not read takes its default with a logged, located diagnostic, and each reference it names
+         * loads for the record's owners. False, with a logged error and the asset unchanged, when the handle does not
+         * resolve or `tree` is not the tree encoding.
+         */
+        bool ReplaceDataAsset(DataAssetHandle handle, std::span<const std::byte> tree);
+
+        /**
+         * @brief Adds `tree`, a value of the data asset type named `typeName` in the tree encoding, as a new asset
+         * owned by `owner`, read as ReplaceDataAsset reads one, as Add does. Refused with a logged error, the handle
+         * empty, for a type the registry has as no data asset type and a `tree` that is not the tree encoding.
+         */
+        [[nodiscard]] DataAssetHandle AddDataAsset(std::string_view typeName, std::span<const std::byte> tree,
+                                                   AssetOwner owner);
+
+        /**
+         * @brief Adds `tree` as AddDataAsset does, under the asset path `name`, as the named Add does: refused, too,
+         * for a `name` an asset has already or one outside the root.
+         */
+        [[nodiscard]] DataAssetHandle AddDataAsset(std::string_view typeName, std::span<const std::byte> tree,
+                                                   AssetOwner owner, std::string_view name);
+
+        /** @brief Writes the data asset `handle` names to its file, as Save<T> does, as its record's own type. */
+        SaveResult SaveDataAsset(DataAssetHandle handle);
+
+        /** @brief Writes the data asset `handle` names to `path`, as Save<T> to a path does. */
+        SaveResult SaveDataAsset(DataAssetHandle handle, std::string_view path);
+
+        /**
+         * @brief Why the type named `typeName` may not be unregistered from the store's type registry now: a live data
+         * asset (loaded, loading or added) is of it or of a type extending it, so its record points at its
+         * description. None when no record holds it. Admission's Forget asks before it unregisters a script's types.
+         */
+        [[nodiscard]] std::optional<std::string> TypeHeld(std::string_view typeName) const;
+
+        /**
+         * @brief Unregisters the type named `typeName` from `types`, which must be the store's type registry, unless
+         * TypeHeld says a record holds it: refused then with a logged error naming why, the registry unchanged.
+         * `types` refuses too, with its own diagnostic, as TypeRegistry::Unregister says.
+         */
+        bool UnregisterType(TypeRegistry& types, std::string_view typeName);
+        /** @} */
 
         /**
          * @brief Writes `scene` to the scene file `path`, an asset path relative to the asset root
@@ -1398,6 +1562,22 @@ namespace Fenrir
         [[nodiscard]] const void* FindData(Detail::AssetSlot slot, const TypeDescription& type) const;
         [[nodiscard]] std::uint32_t RevisionOf(Detail::AssetKind kind, Detail::AssetSlot slot) const;
         [[nodiscard]] std::optional<std::string> PathOfSlot(Detail::AssetKind kind, Detail::AssetSlot slot) const;
+        /**
+         * @brief The by-name doors' read of `bytes`, a value tree in the tree encoding; none, with a logged error that
+         * `action` words, when it is not one.
+         */
+        [[nodiscard]] std::optional<Serialisation::Value> DecodeDataTree(std::span<const std::byte> bytes,
+                                                                         std::string_view action);
+        /**
+         * @brief Reads `tree` into the live data asset record `slot` names, in place, as a file's `data` is read: each
+         * reference it names loads for the record's owners, who own it too.
+         */
+        void FillDataRecord(Detail::AssetSlot slot, Serialisation::Value& tree);
+        /** @brief Both AddDataAsset doors: adds `tree` as a `typeName`, keyed by `name` when there is one. */
+        [[nodiscard]] DataAssetHandle AddDataTree(std::string_view typeName, std::span<const std::byte> tree,
+                                                  AssetOwner owner, std::optional<std::string_view> name);
+        /** @brief Both SaveDataAsset doors: saves the record `handle` names as its own type, to `path` when given. */
+        SaveResult SaveDataByHandle(DataAssetHandle handle, std::optional<std::string_view> path);
         /** @brief Save's untyped part: writes the data asset `slot` names, as `type`, to its file or to `path`. */
         SaveResult SaveData(Detail::AssetSlot slot, const TypeDescription& type, std::optional<std::string_view> path);
         [[nodiscard]] bool SameFileOf(Detail::AssetKind kindA, Detail::AssetSlot a, Detail::AssetKind kindB,

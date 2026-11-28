@@ -1,0 +1,18 @@
+// A dagger: a tree-backed data asset type, which only the running engine describes, extending WeaponData.
+{
+  format: 1,
+  type: "AssetsTest::Dagger",
+  version: 2,
+  data: {
+    displayName: "Kris",
+    tags: ["blade"],
+    stats: {
+      damage: 7,
+      weight: 0.5,
+    },
+    // Its own fields, after its base's.
+    reach: 0.25,
+    runes: ["ember", "frost"],
+    companion: "data/sword.asset.json5",
+  },
+}

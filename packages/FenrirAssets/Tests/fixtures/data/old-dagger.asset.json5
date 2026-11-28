@@ -1,0 +1,11 @@
+// A dagger written at version 1, when its runes were one `rune` and its reach was its `length`.
+{
+  format: 1,
+  type: "AssetsTest::Dagger",
+  version: 1,
+  data: {
+    displayName: "Old kris",
+    length: 0.5,
+    rune: "ember",
+  },
+}

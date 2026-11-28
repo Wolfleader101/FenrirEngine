@@ -22,9 +22,9 @@
 
 **Touches:** `packages/FenrirAssets/` (`include/FenrirAssets/AssetStore.hpp`, `src/AssetStore.cpp`, `src/AssetStoreState.hpp`, `src/Envelope.*`, `Tests/` (a new `TreeBacked.cpp`))
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A hand-registered tree-backed type extending `AssetsTest::WeaponData` loads from a fixture envelope, saves back byte-identical, and reloads in place with its revision bumped.
-- [ ] `TryGet<WeaponData>` reads its base fields, and an `Edit<WeaponData>` shows in the record's tree.
-- [ ] Each by-name door round-trips a C++ type and a tree-backed type through tree bytes.
-- [ ] Unregistering a type with live records is refused.
+- [x] A hand-registered tree-backed type extending `AssetsTest::WeaponData` loads from a fixture envelope, saves back byte-identical, and reloads in place with its revision bumped.
+- [x] `TryGet<WeaponData>` reads its base fields, and an `Edit<WeaponData>` shows in the record's tree.
+- [x] Each by-name door round-trips a C++ type and a tree-backed type through tree bytes.
+- [x] Unregistering a type with live records is refused.

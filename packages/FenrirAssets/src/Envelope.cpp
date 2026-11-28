@@ -440,19 +440,9 @@ namespace Fenrir::Detail
             Ser::UpgradeResult upgraded =
                 Ser::Upgrade(reader.registry, entry.type->name, entry.version, data, reader.path, reader.logger);
             Append(reader.diagnostics, std::move(upgraded.diagnostics));
-
-            // No entity callbacks are given: a data asset holds no entity (ADR-0075).
-            ReferenceReading reading;
-            Ser::Resolvers checked;
-            checked.readReference = CheckedReferenceReader(reader.hooks.readReference, where, reading);
-
-            auto instance = std::make_unique<DataValue>(*entry.type);
-            Ser::BridgeResult bridged =
-                Ser::FromTree(data, *entry.type, reader.registry, checked, instance->value, reader.path, reader.logger);
-            Append(reader.diagnostics, std::move(bridged.diagnostics));
-            ReportEmptied(reading, data, reader.path, reader.logger, reader.diagnostics);
-            return {AssetBox(instance.release(), &DestroyAssetData<DataValue>),
-                    bridged.status == Ser::BridgeStatus::Partial || reading.unresolved, std::move(reading.named)};
+            DataRead read = ReadDataValue(data, *entry.type, where, reader.path, reader.registry,
+                                          reader.hooks.readReference, reader.logger, reader.diagnostics);
+            return {std::move(read.value), read.incomplete, std::move(read.references)};
         }
 
         // Why `name` cannot name a sub-asset, or none: Load splits a path at its last `#`, so no path names a
@@ -660,8 +650,8 @@ namespace Fenrir::Detail
             entry.Add("type", value.type->name);
             entry.Add("version", value.type->version);
             const Ser::Member* priorData = MemberOf(prior, "data");
-            entry.Add("data", Ser::ToTree(value.value, *value.type, registry, resolvers,
-                                          priorData != nullptr ? &priorData->value : nullptr));
+            entry.Add("data",
+                      ComposeDataTree(value, registry, resolvers, priorData != nullptr ? &priorData->value : nullptr));
             TakeComments(entry, prior);
             return entry;
         }

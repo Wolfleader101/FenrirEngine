@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -124,28 +125,68 @@ namespace Fenrir::Detail
     };
 
     /**
-     * @brief A data asset's instance (ADR-0075): of its file's type, which may extend the type it was loaded as, so it
-     * is made, and destroyed, through that type's description.
+     * @brief A data asset's value (ADR-0075): of its file's type, which may extend the type it was loaded as.
+     *
+     * A C++ type's is an instance, made and destroyed through its description. A tree-backed type's (ADR-0083) is a
+     * value tree: `tree` holds the members its nearest C++ base does not, and `value` an instance of that base, the
+     * materialised base, which C++ `TryGet<Base>` and `Edit<Base>` read and change. A tree-backed type with no C++ base
+     * has no instance. The whole tree is the two composed (ComposeDataTree), so an edit of the base is in it at once.
      */
     struct DataValue
     {
+        /** @brief The value's type: the record's. */
         const TypeDescription* type = nullptr;
+        /** @brief The type `value` is an instance of: `type` itself, or a tree-backed type's C++ base; null for none.
+         */
+        const TypeDescription* layout = nullptr;
         void* value = nullptr;
+        /** @brief For a tree-backed type: the members of its tree that `layout` holds none of, in the order given. */
+        std::optional<Serialisation::Value> tree;
 
-        /** @brief A value-initialised instance of `description`'s type. */
-        explicit DataValue(const TypeDescription& description)
-            : type(&description), value(::operator new(description.size, std::align_val_t{description.alignment}))
+        /**
+         * @brief A value-initialised value of `description`'s type, an instance of `base` (the type itself, or a
+         * tree-backed type's nearest C++ base, LayoutOf's), with an empty tree when it is tree-backed.
+         */
+        DataValue(const TypeDescription& description, const TypeDescription* base) : type(&description), layout(base)
         {
-            description.Construct(value);
+            if (layout != nullptr)
+            {
+                value = ::operator new(layout->size, std::align_val_t{layout->alignment});
+                layout->Construct(value);
+            }
+            if (description.treeBacked)
+            {
+                tree.emplace(Serialisation::Object{});
+            }
+        }
+        /** @brief A value-initialised instance of `description`, a type that is not tree-backed. */
+        explicit DataValue(const TypeDescription& description) : DataValue(description, &description)
+        {
+            assert(!description.treeBacked && "a tree-backed type's value is made with its C++ base");
         }
         DataValue(const DataValue&) = delete;
         DataValue& operator=(const DataValue&) = delete;
         ~DataValue()
         {
-            type->Destroy(value);
-            ::operator delete(value, std::align_val_t{type->alignment});
+            if (layout != nullptr)
+            {
+                layout->Destroy(value);
+                ::operator delete(value, std::align_val_t{layout->alignment});
+            }
         }
     };
+
+    /**
+     * @brief The type a value of `type` is laid out as in memory: `type` itself when it is not tree-backed, else the
+     * first C++ type up its base chain; null for a tree-backed type with none.
+     */
+    [[nodiscard]] const TypeDescription* LayoutOf(const TypeDescription& type, const TypeRegistry& registry);
+
+    /**
+     * @brief The fields a tree-backed `type`'s tree holds itself, those its C++ base (LayoutOf) does not: each
+     * tree-backed type's up its base chain, the furthest first, as a visit pushes a base's fields first.
+     */
+    [[nodiscard]] std::vector<const FieldInfo*> TreeFieldsOf(const TypeDescription& type, const TypeRegistry& registry);
 
     /** @brief One asset's place in its kind's table. Free slots keep their generation for the next asset. */
     struct AssetRecord
