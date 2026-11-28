@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
 #include <cstdint>
 #include <format>
+#include <functional>
 #include <iterator>
 #include <limits>
 #include <memory>
@@ -14,6 +16,8 @@
 #include <vector>
 
 #include "AssetStoreState.hpp"
+#include "FenrirECS/DefaultComponents.hpp"
+#include "FenrirECS/SceneComponents.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirSerialisation/Bridge.hpp"
 #include "FenrirSerialisation/ReadTree.hpp"
@@ -706,5 +710,73 @@ namespace Fenrir::Detail
             write.tree.leadingComments = prior->leadingComments;
         }
         return write;
+    }
+    void ForEachInInstance(const Entity& root, const std::function<void(const Entity&)>& visit)
+    {
+        root.ForEachChild([&](const Entity& child) {
+            visit(child);
+            // A nested instance's root is in this scope; what is below it is in its own.
+            if (!child.HasComponent<Instance>())
+            {
+                ForEachInInstance(child, visit);
+            }
+        });
+    }
+
+    Entity FindInInstance(const Entity& root, EntityId id)
+    {
+        Entity found;
+        ForEachInInstance(root, [&](const Entity& entity) {
+            if (!found.IsValid() && entity.HasComponent<EntityId>() &&
+                entity.GetComponent<EntityId>().value == id.value)
+            {
+                found = entity;
+            }
+        });
+        return found;
+    }
+
+    std::optional<Instance> InstanceOf(std::string_view source)
+    {
+        Instance instance;
+        if (source.size() >= sizeof(instance.source))
+        {
+            return std::nullopt;
+        }
+        source.copy(instance.source, source.size());
+        return instance;
+    }
+
+    bool InsideInstance(const Entity& entity)
+    {
+        for (Entity above = entity.GetComponent<Relationship>().parent; above.IsValid();
+             above = above.GetComponent<Relationship>().parent)
+        {
+            if (above.HasComponent<Instance>())
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    Entity FollowSlashPath(Entity top, std::string_view rest)
+    {
+        while (top.IsValid() && top.HasComponent<Instance>())
+        {
+            const std::size_t slash = rest.find('/');
+            const std::optional<EntityId> id = ParseEntityId(rest.substr(0, slash));
+            if (!id)
+            {
+                return {};
+            }
+            top = FindInInstance(top, *id);
+            if (slash == std::string_view::npos)
+            {
+                return top;
+            }
+            rest.remove_prefix(slash + 1);
+        }
+        return {};
     }
 } // namespace Fenrir::Detail

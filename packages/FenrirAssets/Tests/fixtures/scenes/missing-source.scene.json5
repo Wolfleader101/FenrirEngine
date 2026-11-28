@@ -1,0 +1,18 @@
+{
+  format: 1,
+  type: "Fenrir::Scene",
+  version: 1,
+  data: {
+    resources: {},
+    entities: [
+      {
+        id: "st4ge",
+        components: {
+          "Fenrir::Name": {name: "Stage"},
+          "Fenrir::Transform": {},
+        },
+      },
+      {id: "gh0st", parent: "st4ge", instance: "prefabs/missing.scene.json5"},
+    ],
+  },
+}

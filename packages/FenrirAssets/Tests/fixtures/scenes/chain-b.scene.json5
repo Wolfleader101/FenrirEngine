@@ -1,0 +1,18 @@
+{
+  format: 1,
+  type: "Fenrir::Scene",
+  version: 1,
+  data: {
+    resources: {},
+    entities: [
+      {
+        id: "cb000",
+        components: {
+          "Fenrir::Name": {name: "B"},
+          "Fenrir::Transform": {},
+        },
+      },
+      {id: "ca111", parent: "cb000", instance: "prefabs/chain-a.scene.json5"},
+    ],
+  },
+}

@@ -137,6 +137,13 @@ namespace Fenrir::Detail
         std::unique_ptr<AssetWatcher> watcher;
         /** @brief What the last reload poll replaced, in order: AssetStore::Reloaded. */
         std::vector<ReloadedAsset> reloaded;
+        /** @brief The registered ModelSpawner, or null for SpawnNodes alone (AssetStore::RegisterModelSpawner). */
+        ModelSpawner* modelSpawner = nullptr;
+        /**
+         * @brief The asset paths of the scene files being read, outermost first: a read pushes its file and pops it
+         * when done, and an instance block naming one of them would instance itself (ADR-0080 §5).
+         */
+        std::vector<std::string> scenesReading;
 
         /** @brief The live record `slot` names in `kind`'s table, or null. */
         [[nodiscard]] AssetRecord* Find(AssetKind kind, AssetSlot slot);

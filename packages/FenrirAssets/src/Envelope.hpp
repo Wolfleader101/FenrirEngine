@@ -12,7 +12,9 @@
 
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirECS/Entity.hpp"
+#include "FenrirECS/EntityId.hpp"
 #include "FenrirECS/EntityList.hpp"
+#include "FenrirECS/SceneComponents.hpp"
 #include "FenrirSerialisation/Bridge.hpp"
 #include "FenrirSerialisation/Diagnostic.hpp"
 #include "FenrirSerialisation/Value.hpp"
@@ -207,6 +209,30 @@ namespace Fenrir::Detail
     {
         return entity.IsValid() && entity == entities.GetEntity(entity.GetId());
     }
+
+    /**
+     * @brief Calls `visit` for each entity in the scope of the instance `root` tops (ADR-0080 §2): every entity below
+     * it down to, and including, each nested instance's root, whose own entities are that instance's scope. The ids in
+     * one scope are its source file's, so a slash path's segment names one of them. Depth-first, in sibling order.
+     */
+    void ForEachInInstance(const Entity& root, const std::function<void(const Entity&)>& visit);
+
+    /** @brief The entity in the scope of the instance `root` tops whose `EntityId` is `id`, or the null entity. */
+    [[nodiscard]] Entity FindInInstance(const Entity& root, EntityId id);
+
+    /** @brief An `Instance` naming the asset path `source`, or none when it is too long for one to hold (255 bytes). */
+    [[nodiscard]] std::optional<Instance> InstanceOf(std::string_view source);
+
+    /** @brief Whether an ancestor of `entity` is an instance's root, so its id is scoped by that root. */
+    [[nodiscard]] bool InsideInstance(const Entity& entity);
+
+    /**
+     * @brief The entity a slash path names below `top`, an instance's root (`"<source id>/<source id>"`, the path's
+     * segments after the instance's own): each segment found in the scope of the instance before it. Null when a
+     * segment does not parse, names nothing in its scope, or names an entity that is no instance's root but is not the
+     * last.
+     */
+    [[nodiscard]] Entity FollowSlashPath(Entity top, std::string_view rest);
 
     /**
      * @brief A `writeReference` that writes what `inner` names a reference by, unless it names no path or one a file

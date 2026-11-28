@@ -14,6 +14,7 @@
 #include "Core/SceneRenderer.hpp"
 #include "Device/GraphicsSurface.hpp"
 #include "FenrirAssets/AssetStore.hpp"
+#include "FenrirAssets/ModelSpawner.hpp"
 #include "FenrirRenderer/ImageTargets2D.hpp"
 #include "FenrirRenderer/Overlay.hpp"
 #include "FenrirRenderer/Renderer.hpp"
@@ -156,13 +157,21 @@ namespace Fenrir::Detail
         };
         /** @brief By mesh entity id; entities not drawn in a frame are dropped. */
         std::map<std::uint32_t, SkinPairing> skinPairings;
+        /**
+         * @brief SpawnModel as the asset store's ModelSpawner (ADR-0080 §3), registered at install and unregistered at
+         * teardown, so an instanced model draws.
+         */
+        std::unique_ptr<ModelSpawner> spawner;
 
         RendererState() = default;
         RendererState(const RendererState&) = delete;
         RendererState& operator=(const RendererState&) = delete;
         RendererState(RendererState&&) = delete;
         RendererState& operator=(RendererState&&) = delete;
-        /** @brief Frees the GPU side, releases the main window's surface, and removes its InstalledRenderer. */
+        /**
+         * @brief Frees the GPU side, releases the main window's surface, and removes its InstalledRenderer and its
+         * model spawner.
+         */
         ~RendererState();
     };
 
@@ -235,6 +244,9 @@ namespace Fenrir::Detail
             return taken;
         }
     };
+
+    /** @brief SpawnModel in `app`, as a ModelSpawner: what Renderer::Install registers on the asset store. */
+    [[nodiscard]] std::unique_ptr<ModelSpawner> MakeModelSpawner(App& app);
 
     /** @brief The app resource through which Renderer's statics find the installed renderer's state. */
     struct InstalledRenderer

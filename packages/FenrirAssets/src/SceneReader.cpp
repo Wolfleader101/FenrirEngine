@@ -1,9 +1,11 @@
-// The scene reader (ADR-0078, ADR-0079): AssetStore::LoadScene, a scene envelope read into a new scene in two passes,
-// and AssetStore::LoadSceneInto, the same read merged into a scene that exists.
+// The scene reader (ADR-0078, ADR-0079, ADR-0080): AssetStore::LoadScene, a scene envelope read into a new scene in two
+// passes; AssetStore::LoadSceneInto, the same read merged into a scene that exists; and AssetStore::Instantiate, a
+// scene or model file placed into a scene as one instance, which a block's `instance` expands through too.
 
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <format>
 #include <functional>
 #include <limits>
@@ -19,7 +21,10 @@
 #include "Envelope.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/AssetStore.hpp"
+#include "FenrirAssets/Model.hpp"
+#include "FenrirAssets/ModelSpawner.hpp"
 #include "FenrirECS/ComponentType.hpp"
+#include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityId.hpp"
 #include "FenrirECS/EntityList.hpp"
@@ -79,9 +84,39 @@ namespace Fenrir
             return {};
         }
 
+        // The instance a block names, as `instance`: its source as written, and its asset path, which the chain of
+        // files being read is checked against.
+        struct BlockInstance
+        {
+            std::string source;
+            std::string assetPath;
+        };
+
+        // Adds what `inner`, an instance's source read, found to `outer`, the read of the file holding the instance:
+        // its counts and its diagnostics, already logged. The source's resources are never the host's to apply, so
+        // they are no skipped resources of the host's.
+        void AddInner(SceneLoadResult& outer, SceneLoadResult& inner)
+        {
+            outer.entities += inner.entities;
+            outer.entitiesSkipped += inner.entitiesSkipped;
+            outer.components += inner.components;
+            outer.unknownComponentsKept += inner.unknownComponentsKept;
+            outer.fieldsDropped += inner.fieldsDropped;
+            outer.referencesEmptied += inner.referencesEmptied;
+            Append(outer.diagnostics, std::move(inner.diagnostics));
+        }
+
+        // A block's id as its diagnostics name it: `?` when it has none that parses.
+        std::string Spelled(const std::optional<EntityId>& id)
+        {
+            return id ? SpellEntityId(*id) : std::string("?");
+        }
+
         // One load's work: the scene being filled, where its types are found, its file's path for diagnostics, how
         // its asset handle fields are read, and the result being filled; and for a merge, the entity the file's roots
-        // go under (none for the top) and whether the file's resources are skipped.
+        // go under (none for the top) and which door the read serves. An instance block's source is expanded through
+        // `expand`, unless it is on `reading`, the chain of scene files being read, its path resolved against
+        // `assetRoot`.
         struct SceneFiller
         {
             Scene& scene;
@@ -91,7 +126,10 @@ namespace Fenrir
             ILogger& logger;
             SceneLoadResult& result;
             Entity parent;
-            Detail::SceneResources fileResources = Detail::SceneResources::Apply;
+            Detail::SceneRead read = Detail::SceneRead::Load;
+            const std::filesystem::path& assetRoot;
+            const std::vector<std::string>& reading;
+            std::function<InstanceResult(std::string_view)> expand;
 
             // Each block's entity by its id's value: the first block holding an id.
             std::unordered_map<std::uint64_t, std::uint32_t> ids;
@@ -132,7 +170,9 @@ namespace Fenrir
                 Ser::Resolvers resolvers;
                 resolvers.readReference = Detail::CheckedReferenceReader(readReference, where, reading);
                 resolvers.readEntity = [&](std::string_view id, const FieldInfo&) -> std::optional<EntityValue> {
-                    const std::optional<EntityId> parsed = ParseEntityId(id);
+                    // `<id>` names a block; `<id>/<source id>...` an entity inside the instance that block is.
+                    const std::size_t slash = id.find('/');
+                    const std::optional<EntityId> parsed = ParseEntityId(id.substr(0, slash));
                     if (!parsed)
                     {
                         return std::nullopt;
@@ -142,7 +182,17 @@ namespace Fenrir
                     {
                         return std::nullopt;
                     }
-                    return EntityValue{found->second, &entities};
+                    if (slash == std::string_view::npos)
+                    {
+                        return EntityValue{found->second, &entities};
+                    }
+                    const Entity inside =
+                        Detail::FollowSlashPath(entities.GetEntity(found->second), id.substr(slash + 1));
+                    if (!inside.IsValid())
+                    {
+                        return std::nullopt;
+                    }
+                    return EntityValue{inside.GetId(), &entities};
                 };
                 Ser::BridgeResult bridged = Ser::FromTree(tree, type, registry, resolvers, value, path, logger);
                 Append(result.diagnostics, std::move(bridged.diagnostics));
@@ -179,18 +229,10 @@ namespace Fenrir
                 entities.CompleteEntity(entity);
                 Entity handle = entities.GetEntity(entity);
                 ++result.entities;
-                const std::string spelled = id ? SpellEntityId(*id) : std::string("?");
+                const std::string spelled = Spelled(id);
                 if (holdsId)
                 {
-                    // The id map keeps the file's id, so the file's `entity` fields and `parent`s still name this
-                    // block; only the entity's own id is fresh.
-                    EntityId held = *id;
-                    while (taken.contains(held.value) || (held.value != id->value && ids.contains(held.value)))
-                    {
-                        held = MintEntityId();
-                    }
-                    taken.insert(held.value);
-                    handle.AddComponent<EntityId>(held);
+                    GiveId(handle, *id);
                 }
 
                 UnknownComponents unknown;
@@ -214,7 +256,48 @@ namespace Fenrir
                 {
                     handle.AddComponent<UnknownComponents>(std::move(unknown));
                 }
+                Attach(block, at, handle, spelled, filled);
+            }
 
+            // Gives `entity` its block's id, `id`: as it is, unless an entity of the scene from before a merge has it,
+            // when it is re-minted. The id map keeps the file's id, so the file's `entity` fields and `parent`s still
+            // name the block; only the entity's own id is fresh. An instance read takes no ids, so it keeps them all.
+            void GiveId(Entity entity, EntityId id)
+            {
+                EntityId held = id;
+                while (taken.contains(held.value) || (held.value != id.value && ids.contains(held.value)))
+                {
+                    held = MintEntityId();
+                }
+                taken.insert(held.value);
+                if (entity.HasComponent<EntityId>())
+                {
+                    entity.GetComponent<EntityId>() = held;
+                }
+                else
+                {
+                    entity.AddComponent<EntityId>(held);
+                }
+            }
+
+            // Fills the root of an instance block, `root`, which the first pass expanded: gives it the block's id and
+            // appends it to its parent. Its source made its components; the block's own are not read.
+            void FillInstance(Ser::Object& block, const Ser::Value& at, Entity root, std::optional<EntityId> id,
+                              bool holdsId, const std::unordered_set<std::uint32_t>& filled)
+            {
+                if (holdsId)
+                {
+                    GiveId(root, *id);
+                }
+                Attach(block, at, root, Spelled(id), filled);
+            }
+
+            // Appends `handle`, the entity of `block`, to the block before it that its `parent` names, or makes it a
+            // root of the file when it has none, or one naming no earlier block.
+            void Attach(const Ser::Object& block, const Ser::Value& at, Entity handle, const std::string& spelled,
+                        const std::unordered_set<std::uint32_t>& filled)
+            {
+                EntityList& entities = scene.GetEntityList();
                 const Ser::Value* parent = block.Find("parent");
                 if (parent == nullptr)
                 {
@@ -291,11 +374,11 @@ namespace Fenrir
             }
 
             // Adds or fills each scene resource `resources` holds, after every entity, so an `entity` field in one
-            // names an entity of the file (ADR-0078 §7). A merge applies none: the target scene's resources stand, and
-            // each entry is counted as skipped, with no diagnostic (ADR-0079 §2).
+            // names an entity of the file (ADR-0078 §7). A merge or an instance applies none: the target scene's
+            // resources stand, and each entry is counted as skipped, with no diagnostic (ADR-0079 §2).
             void FillResources(Ser::Value& resources)
             {
-                if (fileResources == Detail::SceneResources::Skip)
+                if (read != Detail::SceneRead::Load)
                 {
                     result.resourcesSkipped += resources.AsObject().members.size();
                     return;
@@ -325,6 +408,65 @@ namespace Fenrir
                 }
             }
 
+            // The instance `block` names, or none when it has no `instance`, or one that is not a string (an error, and
+            // the block loads as an ordinary one). A source outside the asset root keeps its text as its asset path,
+            // and fails when it is expanded.
+            std::optional<BlockInstance> InstanceNamed(const Ser::Object& block, const Ser::Value& at,
+                                                       const std::optional<EntityId>& id)
+            {
+                const Ser::Value* instance = block.Find("instance");
+                if (instance == nullptr)
+                {
+                    return std::nullopt;
+                }
+                if (instance->Kind() != Ser::ValueKind::String)
+                {
+                    Report(Ser::DiagnosticSeverity::Error, instance, at,
+                           std::format("entity `{}`: expected `instance`, the asset path of a scene or model file, "
+                                       "found {}; the entity loads as an ordinary one",
+                                       Spelled(id), Detail::Found(instance)));
+                    return std::nullopt;
+                }
+                BlockInstance named{instance->AsString(), {}};
+                std::string fileKey;
+                if (Detail::WholeFileLoadProblem(assetRoot, named.source, named.assetPath, fileKey))
+                {
+                    named.assetPath = named.source;
+                }
+                return named;
+            }
+
+            // Whether the scene file `assetPath` is being read now: this file, or one instancing it through a chain.
+            [[nodiscard]] bool OnReadChain(const std::string& assetPath) const
+            {
+                return std::ranges::find(reading, assetPath) != reading.end();
+            }
+
+            // Expands the source of the instance block `block` at the top of the scene, adding what its read found to
+            // this load's, and gives its root's entity. A source that does not load leaves the root alone, marked
+            // with `Instance`, with an error, so a save writes the block back as it was.
+            std::uint32_t Expand(const BlockInstance& instance, const Ser::Object& block, const Ser::Value& at,
+                                 const std::optional<EntityId>& id)
+            {
+                InstanceResult inner = expand(instance.source);
+                AddInner(result, inner.load);
+                if (inner.root.IsValid())
+                {
+                    return inner.root.GetId();
+                }
+                Report(Ser::DiagnosticSeverity::Error, block.Find("instance"), at,
+                       std::format("entity `{}`: the instance's source `{}` did not load; the entity loads as the "
+                                   "instance's root alone, so a save keeps the block",
+                                   Spelled(id), instance.source));
+                Entity root = scene.GetEntityList().CreateEntity();
+                ++result.entities;
+                if (const std::optional<Instance> mark = Detail::InstanceOf(instance.source))
+                {
+                    root.AddComponent<Instance>(*mark);
+                }
+                return root.GetId();
+            }
+
             // Fills the scene from `data`, a scene envelope's: the entities in two passes, then the resources.
             void FillScene(Ser::Value& data)
             {
@@ -337,7 +479,8 @@ namespace Fenrir
                     blocks = nullptr;
                 }
 
-                // Pass one: an entity for every block, and the id map, so a field or a `parent` names any block.
+                // Pass one: an entity for every block, and the id map, so a field or a `parent` names any block. An
+                // instance block's entity is its expanded source's root, so a slash path names an entity inside it.
                 struct Reserved
                 {
                     Ser::Object* block = nullptr;
@@ -346,6 +489,8 @@ namespace Fenrir
                     // The block's id, when it parsed; the entity holds it only when no earlier block has it.
                     std::optional<EntityId> id;
                     bool holdsId = false;
+                    // Whether the entity is an instance's root, made complete already.
+                    bool instance = false;
                 };
                 std::vector<Reserved> reserved;
                 EntityList& entities = scene.GetEntityList();
@@ -363,7 +508,20 @@ namespace Fenrir
                         }
                         Ser::Object& block = element.value.AsObject();
                         std::optional<EntityId> id = BlockId(block, element.value);
-                        const std::uint32_t entity = entities.ReserveEntity();
+                        const std::optional<BlockInstance> instance = InstanceNamed(block, element.value, id);
+                        if (instance && OnReadChain(instance->assetPath))
+                        {
+                            Report(Ser::DiagnosticSeverity::Error, block.Find("instance"), element.value,
+                                   std::format("entity `{}`: the instance's source `{}` is {}, so it would instance "
+                                               "itself; the block is left out",
+                                               Spelled(id), instance->source,
+                                               instance->assetPath == reading.back() ? "this file"
+                                                                                     : "a file instancing this one"));
+                            ++result.entitiesSkipped;
+                            continue;
+                        }
+                        const std::uint32_t entity =
+                            instance ? Expand(*instance, block, element.value, id) : entities.ReserveEntity();
                         bool holdsId = id.has_value();
                         if (id && !ids.emplace(id->value, entity).second)
                         {
@@ -375,7 +533,7 @@ namespace Fenrir
                                                SpellEntityId(*id)));
                             holdsId = false;
                         }
-                        reserved.push_back({&block, &element.value, entity, id, holdsId});
+                        reserved.push_back({&block, &element.value, entity, id, holdsId, instance.has_value()});
                     }
                 }
 
@@ -383,7 +541,15 @@ namespace Fenrir
                 std::unordered_set<std::uint32_t> filled;
                 for (const Reserved& entry : reserved)
                 {
-                    FillBlock(*entry.block, *entry.at, entry.entity, entry.id, entry.holdsId, filled);
+                    if (entry.instance)
+                    {
+                        FillInstance(*entry.block, *entry.at, entities.GetEntity(entry.entity), entry.id, entry.holdsId,
+                                     filled);
+                    }
+                    else
+                    {
+                        FillBlock(*entry.block, *entry.at, entry.entity, entry.id, entry.holdsId, filled);
+                    }
                     filled.insert(entry.entity);
                 }
 
@@ -452,16 +618,140 @@ namespace Fenrir
     {
         return ReadSceneFile(
             path, [&]() -> Scene& { return app.CreateScene(name.empty() ? std::string(path) : std::string(name)); }, {},
-            Detail::SceneResources::Apply);
+            Detail::SceneRead::Load);
     }
 
     SceneLoadResult AssetStore::LoadSceneInto(Scene& scene, std::string_view path, Entity parent)
     {
-        return ReadSceneFile(path, [&]() -> Scene& { return scene; }, parent, Detail::SceneResources::Skip);
+        return ReadSceneFile(path, [&]() -> Scene& { return scene; }, parent, Detail::SceneRead::Merge);
+    }
+
+    InstanceResult AssetStore::Instantiate(Scene& scene, std::string_view path, Entity parent)
+    {
+        InstanceResult result = ExpandInstance(scene, path);
+        if (!result.root.IsValid())
+        {
+            return result;
+        }
+        if (parent.HasEntityList() && !Detail::LiveIn(scene.GetEntityList(), parent))
+        {
+            Detail::Record({.severity = Ser::DiagnosticSeverity::Error,
+                            .path = std::string(path),
+                            .message = "the parent given is no live entity of the scene instanced into; the instance's "
+                                       "root goes at the top"},
+                           *m_state->logger, result.load.diagnostics);
+            result.load.status = LoadStatus::Partial;
+        }
+        else if (parent.IsValid())
+        {
+            parent.AddChild(result.root);
+        }
+        return result;
+    }
+
+    InstanceResult AssetStore::ExpandInstance(Scene& scene, std::string_view path)
+    {
+        InstanceResult result;
+        std::string assetPath;
+        std::string fileKey;
+        // The instance is refused with `message`, logged here once, and nothing added.
+        const auto fail = [&](std::string message) -> InstanceResult {
+            m_state->logger->Error("Could not instance '{}': {}", path, message);
+            result.load.status = LoadStatus::Failed;
+            result.load.diagnostics.push_back(
+                {.severity = Ser::DiagnosticSeverity::Error, .path = fileKey, .message = std::move(message)});
+            return std::move(result);
+        };
+        if (const std::optional<std::string> problem =
+                Detail::WholeFileLoadProblem(m_state->root, path, assetPath, fileKey))
+        {
+            return fail(*problem);
+        }
+        const std::optional<Instance> mark = Detail::InstanceOf(assetPath);
+        if (!mark)
+        {
+            return fail(
+                std::format("its asset path is {} bytes, more than the 255 an Instance holds", assetPath.size()));
+        }
+
+        Entity root;
+        constexpr std::string_view SceneExtension = ".scene.json5";
+        if (assetPath.ends_with(SceneExtension))
+        {
+            // The read refused the file and logged why; the instance adds nothing more.
+            result.load = ReadSceneFile(assetPath, [&]() -> Scene& { return scene; }, {}, Detail::SceneRead::Instance);
+            if (result.load.status == LoadStatus::Failed)
+            {
+                return result;
+            }
+            if (result.load.roots.size() == 1)
+            {
+                // The file's root is the instance's: its id is the host file's to give, and its source id still finds
+                // it here.
+                root = result.load.roots.front();
+                if (root.HasComponent<EntityId>())
+                {
+                    result.entities.emplace(root.GetComponent<EntityId>().value, root);
+                    root.RemoveComponent<EntityId>();
+                }
+            }
+            else
+            {
+                // Several roots, or none, go under one named after the file, at the identity (SpawnNodes' rule).
+                const std::string_view file = std::string_view(assetPath).substr(assetPath.rfind('/') + 1);
+                root = scene.GetEntityList().CreateEntity();
+                root.GetComponent<Name>().Set(std::string(file.substr(0, file.size() - SceneExtension.size())).c_str());
+                ++result.load.entities;
+                for (Entity& top : result.load.roots)
+                {
+                    root.AddChild(top);
+                }
+            }
+        }
+        else
+        {
+            // A model, owned by the host scene, spawned through the registered spawner (the renderer's SpawnModel) or
+            // the store's own SpawnNodes. The load logged its own failure.
+            const LoadResult<Model> model = Load<Model>(assetPath, AssetOwner(scene));
+            if (!model.Ok())
+            {
+                return fail(std::format("it loads as no scene file or model: {}", model.diagnostic->importerMessage));
+            }
+            const SpawnedNodes spawned = m_state->modelSpawner != nullptr
+                                             ? m_state->modelSpawner->Spawn(scene, model.handle, {})
+                                             : SpawnNodes(scene, model.handle, {});
+            if (!spawned.root.IsValid())
+            {
+                return fail("the model spawned nothing");
+            }
+            root = spawned.root;
+            result.load.scene = &scene;
+            result.load.roots.push_back(root);
+            result.load.entities = 1;
+            Detail::ForEachInInstance(root, [&](const Entity&) { ++result.load.entities; });
+            result.load.status = model.Status() == LoadStatus::Succeeded ? LoadStatus::Succeeded : LoadStatus::Partial;
+        }
+
+        if (root.HasComponent<Instance>())
+        {
+            root.GetComponent<Instance>() = *mark;
+        }
+        else
+        {
+            root.AddComponent<Instance>(*mark);
+        }
+        result.root = root;
+        Detail::ForEachInInstance(root, [&](const Entity& entity) {
+            if (entity.HasComponent<EntityId>())
+            {
+                result.entities.emplace(entity.GetComponent<EntityId>().value, entity);
+            }
+        });
+        return result;
     }
 
     SceneLoadResult AssetStore::ReadSceneFile(std::string_view path, const std::function<Scene&()>& makeScene,
-                                              Entity parent, Detail::SceneResources resources)
+                                              Entity parent, Detail::SceneRead read)
     {
         SceneLoadResult result;
         std::string assetPath;
@@ -514,15 +804,30 @@ namespace Fenrir
             [&](std::string_view reference, const FieldInfo& field) {
                 return ReadFileReference(assetPath, owner, reference, field);
             };
-        SceneFiller filler{scene, *m_state->types, fileKey, readReference, *m_state->logger, result, {}, resources};
+        SceneFiller filler{scene,
+                           *m_state->types,
+                           fileKey,
+                           readReference,
+                           *m_state->logger,
+                           result,
+                           {},
+                           read,
+                           m_state->root,
+                           m_state->scenesReading,
+                           [&](std::string_view source) { return ExpandInstance(scene, source); }};
         EntityList& entities = scene.GetEntityList();
-        entities.ForEachEntity([&](auto handle) {
-            const Entity entity = entities.GetEntity(static_cast<std::uint32_t>(handle));
-            if (entity.HasComponent<EntityId>())
-            {
-                filler.taken.insert(entity.GetComponent<EntityId>().value);
-            }
-        });
+        // An instance keeps its file's ids, which are scoped by its root; so are those inside the scene's instances
+        // already, which no block's id can collide with.
+        if (read != Detail::SceneRead::Instance)
+        {
+            entities.ForEachEntity([&](auto handle) {
+                const Entity entity = entities.GetEntity(static_cast<std::uint32_t>(handle));
+                if (entity.HasComponent<EntityId>() && !Detail::InsideInstance(entity))
+                {
+                    filler.taken.insert(entity.GetComponent<EntityId>().value);
+                }
+            });
+        }
         if (parent.HasEntityList() && !Detail::LiveIn(entities, parent))
         {
             // A parent of another scene, or one destroyed: the file's roots load at the top of this one.
@@ -534,6 +839,17 @@ namespace Fenrir
         {
             filler.parent = parent;
         }
+        // On the chain while its blocks are read, so an instance of it, directly or through another file, is refused.
+        struct OnChain
+        {
+            std::vector<std::string>& chain;
+            ~OnChain()
+            {
+                chain.pop_back();
+            }
+        };
+        m_state->scenesReading.push_back(assetPath);
+        const OnChain onChain{m_state->scenesReading};
         filler.FillScene(*data);
         result.status = result.diagnostics.empty() ? LoadStatus::Succeeded : LoadStatus::Partial;
         return result;
