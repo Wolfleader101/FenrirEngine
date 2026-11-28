@@ -1,6 +1,6 @@
 # move-asset
 
-Moves or renames one file under an asset root and rewrites every reference to it, and to its sub-assets, across the root's `.json5` envelopes (ADR-0076 §5, ADR-0079 §6). It is a thin command line over `Assets::Move` (`packages/FenrirAssets/include/FenrirAssets/Assets.hpp`), which holds the rules: what is refused, which strings count as references, and how a rewritten file keeps its comments and every other byte. A future editor calls the same function.
+Moves or renames one file under an asset root and rewrites every reference to it, and to its sub-assets, across the root's `.json5` envelopes and `.scene.json5` scene files, a scene's `instance` paths included (ADR-0076 §5, ADR-0079 §6). It is a thin command line over `Assets::Move` (`packages/FenrirAssets/include/FenrirAssets/Assets.hpp`), which holds the rules: what is refused, which strings count as references, and how a rewritten file keeps its comments and every other byte. A future editor calls the same function.
 
 The engine builds it with FenrirAssets (`FENRIR_ENABLE_ASSETS`, on by default), as the CMake target `fenrir-move-asset`.
 
@@ -16,7 +16,7 @@ fenrir-move-asset <root> <from> <to> [--dry-run]
 - `--dry-run`: write and move nothing, and print the same report.
 - `--help` or `-h`: print the usage, under the name the program was run by.
 
-It prints, on standard output, one line saying what was moved and how many references were rewritten in how many files, then each changed file (`changed: <path>`, by its path after the move, the moved file's own included) and then each `.json5` file it could not scan (`unscanned: <path>: <reason>`). An unscanned file keeps any reference to the old path, so fix it by hand.
+It prints, on standard output, one line saying what was moved and how many references were rewritten in how many files, then each changed file (`changed: <path>`, by its path after the move, the moved file's own included) and then each `.json5` file it could not scan (`unscanned: <path>: <reason>`). An unscanned file keeps any reference to the old path, so fix it by hand. A scene file with an entry of a type the registry lacks is listed too, though its other entries are rewritten: only that entry keeps the old path.
 
 | Exit code | Meaning |
 | --- | --- |
@@ -50,4 +50,4 @@ target_link_libraries(mygame-move-asset PRIVATE FenrirMoveAsset MyGame)
 
 ## Smoke run
 
-With `FENRIR_BUILD_TESTS` on, the CTest test `MoveAssetSmoke` runs `tests/SmokeRun.cmake`. It copies `tests/root` into the build tree and runs `fenrir-move-asset-test-package`, a copy built as above with FenrirAssets' data asset test package's registration (`tests/TestPackageMain.cpp`): a dry run that lists the changes and writes nothing, then the real move, checking the report and each rewritten file byte for byte. On the same copy it checks that a move onto an existing file is refused with exit code 1, that `fenrir-move-asset` itself lists every fixture as unscanned, and that two arguments exit 2 with the usage.
+With `FENRIR_BUILD_TESTS` on, the CTest test `MoveAssetSmoke` runs `tests/SmokeRun.cmake`. It copies `tests/root` into the build tree and runs `fenrir-move-asset-test-package`, a copy built as above with FenrirAssets' data asset test package's registration (`tests/TestPackageMain.cpp`): a dry run that lists the changes and writes nothing, then the real move, checking the report and each rewritten file byte for byte, a camp scene's asset handle field among them. On the same copy it checks that a move onto an existing file is refused with exit code 1, that `fenrir-move-asset` itself lists every fixture of a test type as unscanned, and that two arguments exit 2 with the usage. Last, it moves the hut prefab the camp instances, and checks that the camp's `instance` is rewritten and nothing else.
